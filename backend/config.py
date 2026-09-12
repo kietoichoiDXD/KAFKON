@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     codex_model: str = Field(default="gpt-4o", alias="CODEX_MODEL")
 
+    # Multi-Tier Fallback Mode: 'low', 'medium', 'high'
+    fallback_tier: str = Field(default="medium", alias="FALLBACK_TIER")
+
     # Skills
     default_skill: str = Field(default="startup_lean", alias="DEFAULT_SKILL")
     skills_dir: Path = Field(default_factory=lambda: BASE_DIR / "skills")

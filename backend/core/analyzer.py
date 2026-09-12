@@ -12,6 +12,7 @@ from .models import (
 )
 from .skills import SkillManager
 from .scorer import InvestScorer
+from .fallback_router import ModelFallbackRouter, FallbackTier
 from ..config import settings
 
 class ScribeBAAnalyzer:
@@ -19,28 +20,32 @@ class ScribeBAAnalyzer:
 
     def __init__(self, skill_manager: Optional[SkillManager] = None):
         self.skill_manager = skill_manager or SkillManager()
+        self.fallback_router = ModelFallbackRouter()
 
     async def analyze_thread(
         self,
         thread: ThreadContext,
         skill_name: Optional[str] = None,
-        force_live: bool = False
+        force_live: bool = False,
+        tier: Optional[str] = None
     ) -> AnalysisResult:
-        """Run complete analysis pipeline on a multi-person chat thread."""
+        """Run complete analysis pipeline on a multi-person chat thread with multi-tier fallback."""
         skill = self.skill_manager.get_skill(skill_name or settings.default_skill)
         transcript = thread.to_formatted_transcript()
+        active_tier = tier or settings.fallback_tier
 
         # Step 1: Detect (Relevance check)
         if not self._is_decision_relevant(transcript):
             return self._empty_result(thread, skill, "Thread contains routine chatter without architectural decisions.")
 
-        # Step 2: Analyze (Local simulation or Live Anthropic Claude API)
-        use_live = force_live or (settings.scribeba_mode == "live" and settings.anthropic_api_key)
+        # Step 2: Analyze (Multi-tier model fallback or local simulation)
+        has_keys = bool(settings.openrouter_api_key or settings.openai_api_key or settings.anthropic_api_key)
+        use_live = force_live or (settings.scribeba_mode == "live" and has_keys)
         if use_live:
             try:
-                return await self._analyze_live(thread, skill, transcript)
+                return await self._analyze_live(thread, skill, transcript, tier=active_tier)
             except Exception as e:
-                print(f"[Warning] Live API call failed ({e}), falling back to local orchestrator.")
+                print(f"[Warning] Live API cascade exhausted ({e}), executing local fallback.")
 
         return self._analyze_local(thread, skill, transcript)
 
@@ -260,15 +265,10 @@ class ScribeBAAnalyzer:
         self,
         thread: ThreadContext,
         skill: SkillConfig,
-        transcript: str
+        transcript: str,
+        tier: str = "medium"
     ) -> AnalysisResult:
-        """Call Anthropic Claude API for live story generation and evidence labeling."""
-        headers = {
-            "x-api-key": settings.anthropic_api_key or "",
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
-
+        """Execute story generation across multi-tier fallback cascade (OpenRouter -> GPT -> LUNA -> SONET -> 5 -> SOL)."""
         system_prompt = f"""You are ScribeBA, an expert AI Business Analyst.
 Analyze multi-person engineering conversations and produce a structured User Story with INVEST scoring and Evidence Labels.
 
@@ -311,25 +311,17 @@ Return strictly valid JSON matching this schema:
   "clarifying_question": "string or null",
   "ready_for_ticket": false
 }}"""
+        user_prompt = f"Analyze this conversation thread:\n\n{transcript}"
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json={
-                    "model": settings.anthropic_reasoning_model,
-                    "max_tokens": 2048,
-                    "system": system_prompt,
-                    "messages": [
-                        {"role": "user", "content": f"Analyze this conversation thread:\n\n{transcript}"}
-                    ]
-                }
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content_text = data["content"][0]["text"]
-            parsed = json.loads(content_text)
+        parsed, audit_trail = await self.fallback_router.execute_with_fallback(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            thread=thread,
+            skill=skill,
+            tier=tier
+        )
 
+        if parsed:
             story = UserStory(**parsed["story"])
             criteria = [AcceptanceCriterion(**c) for c in parsed["acceptance_criteria"]]
             evidence_items = [EvidenceItem(**e) for e in parsed["evidence_items"]]
@@ -344,8 +336,19 @@ Return strictly valid JSON matching this schema:
                 ready_for_ticket=parsed.get("ready_for_ticket", False),
                 skill_applied=skill.name,
                 thread_id=thread.thread_id,
-                metadata={"channel": thread.channel, "platform": thread.platform}
+                metadata={
+                    "channel": thread.channel,
+                    "platform": thread.platform,
+                    "tier": tier,
+                    "fallback_trail": audit_trail
+                }
             )
+
+        # Fallback to local deterministic engine if all remote tiers exhausted
+        res = self._analyze_local(thread, skill, transcript)
+        res.metadata["fallback_trail"] = audit_trail
+        res.metadata["tier"] = tier
+        return res
 
     def _empty_result(self, thread: ThreadContext, skill: SkillConfig, reason: str) -> AnalysisResult:
         story = UserStory(
