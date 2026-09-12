@@ -16,10 +16,11 @@ export function App() {
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<WorkspaceTab>('Agents');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Bumping this is how New chat clears the conversation rather than only changing the route.
+  const [chatResetKey, setChatResetKey] = useState(0);
 
-  const handleSelectPrompt = (prompt: string) => {
-    alert(`Starting new architectural session on: "${prompt}"`);
-  };
+  // Selecting a suggestion fills the composer; HomeView owns the text from there.
+  const handleSelectPrompt = (_prompt: string) => {};
 
   const handleOpenModal = (tab: WorkspaceTab = 'Skills') => {
     setModalInitialTab(tab);
@@ -34,7 +35,7 @@ export function App() {
         currentView={currentView}
         onSelectView={setCurrentView}
         onOpenCustomize={() => handleOpenModal('Agents')}
-        onNewChat={() => setCurrentView('home')}
+        onNewChat={() => { setCurrentView('home'); setChatResetKey(k => k + 1); }}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
@@ -46,6 +47,7 @@ export function App() {
             onSelectPrompt={handleSelectPrompt}
             onNavigateToAutomations={() => setCurrentView('automations')}
             onOpenSkills={() => handleOpenModal('Skills')}
+            resetKey={chatResetKey}
           />
         )}
 
