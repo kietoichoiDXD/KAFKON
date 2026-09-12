@@ -297,11 +297,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
-          {!isCollapsed && (
-            <div className="relative p-1 text-gray-400 hover:text-gray-600">
+          {!isCollapsed && filteredChats.length > 0 && (
+            <div className="relative p-1 text-gray-400" title={`${filteredChats.length} runs recorded`}>
               <span className="material-symbols-outlined text-[19px]">notifications</span>
               <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-[#7b5cff] text-white text-[9px] font-bold flex items-center justify-center">
-                31
+                {filteredChats.length}
               </span>
             </div>
           )}
