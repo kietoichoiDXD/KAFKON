@@ -66,9 +66,30 @@ environments:
       - url: https://api.partner.example/health
 ```
 
-Two kinds ship today. `kubernetes` reads a namespace and Prometheus and can apply the runbooks you
+Two kinds ship today. `kubernetes` reads a namespace and Prometheus and can apply the repairs you
 declare. `http` probes endpoints from outside and **proposes nothing** — it has no way to change
 what it measures, and saying so is better than inventing an action.
+
+**Incidents are declared, not hardcoded.** A check says what to look at, what the baseline is, and
+which runbook repairs it:
+
+| kind | finds | proposes |
+|---|---|---|
+| `env` | an environment variable drifted from the baseline | patch the variable |
+| `image` | the deployment is on the wrong image | patch the image |
+| `replicas` | scaled below the floor the service needs | patch the replica count |
+| `selector` | a Service selects labels no Pod carries | patch the selector |
+| `probe` | the readiness probe points at the wrong path | patch the probe path |
+| `restarts` | crash loops, OOM kills, image pull failures | **nothing** — the right fix for a crash is a judgement |
+
+Two of those deliberately stand aside. `restarts` never guesses a repair. And `selector` reports
+a Service with no endpoints but proposes nothing when the selector is already correct — because
+scaled-to-zero looks identical from there, and patching a correct selector would hide the real
+cause.
+
+**Approvals go where the team already watches.** Declare channels under `notifications:`; Slack and
+Discord ship today. If none is declared, whatever has credentials is used. If no channel can be
+reached the request fails loudly rather than reporting a request nobody received.
 
 A new kind is one class implementing `InfraProvider` (`state`, `diagnose`, `verify`, `target`, and
 `apply` if it can remediate) plus a line in the registry. The console, the chat, the terminal and

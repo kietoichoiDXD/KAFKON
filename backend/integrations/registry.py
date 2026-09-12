@@ -28,6 +28,7 @@ class Registry:
     def __init__(self, path: Path = CONFIG_PATH) -> None:
         self.path = Path(path)
         self._providers: Dict[str, InfraProvider] = {}
+        self.notifications: List[dict] = []
         self.errors: List[str] = []
         self._load()
 
@@ -35,6 +36,7 @@ class Registry:
         if not self.path.exists():
             return
         doc = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}
+        self.notifications = doc.get("notifications", []) or []
         for entry in doc.get("environments", []):
             name = entry.get("name")
             kind = entry.get("kind")

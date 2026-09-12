@@ -112,7 +112,7 @@ def ops_notify():
     if action is None:
         return jsonify({"error": "Unknown action_id. Re-run the diagnosis."}), 400
     try:
-        return jsonify(asyncio.run(ops.notify(body["channel"], action)))
+        return jsonify(asyncio.run(ops.notify(action, body.get("channel"))))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

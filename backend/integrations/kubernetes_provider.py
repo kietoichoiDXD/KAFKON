@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from .infra_base import InfraProvider, ProviderError, finding
+from .k8s_checks import CHECKS
 
 
 class KubernetesProvider(InfraProvider):
@@ -23,8 +24,18 @@ class KubernetesProvider(InfraProvider):
         self.context = config["context"]
         self.namespace = config.get("namespace", "default")
         self.prometheus = config.get("prometheus")
-        # Runbooks are declared per environment: a cluster may only fix what its operator allows.
-        self.runbooks: Dict[str, Dict[str, Any]] = config.get("runbooks", {})
+        # Checks are declared per environment: a cluster is only inspected and repaired in the
+        # ways its operator wrote down. `runbooks:` is the older env-only shape, still accepted.
+        self.checks: List[Dict[str, Any]] = list(config.get("checks", []))
+        for key, book in (config.get("runbooks") or {}).items():
+            self.checks.append({
+                "kind": "env",
+                "runbook": book.get("runbook", key.split("/")[0]),
+                "target": book["target"],
+                "summary": book["summary"],
+                "env": book["env"],
+                "value": book["value"],
+            })
         self.queries: Dict[str, str] = config.get("queries", {})
         self._proposals: Dict[str, Dict[str, Any]] = {}
 
@@ -94,27 +105,28 @@ class KubernetesProvider(InfraProvider):
             f"kubectl -n {self.namespace} get pods",
         ))
 
-        for key, book in self.runbooks.items():
-            name = book["target"].split("/", 1)[1]
-            var, expected = book["env"], book["value"]
-            try:
-                actual = self._deployment_env(name).get(var)
-            except ProviderError as e:
-                evidence.append(finding("Blocked", f"{name} {var}",
-                                        f"could not read the deployment: {e}",
-                                        f"kubectl -n {self.namespace} get deploy {name}"))
+        for spec in self.checks:
+            kind = spec.get("kind", "env")
+            runner = CHECKS.get(kind)
+            if runner is None:
+                evidence.append(finding("Blocked", spec.get("target", kind),
+                                        f"unknown check kind {kind!r}", "integrations.yaml"))
                 continue
-            source = f"kubectl -n {self.namespace} get deploy {name} -o jsonpath=…env"
-            if actual is None:
-                evidence.append(finding("Blocked", f"{name} {var}",
-                                        "variable is not set on the deployment", source))
-            elif actual != expected:
-                evidence.append(finding("Verified", f"{name} {var}",
-                                        f"{actual} — baseline is {expected}", source))
-                if proposal is None:
-                    proposal = self._build_proposal(key, book, actual)
-            else:
-                evidence.append(finding("Verified", f"{name} {var}", actual, source))
+            try:
+                ev, repair = runner(self._kubectl, self.namespace, spec)
+            except ProviderError as e:
+                evidence.append(finding("Blocked", spec.get("target", kind),
+                                        f"could not read it: {e}",
+                                        f"kubectl -n {self.namespace}"))
+                continue
+            except Exception as e:
+                evidence.append(finding("Blocked", spec.get("target", kind),
+                                        f"{type(e).__name__}: {e}", f"kubectl -n {self.namespace}"))
+                continue
+            evidence.append(ev)
+            # First repairable finding wins: one incident, one named action.
+            if repair and proposal is None:
+                proposal = self._build_proposal(spec, repair)
 
         m = state["metrics"]
         if self.prometheus and not m["available"]:
@@ -134,22 +146,21 @@ class KubernetesProvider(InfraProvider):
 
     # ---- proposal and write ----
 
-    def _build_proposal(self, key: str, book: Dict[str, Any], actual: str) -> Dict[str, Any]:
-        name = book["target"].split("/", 1)[1]
-        live = json.loads(self._kubectl("get", "deploy", name, "-o", "json"))
+    def _build_proposal(self, spec: Dict[str, Any], repair: Dict[str, Any]) -> Dict[str, Any]:
+        resource, name = spec["target"].split("/", 1)
+        live = json.loads(self._kubectl("get", resource, name, "-o", "json"))
         action = {
             "action_id": f"ACT-{uuid.uuid4().hex[:8].upper()}",
             "environment": self.name,
-            "runbook": book.get("runbook", key),
-            "target": book["target"],
-            "summary": book["summary"],
-            "parameters": {"name": book["env"], "value": book["value"]},
-            "observed": actual,
+            "runbook": spec.get("runbook", spec.get("kind", "repair")),
+            "target": spec["target"],
+            "summary": spec.get("summary", f"Restore {spec['target']} to the baseline"),
+            "parameters": repair["parameters"],
+            "observed": repair["observed"],
             # Pinning means an approval cannot be replayed against a cluster that has since moved.
             "uid": live["metadata"]["uid"],
             "resource_version": live["metadata"]["resourceVersion"],
-            "patch": {"spec": {"template": {"spec": {"containers": [
-                {"name": name, "env": [{"name": book["env"], "value": book["value"]}]}]}}}},
+            "patch": repair["patch"],
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "expires_at": time.time() + 900,
         }
@@ -165,15 +176,15 @@ class KubernetesProvider(InfraProvider):
         if time.time() > action["expires_at"]:
             raise ProviderError("Proposal expired after 15 minutes. Re-diagnose and approve the new one.")
 
-        name = action["target"].split("/", 1)[1]
-        live = json.loads(self._kubectl("get", "deploy", name, "-o", "json"))
+        resource, name = action["target"].split("/", 1)
+        live = json.loads(self._kubectl("get", resource, name, "-o", "json"))
         if live["metadata"]["resourceVersion"] != action["resource_version"]:
             raise ProviderError(
                 "The deployment changed since this was proposed. Re-diagnose rather than apply a "
                 "stale patch."
             )
 
-        self._kubectl("patch", "deploy", name, "--type", "strategic", "-p",
+        self._kubectl("patch", resource, name, "--type", "strategic", "-p",
                       json.dumps(action["patch"]))
         action["applied_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         action["approver"] = approver
