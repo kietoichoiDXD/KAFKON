@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import logging
 from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple
@@ -18,6 +19,25 @@ from ..config import settings
 
 logger = logging.getLogger("scribeba.fallback")
 
+def parse_model_json(raw_text: str) -> Dict[str, Any]:
+    """Models return JSON wrapped in prose or a ```json fence often enough to matter.
+
+    A bare json.loads on that raises, the cascade treats it as a dead model, and the run degrades
+    to the local engine without anyone noticing. Pull the outermost object out instead.
+    """
+    text = raw_text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+        text = re.sub(r"```\s*$", "", text).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        return json.loads(text[start:end + 1])
+
+
 class FallbackTier(str, Enum):
     LOW = "low"         # Minimum cost & latency (triage / lightweight)
     MEDIUM = "medium"   # Balanced (standard agile specification)
@@ -26,9 +46,9 @@ class FallbackTier(str, Enum):
 class ModelFallbackRouter:
     """Intelligent multi-tier fallback orchestrator.
     
-    When OpenRouter runs out of tokens or hits rate limits (402, 429), it automatically
-    cascades through the requested model hierarchy:
-        [GPT -> LUNA -> SONET -> 5 (GPT-5/o3) -> GPT SOL -> Local Engine]
+    When a model is out of credit (402), rate limited (429) or otherwise unreachable, the chain
+    moves on:
+        [OpenRouter primary -> OpenRouter alternates -> Anthropic direct -> local engine]
     """
 
     # Every id below was checked against GET https://openrouter.ai/api/v1/models on 2026-09-12.
@@ -184,7 +204,7 @@ class ModelFallbackRouter:
         resp.raise_for_status()
         data = resp.json()
         raw_text = data["choices"][0]["message"]["content"]
-        return json.loads(raw_text)
+        return parse_model_json(raw_text)
 
     async def _call_openai(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
         resp = await client.post(
@@ -205,7 +225,7 @@ class ModelFallbackRouter:
         resp.raise_for_status()
         data = resp.json()
         raw_text = data["choices"][0]["message"]["content"]
-        return json.loads(raw_text)
+        return parse_model_json(raw_text)
 
     async def _call_anthropic(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
         resp = await client.post(
@@ -227,4 +247,4 @@ class ModelFallbackRouter:
         resp.raise_for_status()
         data = resp.json()
         raw_text = data["content"][0]["text"]
-        return json.loads(raw_text)
+        return parse_model_json(raw_text)

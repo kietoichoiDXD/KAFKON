@@ -1,6 +1,6 @@
 import unittest
 import asyncio
-from backend.core.fallback_router import ModelFallbackRouter, FallbackTier
+from backend.core.fallback_router import ModelFallbackRouter, FallbackTier, parse_model_json
 from backend.core.models import ThreadContext, ChatMessage, SkillConfig
 
 class TestModelFallbackRouter(unittest.TestCase):
@@ -53,6 +53,12 @@ class TestModelFallbackRouter(unittest.TestCase):
         final_step = trail[-1]
         self.assertEqual(final_step["alias"], "local_engine")
         self.assertEqual(final_step["status"], "success")
+
+    def test_model_json_survives_fences_and_prose(self):
+        """The commonest way a live run silently degrades: JSON the model wrapped in something."""
+        self.assertEqual(parse_model_json('```json\n{"a": 1}\n```'), {"a": 1})
+        self.assertEqual(parse_model_json('Here you go:\n{"a": 1}\nhope that helps'), {"a": 1})
+        self.assertEqual(parse_model_json('{"a": 1}'), {"a": 1})
 
 if __name__ == "__main__":
     unittest.main()
