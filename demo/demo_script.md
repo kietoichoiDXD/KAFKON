@@ -60,13 +60,8 @@ Click the ClickUp link in the thread's last message. On the ticket, show:
 
 ## Act 4 — The team's rules, not our prompt (20s)
 
-Same thread, different Skill:
-
-```bash
-python -m backend.cli slack-run --channel C0BFQCXHM2T --ts <TS> --skill agency_detailed
-```
-
-Put the two ClickUp tickets side by side. Same thread, same agent:
+Do not re-run the command on camera — it posts three more messages into the thread you just showed.
+Run it once before recording (`--skill agency_detailed`) and open both tickets in two tabs. Same thread, same agent:
 
 | | `startup_lean` | `agency_detailed` |
 |---|---|---|
@@ -81,9 +76,10 @@ Put the two ClickUp tickets side by side. Same thread, same agent:
 
 ## If asked in Q&A
 
-- **"Is the analysis a real LLM call?"** — Right now it's our deterministic engine; we had no model
-  key during the build. The router in `backend/core/fallback_router.py` sends the same prompt to
-  OpenRouter the moment the key is set — the Slack and ClickUp paths you just watched are unchanged.
+- **"Is the analysis a real LLM call?"** — No. It's a deterministic engine tuned to this conversation
+  shape; it is not general, and we say so rather than let you find it. We had no model key during the
+  build. `backend/core/fallback_router.py` sends the same thread to OpenRouter the moment the key is
+  set, and the Slack and ClickUp paths you just watched do not change.
 - **"Is it a bot?"** — The Slack integration runs on a user token with `channels:history` and
   `chat:write`. A bot token is a one-line env swap; we did not have app-install rights in time.
 - **"What was built today?"** — Everything in `backend/`, `frontend/` and `skills/`. First commit
