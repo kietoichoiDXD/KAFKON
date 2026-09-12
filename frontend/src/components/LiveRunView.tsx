@@ -33,6 +33,24 @@ const LABEL_COLOR: Record<string, string> = {
   Blocked: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
+const PRESETS = [
+  {
+    label: 'Lean MVP ticket',
+    skill: 'startup_lean',
+    prompt: 'Summarise this thread as an MVP story, label every claim, and file it in ClickUp.',
+  },
+  {
+    label: 'Contract spec',
+    skill: 'agency_detailed',
+    prompt: 'Write a billable feature spec with explicit in-scope and out-of-scope boundaries.',
+  },
+  {
+    label: 'Standard scrum',
+    skill: 'default',
+    prompt: 'Draft a standard user story with Given/When/Then acceptance criteria.',
+  },
+];
+
 function Dot({ on }: { on: boolean }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${on ? 'bg-emerald-500' : 'bg-gray-300'}`} />;
 }
@@ -47,6 +65,7 @@ export function LiveRunView() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
   useEffect(() => {
     fetch(`${API}/api/health`).then(r => r.json()).then(setHealth).catch(() => setError('API is not running. Start it with: python -m backend.cli serve'));
@@ -120,6 +139,25 @@ export function LiveRunView() {
               </select>
             </label>
           </div>
+          {/* Starter prompts: each one sets the run up, so nobody has to guess what to type. */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {PRESETS.map(p => (
+              <button
+                key={p.label}
+                onClick={() => setSkill(p.skill)}
+                title={p.prompt}
+                className={`px-2.5 py-1 rounded-full border text-[12px] transition-colors ${
+                  skill === p.skill
+                    ? 'border-[#7b5cff]/40 bg-[#7b5cff]/8 text-[#4a35a8]'
+                    : 'border-gray-200 text-gray-600 hover:border-[#7b5cff]/40'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[12px] text-gray-500 italic">“{active.prompt}”</p>
+
           <button onClick={run} disabled={running || !channel || !ts}
                   className="px-4 py-2 rounded-full bg-[#7b5cff] text-white text-[13.5px] font-medium disabled:opacity-40">
             {running ? 'Running…' : 'Run in thread'}

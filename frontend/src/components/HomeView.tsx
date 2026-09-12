@@ -17,10 +17,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [showMascot, setShowMascot] = useState(true);
   const [modelMode, setModelMode] = useState('Light · Auto');
 
+  // Starter prompts. They exist so a first-time visitor can press one instead of facing an
+  // empty box, so each is a whole request ScribeBA can actually act on.
   const suggestions = [
-    'Enable multi-factor authentication on the AWS root account.',
-    'Update prove-it-day-01-govern skill with blast radius and workflow impact phases.',
-    'Check snapshot history and tags for the three detached EBS volumes.',
+    'Summarise the SSO thread in #proj-auth-federation and label every requirement.',
+    'Which decisions in this thread are still Assumed? Ask the channel about them.',
+    'Draft the ClickUp ticket from this thread using the agency_detailed skill.',
+    'Compare what startup_lean and agency_detailed would file for the same thread.',
   ];
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
