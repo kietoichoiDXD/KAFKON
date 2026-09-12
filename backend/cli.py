@@ -197,7 +197,8 @@ def serve_cmd(port: int):
 @click.option("--channel", "-c", required=True, help="Slack channel ID, e.g. C0BFQCXHM2T.")
 @click.option("--ts", required=True, help="Thread parent message ts, e.g. 1757661234.123456.")
 @click.option("--skill", "-s", default="startup_lean", help="Skill template name.")
-def slack_run_cmd(channel: str, ts: str, skill: str):
+@click.option("--tier", "-t", default=None, type=click.Choice(['low', 'medium', 'high']), help="Model tier: low is fastest, high reasons deepest.")
+def slack_run_cmd(channel: str, ts: str, skill: str, tier):
     """Read a real Slack thread, analyze it, reply in-thread, and create a real ClickUp task."""
     from .platforms.slack_adapter import SlackAdapter
 
@@ -213,7 +214,7 @@ def slack_run_cmd(channel: str, ts: str, skill: str):
         permalink = await slack.get_permalink(channel, ts)
         print(f"→ Read {len(thread.messages)} messages from {permalink}")
 
-        result = await analyzer.analyze_thread(thread, skill_name=skill)
+        result = await analyzer.analyze_thread(thread, skill_name=skill, tier=tier)
         await slack.post_analysis_summary(channel, ts, result)
         trail = result.metadata.get("fallback_trail") or [{"alias": "local_engine"}]
         print(f"→ Engine: {trail[-1]['alias']} ({trail[-1].get('model', 'deterministic')})")

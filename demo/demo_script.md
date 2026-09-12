@@ -28,8 +28,12 @@ Point at the last line of the thread: `@ScribeBA /ba-summarize`.
 ## Act 2 — The agent answers in the thread (45s)
 
 ```bash
-python -m backend.cli slack-run --channel C0BFQCXHM2T --ts <TS> --skill startup_lean
+python -m backend.cli slack-run --channel C0BFQCXHM2T --ts <TS> --skill startup_lean --tier low
 ```
+
+`--tier low` is Claude Haiku 4.5 and returns in ~20 s; the default medium tier is Sonnet 5 at ~45 s.
+In a two-minute video that difference is a quarter of your runtime — record on low, and say the tier
+is a per-run choice, which it is.
 
 Cut back to Slack. The reply is already in the thread. Show, in this order:
 
