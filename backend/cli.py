@@ -73,16 +73,18 @@ def cli():
 @cli.command("analyze")
 @click.option("--file", "-f", default="demo/sample_conversation.md", help="Path to thread transcript markdown file.")
 @click.option("--skill", "-s", default="startup_lean", help="Skill template name (default, startup_lean, agency_detailed).")
-@click.option("--live", is_flag=True, help="Force live API calls to Anthropic Claude.")
-def analyze_cmd(file: str, skill: str, live: bool):
-    """Analyze a chat thread and extract structured User Story, Acceptance Criteria, and Evidence."""
+@click.option("--live", is_flag=True, help="Force live API calls to Anthropic/OpenRouter.")
+@click.option("--tier", "-t", default=None, type=click.Choice(['low', 'medium', 'high', 'minimum']), help="Fallback operation tier: low (min cost), medium (balanced), high (deep reasoning).")
+def analyze_cmd(file: str, skill: str, live: bool, tier: Optional[str]):
+    """Analyze a chat thread with multi-tier model fallback (OpenRouter -> GPT -> LUNA -> SONET -> 5 -> SOL)."""
     thread = load_thread_from_file(file)
     analyzer = ScribeBAAnalyzer()
+    active_tier = tier or settings.fallback_tier
 
     if HAS_RICH:
-        console.print(f"[bold #008775]🔍 ScribeBA Analyzing Thread:[/bold #008775] [dim]{file}[/dim] with Skill: [bold yellow]{skill}[/bold yellow]...")
+        console.print(f"[bold #008775]🔍 ScribeBA Analyzing Thread:[/bold #008775] [dim]{file}[/dim] | Skill: [bold yellow]{skill}[/bold yellow] | Tier: [bold cyan]{active_tier.upper()}[/bold cyan]")
 
-    result = asyncio.run(analyzer.analyze_thread(thread, skill_name=skill, force_live=live))
+    result = asyncio.run(analyzer.analyze_thread(thread, skill_name=skill, force_live=live, tier=active_tier))
     story = result.story
     score = result.invest_score
 
@@ -125,6 +127,15 @@ def analyze_cmd(file: str, skill: str, live: bool):
 
         if result.clarifying_question:
             console.print(Panel(f"[bold yellow]⚠️ Clarification Required Before Ticket Creation:[/bold yellow]\n{result.clarifying_question}", border_style="yellow"))
+
+        # Fallback Trail Info
+        trail = result.metadata.get("fallback_trail")
+        if trail:
+            trail_lines = []
+            for step in trail:
+                st_color = "green" if step.get("status") == "success" else "yellow" if step.get("status") == "skipped" else "red"
+                trail_lines.append(f"• Step {step.get('step')}: [bold]{step.get('alias')}[/bold] ({step.get('model')}) → [{st_color}]{step.get('status').upper()}[/{st_color}] ({step.get('reason', 'OK')})")
+            console.print(Panel("\n".join(trail_lines), title="🛡️ Model Fallback Cascade Execution Trail", border_style="dim"))
     else:
         print(f"User Story: {story.title}")
         print(f"INVEST: {score.overall}/100")
