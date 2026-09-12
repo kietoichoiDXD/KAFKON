@@ -75,11 +75,21 @@ def health():
     })
 
 
+@app.get("/api/ops/environments")
+def ops_environments():
+    """Everything this instance can investigate, from integrations.yaml."""
+    from . import ops
+    try:
+        return jsonify(ops.environments())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.get("/api/ops/state")
 def ops_state():
     from . import ops
     try:
-        return jsonify(ops.cluster_state())
+        return jsonify(ops.cluster_state(request.args.get("environment")))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -88,7 +98,7 @@ def ops_state():
 def ops_diagnose():
     from . import ops
     try:
-        return jsonify(ops.diagnose())
+        return jsonify(ops.diagnose(request.args.get("environment")))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -132,7 +142,7 @@ def ops_apply():
 def ops_verify():
     from . import ops
     try:
-        return jsonify(ops.verify())
+        return jsonify(ops.verify(request.args.get("environment")))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -196,11 +206,18 @@ def chat():
 
     responder = ChatResponder(skill_manager)
     out = asyncio.run(responder.respond(
-        messages, body.get("skill", "startup_lean"), body.get("tier") or settings.fallback_tier))
+        messages,
+        body.get("skill", "startup_lean"),
+        body.get("tier") or settings.fallback_tier,
+        environment=body.get("environment"),
+        pending_action=body.get("pending_action"),
+    ))
     if out["type"] == "analysis":
         return jsonify({"type": "analysis", **_serialize(out["result"])})
     if out["type"] == "ops":
         return jsonify({"type": "ops", **out["diagnosis"]})
+    if out["type"] == "approve":
+        return jsonify({"type": "approve", "proposal": out["proposal"]})
     return jsonify({"type": "text", "text": out["text"]})
 
 

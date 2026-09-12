@@ -14,6 +14,7 @@ type Turn =
   | { role: 'agent'; result: any; skill: string; tier: string }
   | { role: 'reply'; text: string }
   | { role: 'ops'; diag: any }
+  | { role: 'approve'; proposal: any; applied?: any; error?: string }
   | { role: 'error'; text: string };
 
 const SUGGESTIONS = [
@@ -74,6 +75,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   const [showIntegrations, setShowIntegrations] = useState(true);
   const [modelMode, setModelMode] = useState('Light · Auto');
   const endRef = useRef<HTMLDivElement>(null);
+  // The last proposal seen in this conversation, so "fix it" refers to something concrete.
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   useEffect(() => {
     get<Health>('/api/health').then(setHealth);
@@ -115,14 +118,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       const resp = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, skill, tier }),
+        body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error ?? 'Request failed');
       // A pasted discussion comes back as a labelled analysis; a question comes back as prose.
+      if (data.type === 'ops' && data.proposal) setPendingAction(data.proposal.action_id);
       setTurns(t => [...t,
         data.type === 'text' ? { role: 'reply', text: data.text }
         : data.type === 'ops' ? { role: 'ops', diag: data }
+        : data.type === 'approve' ? { role: 'approve', proposal: data.proposal }
         : { role: 'agent', result: data, skill, tier }]);
     } catch (e: any) {
       setTurns(t => [...t, {
@@ -133,6 +138,27 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       }]);
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  // Approving here is a person pressing a button on a diff they can see — the same gate the
+  // Incidents console uses. A sentence never authorises the write on its own.
+  const applyProposal = async (index: number, actionId: string) => {
+    try {
+      const r = await fetch('http://localhost:8000/api/ops/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action_id: actionId, approver: 'operator' }),
+      });
+      const d = await r.json();
+      setTurns(t => t.map((turn, i) =>
+        i === index && turn.role === 'approve'
+          ? { ...turn, ...(d.error ? { error: d.error } : { applied: d }) }
+          : turn));
+      if (!d.error) setPendingAction(null);
+    } catch (e: any) {
+      setTurns(t => t.map((turn, i) =>
+        i === index && turn.role === 'approve' ? { ...turn, error: e.message } : turn));
     }
   };
 
@@ -254,6 +280,38 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
                       <span className="font-mono text-[11.5px]">{t.diag.proposal.action_id}</span> —
                       open <b>Incidents</b> to see the exact patch and approve it.
                     </p>
+                  )}
+                </div>
+              ) : t.role === 'approve' ? (
+                <div key={i} className="bg-white rounded-2xl border-2 border-[#7b5cff]/30 p-5 space-y-3 shadow-sm">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="text-[15.5px] font-semibold text-gray-900 m-0">{t.proposal.summary}</h3>
+                    <span className="text-[11.5px] font-mono text-gray-500">{t.proposal.action_id}</span>
+                  </div>
+                  <p className="text-[12.5px] text-gray-600 m-0">
+                    {t.proposal.environment} · runbook <b>{t.proposal.runbook}</b> on {t.proposal.target}
+                  </p>
+                  <div className="font-mono text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="text-rose-600">- {t.proposal.parameters.name}={t.proposal.observed}</div>
+                    <div className="text-emerald-700">+ {t.proposal.parameters.name}={t.proposal.parameters.value}</div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-500 m-0">
+                    Pinned to resourceVersion {t.proposal.resource_version} — refused if the
+                    deployment changes before you approve.
+                  </p>
+                  {t.applied ? (
+                    <p className="text-[12.5px] text-emerald-700 m-0">
+                      Applied at {t.applied.at} by {t.applied.approver}. {t.applied.note}
+                    </p>
+                  ) : t.error ? (
+                    <p className="text-[12.5px] text-rose-600 m-0">{t.error}</p>
+                  ) : (
+                    <button
+                      onClick={() => applyProposal(i, t.proposal.action_id)}
+                      className="px-4 py-2 rounded-full bg-emerald-600 text-white text-[13.5px] font-medium hover:bg-emerald-700 active:translate-y-px transition-all"
+                    >
+                      Approve and apply
+                    </button>
                   )}
                 </div>
               ) : t.role === 'reply' ? (
