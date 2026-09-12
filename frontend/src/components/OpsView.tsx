@@ -1,0 +1,203 @@
+import React, { useEffect, useState } from 'react';
+
+const API = 'http://localhost:8000';
+
+const LABEL_COLOR: Record<string, string> = {
+  Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Inferred: 'bg-amber-50 text-amber-700 border-amber-200',
+  Assumed: 'bg-purple-50 text-purple-700 border-purple-200',
+  Blocked: 'bg-rose-50 text-rose-700 border-rose-200',
+};
+
+type Pod = { name: string; ready: string; status: string; restarts: string; age: string };
+type Evidence = { label: string; field: string; value: string; source: string };
+type Proposal = {
+  action_id: string; runbook: string; target: string; summary: string;
+  parameters: { name: string; value: string }; observed: string;
+  resource_version: string; patch: any; created_at: string;
+};
+type Diagnosis = {
+  healthy: boolean;
+  state: { namespace: string; context: string; pods: Pod[];
+    metrics: { rps: number | null; error_rate: number | null; p95_seconds: number | null; available: boolean } };
+  evidence: Evidence[];
+  proposal: Proposal | null;
+  error?: string;
+};
+
+const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`);
+const num = (v: number | null, d = 2) => (v === null ? '—' : v.toFixed(d));
+
+export function OpsView() {
+  const [diag, setDiag] = useState<Diagnosis | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [applied, setApplied] = useState<any>(null);
+  const [verified, setVerified] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (what: 'diagnose' | 'verify') => {
+    setBusy(what); setError(null);
+    try {
+      const r = await fetch(`${API}/api/ops/${what}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); }
+      else setVerified(d);
+    } catch (e: any) {
+      setError(e.message === 'Failed to fetch' ? 'API not running — python -m backend.cli serve' : e.message);
+    } finally { setBusy(null); }
+  };
+
+  const approve = async () => {
+    if (!diag?.proposal) return;
+    setBusy('apply'); setError(null);
+    try {
+      const r = await fetch(`${API}/api/ops/apply`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action_id: diag.proposal.action_id, approver: 'operator' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setApplied(d);
+    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+  };
+
+  useEffect(() => { run('diagnose'); }, []);
+
+  const m = diag?.state.metrics;
+  const bad = (m?.error_rate ?? 0) > 0.02;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="max-w-4xl mx-auto space-y-5">
+        <div>
+          <h1 className="text-[22px] font-semibold text-gray-900">Incident console</h1>
+          <p className="text-[13.5px] text-gray-600 mt-1">
+            Reads the live cluster, labels what it can prove, and proposes one named runbook with the
+            exact patch. Nothing is written until you approve the action you can see.
+          </p>
+        </div>
+
+        {error && <p className="text-[13px] text-rose-600 border border-rose-200 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+
+        {m && (
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              ['Error rate', pct(m.error_rate), bad],
+              ['Requests / s', num(m.rps), false],
+              ['p95 latency', m.p95_seconds === null ? '—' : `${(m.p95_seconds * 1000).toFixed(0)} ms`, false],
+              ['Pods ready', `${diag!.state.pods.filter(p => p.ready.split('/')[0] === p.ready.split('/')[1]).length}/${diag!.state.pods.length}`, false],
+            ].map(([k, v, warn]: any) => (
+              <div key={k} className={`rounded-xl border px-4 py-3 bg-white ${warn ? 'border-rose-300' : 'border-gray-200'}`}>
+                <div className="text-[11.5px] text-gray-500">{k}</div>
+                <div className={`text-[20px] font-semibold ${warn ? 'text-rose-600' : 'text-gray-900'}`}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={() => run('diagnose')} disabled={!!busy}
+                  className="px-4 py-2 rounded-full bg-[#7b5cff] text-white text-[13.5px] font-medium disabled:opacity-40">
+            {busy === 'diagnose' ? 'Reading cluster…' : 'Diagnose'}
+          </button>
+          <button onClick={() => run('verify')} disabled={!!busy}
+                  className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-[13.5px] disabled:opacity-40">
+            {busy === 'verify' ? 'Checking…' : 'Verify recovery'}
+          </button>
+        </div>
+
+        {diag && (
+          <div className="border border-gray-200 rounded-xl p-5 bg-white space-y-3">
+            <h2 className="text-[15px] font-semibold">Evidence</h2>
+            {diag.evidence.map((e, i) => (
+              <div key={i} className="flex items-start gap-2 text-[12.5px]">
+                <span className={`px-1.5 py-0.5 rounded border shrink-0 ${LABEL_COLOR[e.label] ?? 'bg-gray-50 border-gray-200'}`}>{e.label}</span>
+                <span className="text-gray-700">
+                  <b>{e.field}</b>: {e.value}
+                  <span className="block text-gray-400 font-mono text-[11px] mt-0.5">{e.source}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {diag?.proposal && !applied && (
+          <div className="border-2 border-[#7b5cff]/30 rounded-xl p-5 bg-white space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[15px] font-semibold">Proposed fix</h2>
+              <span className="text-[11.5px] font-mono text-gray-500">{diag.proposal.action_id}</span>
+            </div>
+            <p className="text-[13px] text-gray-700">{diag.proposal.summary}</p>
+            <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+              <div><span className="text-gray-500">Runbook</span><div className="font-semibold">{diag.proposal.runbook}</div></div>
+              <div><span className="text-gray-500">Target</span><div className="font-semibold">{diag.proposal.target}</div></div>
+            </div>
+            <div className="text-[12.5px]">
+              <span className="text-gray-500">Exact change</span>
+              <div className="mt-1 font-mono text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <div className="text-rose-600">- {diag.proposal.parameters.name}={diag.proposal.observed}</div>
+                <div className="text-emerald-700">+ {diag.proposal.parameters.name}={diag.proposal.parameters.value}</div>
+              </div>
+            </div>
+            <p className="text-[11.5px] text-gray-500">
+              Pinned to resourceVersion {diag.proposal.resource_version} — if the deployment changes
+              before you approve, this action is refused rather than applied to something else.
+            </p>
+            <button onClick={approve} disabled={!!busy}
+                    className="px-4 py-2 rounded-full bg-emerald-600 text-white text-[13.5px] font-medium disabled:opacity-40">
+              {busy === 'apply' ? 'Applying…' : 'Approve and apply'}
+            </button>
+          </div>
+        )}
+
+        {diag && !diag.proposal && (
+          <div className="border border-emerald-200 bg-emerald-50 rounded-xl px-4 py-3 text-[13px] text-emerald-800">
+            Configuration matches the baseline. No runbook to propose.
+          </div>
+        )}
+
+        {applied && (
+          <div className="border border-gray-200 rounded-xl p-4 bg-white text-[13px] space-y-1">
+            <div className="font-semibold text-emerald-700">Applied · {applied.action_id}</div>
+            <div className="text-gray-600">approved by {applied.approver} at {applied.at}</div>
+            <div className="text-gray-500 text-[12px]">{applied.note}</div>
+          </div>
+        )}
+
+        {verified && (
+          <div className={`border rounded-xl p-4 text-[13px] space-y-1 ${verified.recovered ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+            <div className="font-semibold">{verified.recovered ? 'Recovered' : 'Not recovered yet'}</div>
+            <div className="text-gray-700">
+              config restored: {String(verified.config_restored)} · pods ready: {String(verified.pods_ready)} ·
+              error rate: {pct(verified.error_rate)}
+            </div>
+            <div className="text-gray-500 text-[12px]">
+              The rate window still holds pre-fix samples, so the number falls over a minute or two
+              rather than instantly.
+            </div>
+          </div>
+        )}
+
+        {diag && (
+          <div className="border border-gray-200 rounded-xl p-4 bg-white">
+            <h2 className="text-[14px] font-semibold mb-2">
+              {diag.state.namespace} · {diag.state.context}
+            </h2>
+            <div className="space-y-1 font-mono text-[12px]">
+              {diag.state.pods.map(p => (
+                <div key={p.name} className="flex gap-3 text-gray-600">
+                  <span className="w-64 truncate">{p.name}</span>
+                  <span className={p.ready.split('/')[0] === p.ready.split('/')[1] ? 'text-emerald-600' : 'text-rose-600'}>{p.ready}</span>
+                  <span>{p.status}</span>
+                  <span className="text-gray-400">restarts {p.restarts}</span>
+                  <span className="text-gray-400">{p.age}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

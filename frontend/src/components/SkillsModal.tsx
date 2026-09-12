@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { SKILLS_LIST } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { get, Skill } from '../api';
 import { SkillItem } from '../types';
 
 interface SkillsModalProps {
@@ -8,8 +8,33 @@ interface SkillsModalProps {
 }
 
 export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => {
-  const [skills, setSkills] = useState<SkillItem[]>(SKILLS_LIST);
-  const [selectedSkillId, setSelectedSkillId] = useState<string>('domain-modeling');
+  const [skills, setSkills] = useState<SkillItem[]>([]);
+  const [selectedSkillId, setSelectedSkillId] = useState<string>('');
+
+  // The skills are the YAML files the backend actually loaded from skills/.
+  useEffect(() => {
+    if (!isOpen) return;
+    get<Skill[]>('/api/skills').then(list => {
+      if (!list) return;
+      const mapped: SkillItem[] = list.map(sk => ({
+        id: sk.name,
+        name: sk.name,
+        description: sk.description,
+        enabled: true,
+        availableIn: { chat: true, review: true, incident: false, assessment: false },
+        files: [{
+          name: `${sk.name}.yaml`,
+          path: `skills/${sk.name}.yaml`,
+          content:
+            `# ${sk.name} (v${sk.version})\n\n**Team type**: ${sk.team_type}\n\n` +
+            `${sk.description}\n\n## Required fields\n\n` +
+            sk.required_fields.map(f => `- \`${f}\``).join('\n'),
+        }],
+      }));
+      setSkills(mapped);
+      setSelectedSkillId(prev => prev || mapped[0]?.id || '');
+    });
+  }, [isOpen]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('SKILL.md');
   const [activeMenu, setActiveMenu] = useState('Skills');
@@ -17,6 +42,16 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
   if (!isOpen) return null;
 
   const currentSkill = skills.find(s => s.id === selectedSkillId) || skills[0];
+  if (!currentSkill) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+        <div className="bg-white rounded-2xl px-8 py-7 text-[13.5px] text-gray-500" onClick={e => e.stopPropagation()}>
+          Loading skills from the backend… if this stays, start it with
+          <code className="mx-1 font-mono text-gray-700">python -m backend.cli serve</code>.
+        </div>
+      </div>
+    );
+  }
 
   const filteredSkills = skills.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())

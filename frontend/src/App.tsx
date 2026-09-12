@@ -5,6 +5,7 @@ import { HomeView } from './components/HomeView';
 import { RoomsView } from './components/RoomsView';
 import { LiveRunView } from './components/LiveRunView';
 import { Petals } from './components/Petals';
+import { OpsView } from './components/OpsView';
 import { ArtifactsView } from './components/ArtifactsView';
 import { AutomationsView } from './components/AutomationsView';
 import { ReviewView } from './components/ReviewView';
@@ -49,6 +50,8 @@ export function App() {
         )}
 
         {currentView === 'live' && <LiveRunView />}
+
+        {currentView === 'ops' && <OpsView />}
 
         {currentView === 'rooms' && <RoomsView />}
 

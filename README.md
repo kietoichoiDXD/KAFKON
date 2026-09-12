@@ -19,6 +19,25 @@ relationship tracing and export. Built with [archify](https://github.com/tt-a1i/
 
 ---
 
+## 🚨 Incident console
+
+The same discipline, pointed at infrastructure. ScribeBA's whole argument is that a claim should
+carry where it came from and that a missing answer is Blocked rather than invented — that is as
+true of a failing deployment as of a requirement.
+
+`backend/ops.py` reads a Kubernetes namespace and Prometheus, labels each finding with the command
+that produced it, and proposes **one named runbook** from a fixed catalogue with the exact patch.
+It cannot be asked for an arbitrary patch or a shell. Every proposal pins the deployment's `uid`
+and `resourceVersion`, so an approval cannot be replayed against a cluster that has since changed,
+and nothing is written until a human approves the action they can see on screen.
+
+Verified against a live EKS cluster on 2026-09-12: it found `VALKEY_ADDR=missing-valkey:6379` on
+`deployment/cart` with 25% of requests failing, proposed `restore-endpoint`, applied the patch on
+approval, and then correctly reported **not recovered** while the rate window still held pre-fix
+samples — because "the API write succeeded" and "the business flow works" are different claims.
+
+---
+
 ## ✅ What is live, and what is simulated
 
 Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp list `Project 1`:
@@ -33,7 +52,7 @@ Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp li
 | Exa neural search | **Live** | `python -m backend.cli exa-search "SOC2 idle session timeout"` returns grounded sources |
 | Telegram / Discord adapters | **Not exercised** | Code present, no token configured |
 | React dashboard — **Live run** view | **Live** | Calls the backend API; the button posts into the real thread and files the real ticket |
-| React dashboard — other views | **Mock data** | Still read `frontend/src/data/mockData.ts` |
+| React dashboard | **Live** | `mockData.ts` is deleted. Every panel reads the backend: connections from `/api/health`, run history and evidence from `/api/runs`, artifacts from the ClickUp tickets really filed, skills from `skills/*.yaml`. Where there is nothing to show, the screen says so |
 | PII / secret redaction before egress | **Live** | `backend/core/redaction.py` masks Slack/GitHub/OpenAI/ClickUp/AWS tokens, cards, IPs, phone numbers and email local-parts before any model call |
 
 Run the live path yourself:

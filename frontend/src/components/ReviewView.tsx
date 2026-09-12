@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { EVIDENCE_ITEMS } from '../data/mockData';
+
 
 const COLORS: Record<string, string> = {
   Verified: '#2F6F5E',
@@ -9,13 +9,13 @@ const COLORS: Record<string, string> = {
 };
 
 export const ReviewView: React.FC = () => {
-  const [items, setItems] = useState(EVIDENCE_ITEMS);
-  const [selectedItem, setSelectedItem] = useState(items[0]);
+  const [items, setItems] = useState<any[]>([]);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [isLive, setIsLive] = useState(false);
 
-  // Real evidence from runs this backend actually performed; the sample list is the fallback
-  // when the API is not running.
+  // Only evidence from runs this backend actually performed. When there are none the screen
+  // says so rather than showing sample rows that look like findings.
   useEffect(() => {
     fetch('http://localhost:8000/api/runs')
       .then(r => r.json())
@@ -73,11 +73,8 @@ export const ReviewView: React.FC = () => {
             <h1 className="text-xl font-bold font-serif text-[#1e2321] tracking-tight">
               Ticket Review & Evidence Verification
             </h1>
-            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[#1e2321] text-white">
-              Stitch ScribeBA v1.4
-            </span>
             <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${isLive ? 'bg-[#2F6F5E] text-white' : 'bg-gray-200 text-gray-600'}`}>
-              {isLive ? 'live runs' : 'sample data'}
+              {isLive ? 'live runs' : 'no runs yet'}
             </span>
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
@@ -88,7 +85,15 @@ export const ReviewView: React.FC = () => {
         {/* Action button */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => alert('Exporting Official Evidence Docket...')}
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = `scribeba-evidence-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }}
+            disabled={items.length === 0}
             className="px-4 py-2 border border-[#1e2321] text-xs font-mono font-medium text-[#1e2321] hover:bg-[#1e2321] hover:text-white transition-all shadow-sm"
           >
             Export Docket
@@ -123,8 +128,14 @@ export const ReviewView: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left column: Evidence list */}
         <div className="w-1/2 border-r border-[#c9ccc2] overflow-y-auto p-6 space-y-3 bg-white">
+          {filteredItems.length === 0 && (
+            <p className="text-[13px] text-gray-500 m-0">
+              {isLive ? 'No records match this filter.'
+                      : 'No runs recorded yet. Start one from Live run, or from the Incidents console.'}
+            </p>
+          )}
           {filteredItems.map(item => {
-            const isSelected = selectedItem.id === item.id;
+            const isSelected = selectedItem?.id === item.id;
             return (
               <div
                 key={item.id}
@@ -219,7 +230,7 @@ export const ReviewView: React.FC = () => {
                             : i
                         )
                       );
-                      setSelectedItem(prev => ({
+                      setSelectedItem((prev: any) => ({
                         ...prev,
                         status: prev.status === 'Verified' ? 'Inferred' : 'Verified',
                       }));

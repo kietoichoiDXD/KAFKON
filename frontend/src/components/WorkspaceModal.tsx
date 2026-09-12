@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   WorkspaceTab,
   AgentItem,
@@ -8,12 +8,12 @@ import {
   SkillItem,
 } from '../types';
 import {
-  SKILLS_LIST,
   CORE_AGENTS,
   COMMANDS_LIST,
   KNOWLEDGE_BASES,
   INITIAL_CREDENTIALS,
-} from '../data/mockData';
+} from '../data/workspace';
+import { get, Skill } from '../api';
 import { SkillMarkdownRenderer } from './SkillMarkdownRenderer';
 
 interface WorkspaceModalProps {
@@ -36,7 +36,28 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [connectionSubTab, setConnectionSubTab] = useState<'Builtin' | 'MCP'>('Builtin');
 
   // Skills State
-  const [skills, setSkills] = useState<SkillItem[]>(SKILLS_LIST);
+  const [skills, setSkills] = useState<SkillItem[]>([]);
+
+  // The skill list is whatever the backend loaded from skills/*.yaml.
+  useEffect(() => {
+    if (!isOpen) return;
+    get<Skill[]>('/api/skills').then(list => {
+      if (!list) return;
+      setSkills(list.map(sk => ({
+        id: sk.name,
+        name: sk.name,
+        description: sk.description,
+        enabled: true,
+        availableIn: { chat: true, review: true, incident: false, assessment: false },
+        files: [{
+          name: `${sk.name}.yaml`,
+          path: `skills/${sk.name}.yaml`,
+          content: `# ${sk.name} (v${sk.version})\n\n**Team type**: ${sk.team_type}\n\n${sk.description}\n\n## Required fields\n\n` +
+                   sk.required_fields.map(f => `- \`${f}\``).join('\n'),
+        }],
+      })));
+    });
+  }, [isOpen]);
   const [selectedSkillId, setSelectedSkillId] = useState<string>('domain-modeling');
   const [skillSearch, setSkillSearch] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('SKILL.md');

@@ -1,24 +1,48 @@
-import React, { useState } from 'react';
-import { ARTIFACTS_LIST } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
 import { ArtifactItem } from '../types';
+import { get, Run } from '../api';
 
 export const ArtifactsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [visibilityFilter, setVisibilityFilter] = useState<'All' | 'Shared' | 'Private'>('All');
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
+  const [artifacts, setArtifacts] = useState<ArtifactItem[] | null>(null);
 
+  // An artifact here is a ticket this backend really filed, not a catalogue entry.
+  useEffect(() => {
+    get<Run[]>('/api/runs').then(runs => {
+      if (!runs) { setArtifacts(null); return; }
+      setArtifacts(
+        runs
+          .filter(r => r.ticket)
+          .map((r, i) => ({
+            id: r.ticket!.id ?? String(i),
+            title: r.ticket!.title,
+            source: `${r.skill} · INVEST ${r.invest}${r.engine ? ` · ${r.engine}` : ''}`,
+            time: r.at,
+            type: 'REPORT' as const,
+            visibility: 'Shared' as const,
+            contentSnippet: r.evidence
+              .map(e => `[${e.label}] ${e.field}: ${e.value}`)
+              .join('\n'),
+          }))
+      );
+    });
+  }, []);
+
+  const byType = (t: string) => (artifacts ?? []).filter(a => a.type === t).length;
   const tabs = [
-    { label: 'All', count: 8 },
-    { label: 'Reports', count: 6 },
-    { label: 'Dashboards', count: 0 },
-    { label: 'Files', count: 0 },
-    { label: 'Scorecards', count: 2 },
-    { label: 'Diagrams', count: 0 },
-    { label: 'Comparisons', count: 0 },
+    { label: 'All', count: (artifacts ?? []).length },
+    { label: 'Reports', count: byType('REPORT') },
+    { label: 'Dashboards', count: byType('DASHBOARD') },
+    { label: 'Files', count: byType('FILE') },
+    { label: 'Scorecards', count: byType('SCORECARD') },
+    { label: 'Diagrams', count: byType('DIAGRAM') },
+    { label: 'Comparisons', count: byType('COMPARISON') },
   ];
 
-  const filteredArtifacts = ARTIFACTS_LIST.filter(art => {
+  const filteredArtifacts = (artifacts ?? []).filter(art => {
     // Filter by tab
     if (activeTab === 'Reports' && art.type !== 'REPORT') return false;
     if (activeTab === 'Scorecards' && art.type !== 'SCORECARD') return false;
@@ -77,7 +101,7 @@ export const ArtifactsView: React.FC = () => {
           </div>
 
           <span className="text-xs font-medium text-gray-500 shrink-0 ml-4">
-            {ARTIFACTS_LIST.length} artifacts
+            {(artifacts ?? []).length} artifacts
           </span>
         </div>
       </div>
@@ -185,7 +209,7 @@ export const ArtifactsView: React.FC = () => {
         {/* Footer info */}
         <div className="mt-8 flex items-center justify-start">
           <div className="text-xs text-[#7b5cff] font-semibold bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-md">
-            1-{filteredArtifacts.length} of {ARTIFACTS_LIST.length} artifacts
+            1-{filteredArtifacts.length} of {(artifacts ?? []).length} artifacts
           </div>
         </div>
       </div>
