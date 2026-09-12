@@ -11,8 +11,10 @@ from .integrations.clickup_client import ClickUpClient
 def run_slack_bot():
     """Start the Slack Bolt application in Socket Mode if tokens are configured."""
     if not settings.slack_bot_token or not settings.slack_app_token:
-        print("[ScribeBA] Slack tokens not detected. Running in CLI / Local Orchestrator mode.")
-        print("Tip: Run 'python -m backend.cli demo' or 'python -m backend.cli analyze --help' to test.")
+        print("[ScribeBA] Socket Mode needs a bot token (xoxb-) and an app token (xapp-); neither is set.")
+        print("The full Slack loop does not need Socket Mode - a user or bot token is enough:")
+        print("  python demo/seed_slack_thread.py <CHANNEL_ID>")
+        print("  python -m backend.cli slack-run --channel <CHANNEL_ID> --ts <TS>")
         return
 
     try:

@@ -100,6 +100,7 @@ KAFKON/
 │       ├── index.css
 │       ├── types.ts
 │       ├── components/
+│       │   ├── LiveRunView.tsx        # Drives the real Slack -> ClickUp loop from the UI
 │       │   ├── Sidebar.tsx
 │       │   ├── HomeView.tsx
 │       │   ├── RoomsView.tsx
@@ -114,13 +115,16 @@ KAFKON/
 │
 ├── backend/                        # Python Backend & CLI
 │   ├── __init__.py
-│   ├── app.py                      # Slack Bolt Socket Mode entry point
-│   ├── cli.py                      # Click & Rich interactive CLI
+│   ├── api.py                      # HTTP API the Web Studio calls (Flask)
+│   ├── app.py                      # Slack Bolt Socket Mode entry point (needs xoxb- + xapp-)
+│   ├── cli.py                      # Click & Rich CLI: analyze, slack-run, serve, web, demo
 │   ├── config.py                   # Pydantic BaseSettings loader
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── models.py               # Pydantic data models
-│   │   ├── analyzer.py             # Claude-powered analysis engine
+│   │   ├── analyzer.py             # Analysis engine + model cascade entry
+│   │   ├── fallback_router.py      # Multi-tier model cascade (ids verified against OpenRouter)
+│   │   ├── redaction.py            # Masks secrets and PII before anything leaves the process
 │   │   ├── scorer.py               # INVEST scoring (I, N, V, E, S, T)
 │   │   └── skills.py               # Skill template manager
 │   ├── platforms/
@@ -146,7 +150,9 @@ KAFKON/
 │
 ├── demo/                           # Demo assets
 │   ├── sample_conversation.md      # Multi-person Slack thread
-│   └── demo_script.md             # 2-minute live demo script
+│   ├── seed_slack_thread.py        # Posts that thread into a real channel, verbatim
+│   ├── submission.md               # Portal copy: description + social post
+│   └── demo_script.md              # 2-minute demo script
 │
 └── docs/                           # Documentation & reference
     ├── investigation/
