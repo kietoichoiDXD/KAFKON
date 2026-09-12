@@ -184,6 +184,24 @@ def slack_thread():
     return jsonify(asyncio.run(run()))
 
 
+@app.post("/api/chat")
+def chat():
+    """Answer anything: a pasted discussion becomes a labelled analysis, a question gets a reply."""
+    from .chat import ChatResponder
+
+    body = request.get_json(force=True)
+    messages = [m for m in body.get("messages", []) if str(m).strip()]
+    if not messages:
+        return jsonify({"error": "Nothing to answer."}), 400
+
+    responder = ChatResponder(skill_manager)
+    out = asyncio.run(responder.respond(
+        messages, body.get("skill", "startup_lean"), body.get("tier") or settings.fallback_tier))
+    if out["type"] == "analysis":
+        return jsonify({"type": "analysis", **_serialize(out["result"])})
+    return jsonify({"type": "text", "text": out["text"]})
+
+
 @app.post("/api/analyze")
 def analyze():
     body = request.get_json(force=True)

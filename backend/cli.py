@@ -71,8 +71,14 @@ def load_thread_from_file(file_path: str) -> ThreadContext:
 def cli(ctx):
     """ScribeBA — AI Business Analyst Agent with Evidence Labeling & Multi-Platform MCP."""
     if ctx.invoked_subcommand is None:
-        from .interactive_cli import start_interactive_app
-        start_interactive_app()
+        from .tui import start
+        start()
+
+@cli.command("chat")
+def chat_cmd():
+    """Talk to ScribeBA in the terminal: ask anything, or paste a thread to have it specified."""
+    from .tui import start
+    start()
 
 @cli.command("interactive")
 def interactive_cmd():
