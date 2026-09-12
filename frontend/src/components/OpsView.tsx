@@ -64,8 +64,13 @@ export function OpsView() {
       const r = await fetch(`${API}/api/ops/${what}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); }
-      else setVerified(d);
+      if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); setNotified(null); }
+      else {
+        setVerified(d);
+        // Keep the metric cards honest: verify has a fresher error rate than the last diagnose.
+        setDiag(prev => prev && { ...prev, state: { ...prev.state,
+          metrics: { ...prev.state.metrics, error_rate: d.error_rate } } });
+      }
     } catch (e: any) {
       setError(e.message === 'Failed to fetch' ? 'API not running — python -m backend.cli serve' : e.message);
     } finally { setBusy(null); }
