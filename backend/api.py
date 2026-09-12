@@ -7,6 +7,9 @@ Flask rather than FastAPI: the FastAPI installed on the build machine is incompa
 Starlette, and a hackathon is not the place to fight a dependency tree.
 """
 import asyncio
+import json
+import time
+from pathlib import Path
 
 from flask import Flask, jsonify, request
 
@@ -20,6 +23,20 @@ from .platforms.slack_adapter import SlackAdapter
 app = Flask(__name__)
 skill_manager = SkillManager()
 analyzer = ScribeBAAnalyzer(skill_manager)
+
+RUNS_FILE = Path(__file__).resolve().parent.parent / ".runs.json"
+
+
+def _load_runs() -> list:
+    if RUNS_FILE.exists():
+        return json.loads(RUNS_FILE.read_text())
+    return []
+
+
+def _record_run(entry: dict) -> None:
+    """Keep the last 50 runs so the review screen shows real history, not samples."""
+    runs = [entry] + _load_runs()
+    RUNS_FILE.write_text(json.dumps(runs[:50], indent=2))
 
 
 @app.after_request
@@ -54,6 +71,12 @@ def health():
         "clickup": bool(settings.clickup_api_key and settings.clickup_list_id),
         "exa": bool(settings.exa_api_key),
     })
+
+
+@app.get("/api/runs")
+def runs():
+    """Every analysis this backend actually performed, newest first."""
+    return jsonify(_load_runs())
 
 
 @app.get("/api/skills")
@@ -141,6 +164,18 @@ def slack_run():
             )
             await slack.post_ticket_confirmation(channel, ts, ticket)
             payload["ticket"] = {"id": ticket.created_task_id, "url": ticket.clickup_url, "title": ticket.title}
+
+        _record_run({
+            "at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "skill": skill_name,
+            "channel": channel,
+            "permalink": permalink,
+            "title": result.story.title,
+            "invest": result.invest_score.overall,
+            "evidence": payload["evidence"],
+            "clarifying_question": result.clarifying_question,
+            "ticket": payload.get("ticket"),
+        })
         return payload
 
     return jsonify(asyncio.run(run()))

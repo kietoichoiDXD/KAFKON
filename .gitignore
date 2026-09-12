@@ -49,3 +49,4 @@ dist/
 # ScribeBA Local storage
 .scribeba_cache/
 *.log
+.runs.json

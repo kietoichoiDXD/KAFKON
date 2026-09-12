@@ -1,10 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { EVIDENCE_ITEMS } from '../data/mockData';
+
+const COLORS: Record<string, string> = {
+  Verified: '#2F6F5E',
+  Inferred: '#B08628',
+  Assumed: '#7A5FA0',
+  Blocked: '#B4402D',
+};
 
 export const ReviewView: React.FC = () => {
   const [items, setItems] = useState(EVIDENCE_ITEMS);
   const [selectedItem, setSelectedItem] = useState(items[0]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [isLive, setIsLive] = useState(false);
+
+  // Real evidence from runs this backend actually performed; the sample list is the fallback
+  // when the API is not running.
+  useEffect(() => {
+    fetch('http://localhost:8000/api/runs')
+      .then(r => r.json())
+      .then((runs: any[]) => {
+        if (!Array.isArray(runs) || runs.length === 0) return;
+        const real = runs.flatMap((run, ri) =>
+          (run.evidence ?? []).map((e: any, ei: number) => ({
+            id: `run-${ri}-${ei}`,
+            status: e.label,
+            color: COLORS[e.label] ?? '#6b7280',
+            tag: run.skill.toUpperCase().replace('_', '-'),
+            title: e.field,
+            claim: e.value,
+            source: e.quote_source ?? run.permalink,
+            timestamp: run.at,
+          }))
+        );
+        if (real.length) {
+          setItems(real);
+          setSelectedItem(real[0]);
+          setIsLive(true);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -39,6 +75,9 @@ export const ReviewView: React.FC = () => {
             </h1>
             <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[#1e2321] text-white">
               Stitch ScribeBA v1.4
+            </span>
+            <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${isLive ? 'bg-[#2F6F5E] text-white' : 'bg-gray-200 text-gray-600'}`}>
+              {isLive ? 'live runs' : 'sample data'}
             </span>
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
@@ -159,9 +198,11 @@ export const ReviewView: React.FC = () => {
                 </div>
 
                 <div>
-                  <span className="text-gray-400">CRYPTOGRAPHIC PROOF:</span>
+                  <span className="text-gray-400">PROVENANCE:</span>
                   <div className="mt-0.5 p-2 bg-gray-100 border border-gray-200 text-[11px] text-gray-700 break-all">
-                    sha256:8f4c2b9a781d09e3f1c8491cba09e1e2d78bfb04d67e61a938cf1a4b60029b3
+                    {isLive
+                      ? 'Quoted from the source thread; the ClickUp ticket carries a sha256 of its own audit ledger.'
+                      : 'Sample record — start the API to review real runs.'}
                   </div>
                 </div>
 
