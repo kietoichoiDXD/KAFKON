@@ -15,6 +15,10 @@ class TelegramAdapter(BasePlatformAdapter):
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
         self._message_store: Dict[str, List[ChatMessage]] = {}
 
+    def _missing_token(self) -> str:
+        return ("No TELEGRAM_BOT_TOKEN configured. Get one from @BotFather and set it in .env — "
+                "ScribeBA will not report a message as sent when it was not.")
+
     def is_live(self) -> bool:
         return bool(self.bot_token and settings.scribeba_mode == "live")
 
@@ -128,8 +132,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 data = resp.json()
                 return str(data.get("result", {}).get("message_id", ""))
 
-        print(f"\n[Telegram Adapter Mock] Chat: {channel_id} | Thread: {thread_id}\n{text}\n")
-        return "mock-tg-msg-id-1001"
+        raise RuntimeError(self._missing_token())
 
     async def post_clarification_question(
         self,
@@ -151,8 +154,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 data = resp.json()
                 return str(data.get("result", {}).get("message_id", ""))
 
-        print(f"[Telegram Question] {text}")
-        return "mock-tg-question-id"
+        raise RuntimeError(self._missing_token())
 
     async def post_ticket_confirmation(
         self,
@@ -163,7 +165,7 @@ class TelegramAdapter(BasePlatformAdapter):
         text = (
             f"🚀 <b>ClickUp Task Synchronized!</b>\n\n"
             f"<b>Title:</b> {ticket.title}\n"
-            f"<b>Task ID:</b> <code>{ticket.created_task_id or 'CLK-NEW'}</code>\n"
+            f"<b>Task ID:</b> <code>{ticket.created_task_id or 'not created'}</code>\n"
             f"<b>Priority:</b> {ticket.priority.upper()}\n"
             f"<b>URL:</b> <a href=\"{ticket.clickup_url}\">{ticket.clickup_url}</a>\n\n"
             f"<i>Source audit trail preserved with bidirectional Telegram backlink.</i>"
@@ -182,17 +184,12 @@ class TelegramAdapter(BasePlatformAdapter):
                 data = resp.json()
                 return str(data.get("result", {}).get("message_id", ""))
 
-        print(f"[Telegram Confirmation] {text}")
-        return "mock-tg-confirm-id"
+        raise RuntimeError(self._missing_token())
 
     async def start_polling(self, analyzer, clickup_client, skill_manager):
         """Run Telegram long-polling loop for real-time bot interaction."""
         if not self.is_live():
-            print("[ScribeBA Telegram] Running in Local Simulation mode (No TELEGRAM_BOT_TOKEN set).")
-            print("Simulating incoming command '/ba_summarize' from Telegram group...")
-            thread = await self.fetch_thread("test-chat-888", "1")
-            res = await analyzer.analyze_thread(thread, skill_name=settings.default_skill)
-            await self.post_analysis_summary("test-chat-888", "1", res)
+            print(self._missing_token())
             return
 
         offset = 0

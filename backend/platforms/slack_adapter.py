@@ -68,33 +68,28 @@ class SlackAdapter(BasePlatformAdapter):
                 messages=messages
             )
 
-        # Local mode mock data
-        return ThreadContext(
-            thread_id=thread_id,
-            channel=channel_id,
-            platform="slack",
-            messages=[
-                ChatMessage(author="@alex_lead", timestamp="10:15", text="Acme Corp requires Google Workspace SSO."),
-                ChatMessage(author="@oliver_sec", timestamp="10:17", text="Must restrict to domain @acmecorp.com and assign Engineer role."),
-                ChatMessage(author="@tony_db", timestamp="10:20", text="I will add sso_provider column with unique constraint."),
-                ChatMessage(author="@alex_lead", timestamp="10:22", text="What about session expiration? 8h or 24h?"),
-                ChatMessage(author="@oliver_sec", timestamp="10:28", text="Avatar sync out of scope. 8h standard for SOC2."),
-                ChatMessage(author="@alex_lead", timestamp="10:30", text="/ba-summarize"),
-            ]
+        raise RuntimeError(
+            "No Slack token configured. Set SLACK_USER_TOKEN or SLACK_BOT_TOKEN in .env — "
+            "there is no offline substitute for a real thread."
         )
 
     async def _post(self, channel_id: str, thread_id: str, text: str, blocks=None) -> str:
         if not self.is_live:
-            print(f"[Slack Mock Post] Channel: {channel_id} | Thread: {thread_id}\n{text}")
-            return "mock-slack-ts"
-        params = {"channel": channel_id, "thread_ts": thread_id, "text": text}
+            raise RuntimeError("No Slack token configured; refusing to pretend a message was posted.")
+        # A top-level post has no thread_ts; sending null makes Slack reject the call.
+        params = {"channel": channel_id, "text": text}
+        if thread_id:
+            params["thread_ts"] = thread_id
         if blocks:
             params["blocks"] = blocks
         try:
             data = await self._call("chat.postMessage", params, post=True)
         except RuntimeError:
             # A malformed block must not cost the demo the message.
-            data = await self._call("chat.postMessage", {"channel": channel_id, "thread_ts": thread_id, "text": text}, post=True)
+            retry = {"channel": channel_id, "text": text}
+            if thread_id:
+                retry["thread_ts"] = thread_id
+            data = await self._call("chat.postMessage", retry, post=True)
         return data.get("ts", "")
 
     async def post_analysis_summary(

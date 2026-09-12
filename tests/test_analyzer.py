@@ -72,8 +72,10 @@ class TestAnalyzerAndClickUp(unittest.TestCase):
                 result, skill, "slack://thread/1789201948"
             )
         )
-        self.assertTrue(ticket.created_task_id.startswith("CLK-"))
-        self.assertIn("clickup.com", ticket.clickup_url)
+        # Offline, nothing was filed. The payload must say so rather than carry an invented
+        # CLK-xxxxxx id and a link that 404s - in a demo those read exactly like a real ticket.
+        self.assertIsNone(ticket.created_task_id)
+        self.assertIsNone(ticket.clickup_url)
         self.assertEqual(ticket.title, result.story.title)
         self.assertIn("INVEST", ticket.description_markdown)
 

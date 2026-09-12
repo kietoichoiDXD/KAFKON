@@ -175,6 +175,45 @@ def _build_proposal(runbook_key: str, var: str, expected: str, actual: str) -> D
     return action
 
 
+async def notify(channel: str, action: Dict[str, Any]) -> Dict[str, Any]:
+    """Put the proposal in front of a human where they already are."""
+    from .platforms.slack_adapter import SlackAdapter
+
+    slack = SlackAdapter()
+    if not slack.is_live:
+        raise RuntimeError("No Slack token configured, so the approval request cannot be sent.")
+
+    p = action["parameters"]
+    text = (
+        f"🚨 *ScribeBA — approval needed*  `{action['action_id']}`\n"
+        f"*{action['summary']}*\n"
+        f"• Runbook: `{action['runbook']}`  ·  Target: `{action['target']}`\n"
+        f"• Change: `{p['name']}={action['observed']}` → `{p['name']}={p['value']}`\n"
+        f"• Pinned to resourceVersion `{action['resource_version']}` — refused if the deployment "
+        f"changes before approval\n"
+        f"_Nothing has been written. Approve in the Incidents console._"
+    )
+    ts = await slack._post(channel, None, text)
+    action["notified"] = {"channel": channel, "ts": ts}
+    return {"channel": channel, "ts": ts}
+
+
+async def notify_outcome(action: Dict[str, Any], outcome: str) -> None:
+    """Close the loop in the same place the request was made."""
+    target = action.get("notified")
+    if not target:
+        return
+    from .platforms.slack_adapter import SlackAdapter
+    try:
+        await SlackAdapter()._post(target["channel"], target["ts"], outcome)
+    except Exception as e:  # a failed notification must not hide the applied write
+        print(f"[ops] outcome notification failed: {e}")
+
+
+def get_proposal(action_id: str) -> Optional[Dict[str, Any]]:
+    return _PROPOSALS.get(action_id)
+
+
 def apply_action(action_id: str, approver: str) -> Dict[str, Any]:
     """Apply an approved proposal. Refuses anything it did not itself propose."""
     action = _PROPOSALS.get(action_id)
