@@ -25,6 +25,15 @@ type Diagnosis = {
   error?: string;
 };
 
+// What to say while demoing, in the order that tells the story.
+const SCRIPT = [
+  { step: 'Trigger', note: 'Inject a declared fault — the console can only break what it can fix.' },
+  { step: 'Diagnose', note: 'Every finding carries the command that produced it.' },
+  { step: 'Ask in Slack', note: 'The person who approves sees the diff where they already work.' },
+  { step: 'Approve', note: 'A sentence never authorises a write; a click on a visible diff does.' },
+  { step: 'Verify', note: 'Applied is not recovered — the rate window still holds the outage.' },
+];
+
 const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`);
 const num = (v: number | null, d = 2) => (v === null ? '—' : v.toFixed(d));
 
@@ -36,13 +45,46 @@ export function OpsView() {
   const [error, setError] = useState<string | null>(null);
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [channel, setChannel] = useState('');
-  const [notified, setNotified] = useState<{ channel: string; ts: string } | null>(null);
+  const [notified, setNotified] = useState<any>(null);
+  const [envs, setEnvs] = useState<any[]>([]);
+  const [env, setEnv] = useState<string>('');
+  const [faults, setFaults] = useState<any[]>([]);
+  const [fault, setFault] = useState<string>('');
+  const [triggered, setTriggered] = useState<any>(null);
 
   useEffect(() => {
     fetch(`${API}/api/slack/channels`).then(r => r.json()).then(c => {
       if (Array.isArray(c)) { setChannels(c); setChannel(c[0]?.id ?? ''); }
     }).catch(() => undefined);
+    fetch(`${API}/api/ops/environments`).then(r => r.json()).then(e => {
+      if (Array.isArray(e)) { setEnvs(e); setEnv(e[0]?.name ?? ''); }
+    }).catch(() => undefined);
   }, []);
+
+  // Drill scenarios follow the selected environment; most environments declare none.
+  useEffect(() => {
+    if (!env) return;
+    fetch(`${API}/api/ops/faults?environment=${encodeURIComponent(env)}`)
+      .then(r => r.json())
+      .then(f => { if (Array.isArray(f)) { setFaults(f); setFault(f[0]?.name ?? ''); } })
+      .catch(() => undefined);
+  }, [env]);
+
+  const triggerFault = async () => {
+    if (!fault) return;
+    setBusy('trigger'); setError(null); setTriggered(null);
+    try {
+      const r = await fetch(`${API}/api/ops/trigger`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fault, environment: env }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setTriggered(d);
+      // Give Kubernetes a moment to roll the change before reading it back.
+      setTimeout(() => run('diagnose'), 6000);
+    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+  };
 
   const requestApproval = async () => {
     if (!diag?.proposal || !channel) return;
@@ -61,7 +103,7 @@ export function OpsView() {
   const run = async (what: 'diagnose' | 'verify') => {
     setBusy(what); setError(null);
     try {
-      const r = await fetch(`${API}/api/ops/${what}`);
+      const r = await fetch(`${API}/api/ops/${what}?environment=${encodeURIComponent(env)}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); setNotified(null); }
@@ -121,6 +163,61 @@ export function OpsView() {
                 <div className={`text-[20px] font-semibold ${warn ? 'text-rose-600' : 'text-gray-900'}`}>{v}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-1.5">
+          {SCRIPT.map((s, i) => (
+            <span key={s.step} title={s.note}
+                  className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-[12px] text-gray-600">
+              <span className="text-gray-400 mr-1.5">{i + 1}</span>{s.step}
+            </span>
+          ))}
+        </div>
+
+        {envs.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-gray-500">Environment</span>
+            {envs.map(e => (
+              <button
+                key={e.name}
+                onClick={() => { setEnv(e.name); setDiag(null); setApplied(null); setVerified(null); }}
+                className={`px-3 py-1.5 rounded-full border text-[12.5px] transition-colors ${
+                  env === e.name
+                    ? 'border-[#7b5cff]/50 bg-[#7b5cff]/8 text-[#4a35a8] font-medium'
+                    : 'border-gray-200 text-gray-600 hover:border-[#7b5cff]/40'
+                }`}
+                title={`${e.kind} · ${e.target}`}
+              >
+                {e.name}
+                <span className="text-gray-400 ml-1.5">{e.can_remediate ? e.kind : `${e.kind} · read-only`}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {faults.length > 0 && (
+          <div className="border border-amber-200 bg-amber-50/60 rounded-xl p-4 space-y-2">
+            <h2 className="text-[13px] font-semibold text-amber-900 m-0">Drill</h2>
+            <p className="text-[12px] text-amber-800 m-0">
+              Inject a declared fault to rehearse the loop. Only the scenarios written in
+              integrations.yaml can be triggered, and each one is reversible by a runbook above.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={fault} onChange={e => setFault(e.target.value)}
+                      className="border border-amber-200 bg-white rounded-lg px-2.5 py-2 text-[13px]">
+                {faults.map(f => <option key={f.name} value={f.name}>{f.name} — {f.summary}</option>)}
+              </select>
+              <button onClick={triggerFault} disabled={!!busy}
+                      className="px-4 py-2 rounded-full bg-amber-600 text-white text-[13.5px] font-medium disabled:opacity-40 hover:bg-amber-700 active:translate-y-px transition-all">
+                {busy === 'trigger' ? 'Injecting…' : 'Trigger fault'}
+              </button>
+              {triggered && (
+                <span className="text-[12.5px] text-amber-900">
+                  {triggered.triggered} at {triggered.at} · expect <b>{triggered.expect}</b>
+                </span>
+              )}
+            </div>
           </div>
         )}
 

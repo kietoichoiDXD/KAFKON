@@ -95,6 +95,59 @@ environments:
         target: pod/
         value: 0
 
+    # Faults the console is allowed to inject, for demos and drills. This is an allowlist exactly
+    # like the checks: no free-form patch, and every one of these is reversible by a runbook above,
+    # so a demo can never leave the cluster in a state the console cannot talk its way out of.
+    faults:
+      - name: F02-valkey-endpoint
+        summary: Point cart at a Valkey that does not exist
+        expect: restore-endpoint on deployment/cart
+        target: deployment/cart
+        patch:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: cart
+                    env:
+                      - name: VALKEY_ADDR
+                        value: missing-valkey:6379
+
+      - name: F08-cart-scaled-to-zero
+        summary: Scale cart to zero replicas
+        expect: set-replicas on deployment/cart
+        target: deployment/cart
+        patch:
+          spec:
+            replicas: 0
+
+      - name: F04-bad-image-tag
+        summary: Pin cart to an image tag that does not exist
+        expect: restore-image on deployment/cart
+        target: deployment/cart
+        patch:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: cart
+                    image: 589077667575.dkr.ecr.us-east-1.amazonaws.com/capstone-aiops-lab/cart:does-not-exist
+
+      - name: F06-bad-readiness-path
+        summary: Point the web readiness probe at a path that does not answer
+        expect: restore-probe on deployment/web
+        target: deployment/web
+        patch:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: web
+                    readinessProbe:
+                      httpGet:
+                        path: /not-here
+                        port: 8080
+
   # The studio itself, watched from outside. No cluster access, no remediation — just evidence.
   - name: scribeba-local
     kind: http

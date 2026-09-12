@@ -55,6 +55,15 @@ def apply_action(action_id: str, approver: str) -> Dict[str, Any]:
     return _provider(action.get("environment")).apply(action, approver)
 
 
+def faults(environment: Optional[str] = None) -> List[Dict[str, Any]]:
+    return _provider(environment).list_faults()
+
+
+def trigger(fault_name: str, environment: Optional[str] = None) -> Dict[str, Any]:
+    """Inject a declared fault, for a demo or a drill."""
+    return _provider(environment).trigger(fault_name)
+
+
 def verify(environment: Optional[str] = None) -> Dict[str, Any]:
     return _provider(environment).verify()
 

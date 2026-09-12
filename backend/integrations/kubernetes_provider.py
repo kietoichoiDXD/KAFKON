@@ -36,6 +36,8 @@ class KubernetesProvider(InfraProvider):
                 "env": book["env"],
                 "value": book["value"],
             })
+        # Faults are a drill tool, kept behind the same allowlist discipline as the repairs.
+        self.faults: List[Dict[str, Any]] = list(config.get("faults", []))
         self.queries: Dict[str, str] = config.get("queries", {})
         self._proposals: Dict[str, Dict[str, Any]] = {}
 
@@ -166,6 +168,27 @@ class KubernetesProvider(InfraProvider):
         }
         self._proposals[action["action_id"]] = action
         return action
+
+    # ---- drills ----
+
+    def list_faults(self) -> List[Dict[str, Any]]:
+        return [{k: f[k] for k in ("name", "summary", "expect", "target") if k in f}
+                for f in self.faults]
+
+    def trigger(self, fault_name: str) -> Dict[str, Any]:
+        """Inject one declared fault. Anything not in the file is refused."""
+        for f in self.faults:
+            if f["name"] == fault_name:
+                resource, name = f["target"].split("/", 1)
+                self._kubectl("patch", resource, name, "--type", "strategic",
+                              "-p", json.dumps(f["patch"]))
+                return {"triggered": f["name"], "target": f["target"],
+                        "summary": f["summary"], "expect": f.get("expect", ""),
+                        "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        raise ProviderError(
+            f"No fault named {fault_name!r}. Declared: "
+            f"{', '.join(f['name'] for f in self.faults) or 'none'}."
+        )
 
     def get_proposal(self, action_id: str) -> Optional[Dict[str, Any]]:
         return self._proposals.get(action_id)

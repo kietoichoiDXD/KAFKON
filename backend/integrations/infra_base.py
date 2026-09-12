@@ -54,6 +54,15 @@ class InfraProvider(ABC):
             f"{self.name} ({self.kind}) can report what it sees but cannot change it."
         )
 
+    def list_faults(self) -> List[Dict[str, Any]]:
+        """Drill scenarios this environment can inject. Most environments have none."""
+        return []
+
+    def trigger(self, fault_name: str) -> Dict[str, Any]:
+        raise NotImplementedError(
+            f"{self.name} ({self.kind}) has no fault drills declared."
+        )
+
     @abstractmethod
     def verify(self) -> Dict[str, Any]:
         """Did the business flow recover? Distinct from 'the write succeeded'."""

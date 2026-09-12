@@ -27,6 +27,12 @@ environments:
         summary: Point cart back at Valkey
         env: VALKEY_ADDR
         value: valkey:6379
+    faults:
+      - name: F02-valkey-endpoint
+        summary: Point cart at a Valkey that does not exist
+        expect: restore-endpoint on deployment/cart
+        target: deployment/cart
+        patch: {spec: {replicas: 0}}
   - name: cluster-b
     kind: kubernetes
     kubeconfig: /tmp/also-missing
@@ -84,6 +90,30 @@ class TestRegistry(unittest.TestCase):
         self.assertTrue(by_name["cluster-a"]["can_remediate"])
         # The HTTP provider watches from outside and cannot change what it measures.
         self.assertFalse(by_name["public-api"]["can_remediate"])
+
+
+class TestFaultDrills(unittest.TestCase):
+    """A drill can only break what the file says, and only what a runbook can undo."""
+
+    def setUp(self):
+        self.r = _registry()
+
+    def test_declared_faults_are_listed(self):
+        faults = self.r.get("cluster-a").list_faults()
+        self.assertEqual([f["name"] for f in faults], ["F02-valkey-endpoint"])
+        self.assertIn("expect", faults[0])
+
+    def test_an_undeclared_fault_is_refused_by_name(self):
+        with self.assertRaises(Exception) as ctx:
+            self.r.get("cluster-a").trigger("delete-everything")
+        self.assertIn("F02-valkey-endpoint", str(ctx.exception))
+
+    def test_an_environment_without_drills_has_none(self):
+        self.assertEqual(self.r.get("cluster-b").list_faults(), [])
+
+    def test_a_read_only_environment_cannot_be_broken_either(self):
+        with self.assertRaises(NotImplementedError):
+            self.r.get("public-api").trigger("anything")
 
 
 class TestProviderContract(unittest.TestCase):
