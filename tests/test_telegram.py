@@ -28,7 +28,7 @@ class TestTelegramAdapter(unittest.TestCase):
         self.assertEqual(len(thread.messages), 2)
         self.assertEqual(thread.messages[0].author, "@bob")
 
-    def test_format_and_post_summary_mock(self):
+    def test_formatting_does_not_need_a_token(self):
         thread = asyncio.run(self.adapter.fetch_thread("chat-mock", "msg-1"))
         result = asyncio.run(self.analyzer.analyze_thread(thread, skill_name="startup_lean"))
 
@@ -37,14 +37,17 @@ class TestTelegramAdapter(unittest.TestCase):
         self.assertIn("INVEST Score:", html)
         self.assertIn("Acceptance Criteria:", html)
 
-        msg_id = asyncio.run(self.adapter.post_analysis_summary("chat-mock", "msg-1", result))
-        self.assertEqual(msg_id, "mock-tg-msg-id-1001")
+        # Sending without a token must fail loudly. Returning a fake message id told the caller
+        # a message had been delivered when nothing left the process.
+        with self.assertRaises(RuntimeError) as ctx:
+            asyncio.run(self.adapter.post_analysis_summary("chat-mock", "msg-1", result))
+        self.assertIn("TELEGRAM_BOT_TOKEN", str(ctx.exception))
 
-    def test_post_clarification_and_confirmation(self):
-        q_id = asyncio.run(self.adapter.post_clarification_question(
-            "chat-mock", "msg-1", "Should session timeout be 8h or 24h?"
-        ))
-        self.assertEqual(q_id, "mock-tg-question-id")
+    def test_sending_without_a_token_is_refused(self):
+        with self.assertRaises(RuntimeError):
+            asyncio.run(self.adapter.post_clarification_question(
+                "chat-mock", "msg-1", "Should session timeout be 8h or 24h?"
+            ))
 
         ticket = TicketPayload(
             title="[MVP] Google Workspace SSO",
@@ -53,8 +56,8 @@ class TestTelegramAdapter(unittest.TestCase):
             clickup_url="https://app.clickup.com/t/clk-tg-888",
             thread_link="tg://chat/999/1"
         )
-        c_id = asyncio.run(self.adapter.post_ticket_confirmation("chat-mock", "msg-1", ticket))
-        self.assertEqual(c_id, "mock-tg-confirm-id")
+        with self.assertRaises(RuntimeError):
+            asyncio.run(self.adapter.post_ticket_confirmation("chat-mock", "msg-1", ticket))
 
 if __name__ == "__main__":
     unittest.main()

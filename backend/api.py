@@ -93,14 +93,39 @@ def ops_diagnose():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/api/ops/notify")
+def ops_notify():
+    """Send the proposal to Slack so a human is asked where they already are."""
+    from . import ops
+    body = request.get_json(force=True)
+    action = ops.get_proposal(body.get("action_id", ""))
+    if action is None:
+        return jsonify({"error": "Unknown action_id. Re-run the diagnosis."}), 400
+    try:
+        return jsonify(asyncio.run(ops.notify(body["channel"], action)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.post("/api/ops/apply")
 def ops_apply():
     from . import ops
     body = request.get_json(force=True)
+    approver = body.get("approver", "operator")
+    action = ops.get_proposal(body.get("action_id", ""))
     try:
-        return jsonify(ops.apply_action(body["action_id"], body.get("approver", "operator")))
+        result = ops.apply_action(body["action_id"], approver)
     except Exception as e:
+        # A refusal is news too: whoever was asked to approve should see that it did not go through.
+        if action is not None:
+            asyncio.run(ops.notify_outcome(action, f"⛔ *Not applied* — {e}"))
         return jsonify({"error": str(e)}), 400
+    asyncio.run(ops.notify_outcome(
+        action,
+        f"✅ *Approved and applied* by *{approver}* at {result['at']}  `{result['action_id']}`\n"
+        f"_{result['note']}_"
+    ))
+    return jsonify(result)
 
 
 @app.get("/api/ops/verify")

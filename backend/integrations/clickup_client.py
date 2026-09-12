@@ -54,11 +54,10 @@ class ClickUpClient:
                     clickup_url=clickup_url
                 )
             except Exception as e:
-                print(f"[Warning] Live ClickUp creation failed ({e}), falling back to local simulation.")
+                print(f"[ClickUp] Task was NOT created: {e}")
 
-        # Local Simulation Mode
-        mock_id = f"CLK-{str(uuid.uuid4())[:6].upper()}"
-        mock_url = f"https://app.clickup.com/t/{mock_id.lower()}"
+        # Not filed. A fabricated CLK-xxxxxx id and a link that 404s would read exactly like a
+        # real ticket in a demo; leaving both empty is the honest signal that nothing was created.
         return TicketPayload(
             title=story.title,
             description_markdown=description_md,
@@ -66,8 +65,8 @@ class ClickUpClient:
             tags=tags,
             custom_fields=custom_fields,
             thread_link=thread_url,
-            created_task_id=mock_id,
-            clickup_url=mock_url
+            created_task_id=None,
+            clickup_url=None,
         )
 
     def _build_description(

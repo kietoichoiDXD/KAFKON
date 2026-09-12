@@ -34,6 +34,29 @@ export function OpsView() {
   const [applied, setApplied] = useState<any>(null);
   const [verified, setVerified] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
+  const [channel, setChannel] = useState('');
+  const [notified, setNotified] = useState<{ channel: string; ts: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API}/api/slack/channels`).then(r => r.json()).then(c => {
+      if (Array.isArray(c)) { setChannels(c); setChannel(c[0]?.id ?? ''); }
+    }).catch(() => undefined);
+  }, []);
+
+  const requestApproval = async () => {
+    if (!diag?.proposal || !channel) return;
+    setBusy('notify'); setError(null);
+    try {
+      const r = await fetch(`${API}/api/ops/notify`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action_id: diag.proposal.action_id, channel }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setNotified(d);
+    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+  };
 
   const run = async (what: 'diagnose' | 'verify') => {
     setBusy(what); setError(null);
@@ -144,10 +167,26 @@ export function OpsView() {
               Pinned to resourceVersion {diag.proposal.resource_version} — if the deployment changes
               before you approve, this action is refused rather than applied to something else.
             </p>
-            <button onClick={approve} disabled={!!busy}
-                    className="px-4 py-2 rounded-full bg-emerald-600 text-white text-[13.5px] font-medium disabled:opacity-40">
-              {busy === 'apply' ? 'Applying…' : 'Approve and apply'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <select value={channel} onChange={e => setChannel(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-2.5 py-2 text-[13px]">
+                {channels.map(c => <option key={c.id} value={c.id}>#{c.name}</option>)}
+              </select>
+              <button onClick={requestApproval} disabled={!!busy || !channel || !!notified}
+                      className="px-4 py-2 rounded-full border border-[#7b5cff]/40 text-[#4a35a8] text-[13.5px] font-medium disabled:opacity-40">
+                {busy === 'notify' ? 'Sending…' : notified ? 'Sent to Slack' : 'Ask for approval in Slack'}
+              </button>
+              <button onClick={approve} disabled={!!busy}
+                      className="px-4 py-2 rounded-full bg-emerald-600 text-white text-[13.5px] font-medium disabled:opacity-40">
+                {busy === 'apply' ? 'Applying…' : 'Approve and apply'}
+              </button>
+            </div>
+            {notified && (
+              <p className="text-[12px] text-emerald-700">
+                Approval request posted in Slack. The outcome — approved or refused — is posted back
+                into that same thread.
+              </p>
+            )}
           </div>
         )}
 
