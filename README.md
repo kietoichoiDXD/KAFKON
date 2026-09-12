@@ -17,7 +17,7 @@ Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp li
 | Slack thread read (`conversations.replies`) | **Live** | 8 messages read from a real thread |
 | Slack in-thread reply (`chat.postMessage`, Block Kit) | **Live** | Analysis, clarifying question and ticket confirmation all posted into the thread |
 | ClickUp task creation (`POST /api/v2/list/{id}/task`) | **Live** | Task `86eyw9yf1`, description carries the Slack permalink and a real sha256 seal |
-| Analysis engine | **Deterministic local engine** | No LLM key at build time. `fallback_router.py` routes to OpenRouter/Anthropic the moment `OPENROUTER_API_KEY` is set — the pipeline is unchanged either way |
+| Analysis engine | **Deterministic engine, tuned to this conversation shape — not general** | We had no model key during the build. `fallback_router.py` sends the same thread to OpenRouter the moment `OPENROUTER_API_KEY` is set; the Slack and ClickUp paths are identical either way |
 | Telegram / Discord adapters | **Not exercised** | Code present, no token configured |
 | React dashboard | **Mock data** | Reads `frontend/src/data/mockData.ts`, not the backend |
 
