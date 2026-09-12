@@ -20,6 +20,7 @@ type RunResult = {
   messages_read: number;
   story: { title: string; as_a: string; i_want: string; so_that: string };
   invest: { overall: number };
+  engine: string;
   evidence: Evidence[];
   clarifying_question?: string | null;
   ticket?: { id: string; url: string; title: string };
@@ -130,7 +131,12 @@ export function LiveRunView() {
           <div className="border border-gray-200 rounded-xl p-5 bg-white space-y-4">
             <div className="flex items-baseline justify-between">
               <h2 className="text-[16px] font-semibold">{result.story.title}</h2>
-              <span className="text-[13px] text-[#008775] font-semibold">INVEST {result.invest.overall}/100</span>
+              <span className="flex items-center gap-2">
+                <span className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-600">
+                  engine: {result.engine}
+                </span>
+                <span className="text-[13px] text-[#008775] font-semibold">INVEST {result.invest.overall}/100</span>
+              </span>
             </div>
             <p className="text-[13px] text-gray-700">
               <b>As a</b> {result.story.as_a} · <b>I want</b> {result.story.i_want} · <b>So that</b> {result.story.so_that}
