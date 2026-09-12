@@ -89,11 +89,43 @@ We deeply fuse the hackathon sponsor technologies into a unified, resilient mult
 └───────────────────┴───────────────────────────────┴────────────────────────────────────┘
 ```
 
-### 2.1 OpenRouter Multi-Tier Routing Architecture
-Instead of routing every trivial message to expensive reasoning models, ScribeBA implements a **3-Tier Semantic Router**:
-- **Tier 1 — Intent & Relevance Filter ($0.15/1M tokens)**: `anthropic/claude-3-5-haiku` or `meta-llama/llama-3.3-70b-instruct` evaluates if an incoming thread contains technical requirements or architectural decisions.
-- **Tier 2 — Rigorous BA Reasoning & INVEST Scoring ($3.00/1M tokens)**: `anthropic/claude-3-7-sonnet` or `openai/o3-mini` extracts the User Story, computes the 6-dimension INVEST score, and tags every claim with an Evidence Label.
-- **Tier 3 — Fallback Resiliency**: If Anthropic encounters rate limits (HTTP 429), OpenRouter automatically switches traffic to `openai/gpt-4o` within 250ms without dropping the Slack Socket Mode connection.
+### 2.1 Multi-Tier Model Fallback Cascade: Zero-Downtime Resilience
+To ensure zero failure on stage and in enterprise production, ScribeBA implements a dynamic **6-Level Failover Cascade**. When OpenRouter runs out of tokens (HTTP `402 Payment Required`), encounters rate limiting (HTTP `429`), or experiences upstream latency spikes, ScribeBA automatically cascades through the model hierarchy without dropping conversational context:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                          6-STAGE FAILOVER CASCADE PIPELINE                             │
+│                                                                                        │
+│  [OpenRouter Primary] ──(402 / 429)──> [1. GPT (OpenAI Direct)]                        │
+│                                                   │                                    │
+│                                                   ▼ (Rate Limit / Quota Exceeded)      │
+│                                        [2. LUNA (Llama 3.3 / DeepSeek R1)]             │
+│                                                   │                                    │
+│                                                   ▼ (Failover)                         │
+│                                        [3. SONET (Anthropic Direct)]                   │
+│                                                   │                                    │
+│                                                   ▼ (Failover)                         │
+│                                        [4. 5 (OpenAI o3-mini / GPT-5 Preview)]         │
+│                                                   │                                    │
+│                                                   ▼ (Failover)                         │
+│                                        [5. GPT SOL (Solar Pro / Solar 10.7B)]          │
+│                                                   │                                    │
+│                                                   ▼ (Ultimate Safety Net)              │
+│                                        [6. ScribeBA Local Deterministic Engine]        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Operation Modes & Tier Configuration:
+ScribeBA supports three operating profiles (`--tier [low|medium|high]`):
+
+| Cấp độ (Tier) | Profile Focus | Model Cascade Chain | Blended Cost / Query |
+| :--- | :--- | :--- | :--- |
+| **`LOW` (Minimum)** | Fast triage, message filtering, maximum cost savings | `Haiku` → `gpt-4o-mini` → `llama-3.2-3b` → `claude-3-5-haiku` → `solar-10.7b` → Local Engine | **~$0.0005** |
+| **`MEDIUM` (Balanced)** | Standard Agile User Story extraction & INVEST scoring | `Claude 3.7 Sonnet` → `gpt-4o` → `llama-3.3-70b` → `claude-3-7-sonnet` → `o3-mini` → `solar-pro` → Local Engine | **~$0.0150** |
+| **`HIGH`** | Deep reasoning, contract boundary verification, strict GDPR compliance | `Claude 3.7 (Thinking)` → `gpt-4o` → `deepseek-r1` → `claude-3-7-sonnet` → `o3-mini (High)` → `solar-pro` → Local Engine | **~$0.0350** |
+
+- **Zero-Downtime Assurance**: If every external API key is exhausted or network connectivity drops completely, the system falls back to the **ScribeBA Local Deterministic Engine**, guaranteeing that live demos never crash in front of judges.
+- **Audit Provenance**: Every response embeds a `fallback_trail` in metadata, documenting the exact millisecond timestamps and status codes of any failovers triggered.
 
 ### 2.2 Exa Neural Search Grounding
 When team discussions reference external systems (e.g. *"We should use Google OAuth 2.0 PKCE with refresh token rotation"*), the **Exa Grounding Agent** executes neural queries:
@@ -163,9 +195,13 @@ C4Context
 ```
 
 ### 4.1 Microservices & Component Decomposition
-1. **Event Ingestion Gateway**: Built on Slack Bolt (Socket Mode) & Discord.py. Handles rate limiting, thread session de-duplication, and event acknowledgment within the 3000ms window.
+1. **Event Ingestion Gateway**: 
+   - **Slack Bolt**: Socket Mode bi-directional listener for enterprise workspaces.
+   - **Telegram Platform Adapter**: Native Long-Polling engine via `httpx` async (`getUpdates`). Supports Telegram Groups, Supergroups, and Forum Topics (`message_thread_id`) with HTML rendering and Inline Keyboard action callbacks (`approve:<thread_id>`, `clarify:<thread_id>`).
+   - **Discord.py Adapter**: Community channel monitoring via Discord application gateway.
+   - Handles rate limiting, thread session de-duplication, and event acknowledgment within the 3000ms window.
 2. **Context Aggregator & Sanitizer**: Filters bot chatter, extracts user identity roles (`@lead`, `@sec`, `@db`), strips sensitive credentials (regex scanning for JWTs/passwords), and compiles the chronologically ordered transcript.
-3. **Agent Orchestration Engine**: Asynchronous Python pipeline (`FastAPI` + `asyncio`) managing the state machine.
+3. **Agent Orchestration Engine**: Asynchronous Python pipeline (`FastAPI` + `asyncio`) managing the state machine and the 6-Level Fallback Cascade.
 4. **Evidence & Verification Ledger**: Maintains an immutable log linking each requirement statement to a specific message timestamp and author.
 5. **ClickUp & Jira Dispatcher**: Maps validated analysis models into platform-specific task custom fields, priorities, and markdown attachments.
 6. **CloudThinker Web Studio (React + Vite)**: Management portal for configuring Team Skills, inspecting Evidence Dockets, and adjusting prompt parameters.
