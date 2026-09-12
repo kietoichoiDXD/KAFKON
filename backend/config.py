@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     openrouter_model: str = Field(default="anthropic/claude-sonnet-5", alias="OPENROUTER_MODEL")
     openrouter_triage_model: str = Field(default="anthropic/claude-haiku-4.5", alias="OPENROUTER_TRIAGE_MODEL")
 
+    # Sponsor Integrations: Nebius AI Studio (OpenAI-compatible endpoint)
+    nebius_api_key: Optional[str] = Field(default=None, alias="NEBIUS_API_KEY")
+    nebius_base_url: str = Field(default="https://api.studio.nebius.ai/v1/", alias="NEBIUS_BASE_URL")
+    nebius_model: str = Field(default="Qwen/Qwen3-30B-A3B-Instruct-2507", alias="NEBIUS_MODEL")
+
     # Sponsor Integrations: Exa Neural Web Search
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
 

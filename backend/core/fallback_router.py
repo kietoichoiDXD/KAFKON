@@ -59,24 +59,29 @@ class ModelFallbackRouter:
             {"alias": "openrouter_primary", "model": "anthropic/claude-haiku-4.5",  "provider": "openrouter"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-8b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "qwen/qwen-2.5-7b-instruct",   "provider": "openrouter"},
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-haiku-4-5",            "provider": "anthropic"},
         ],
         FallbackTier.MEDIUM: [
             {"alias": "openrouter_primary", "model": "anthropic/claude-sonnet-5",   "provider": "openrouter"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-70b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "deepseek/deepseek-chat-v3.1", "provider": "openrouter"},
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-sonnet-5",             "provider": "anthropic"},
         ],
         FallbackTier.HIGH: [
             {"alias": "openrouter_primary", "model": "anthropic/claude-opus-5",     "provider": "openrouter"},
             {"alias": "luna",               "model": "deepseek/deepseek-r1",        "provider": "openrouter"},
             {"alias": "sol",                "model": "google/gemini-2.5-pro",       "provider": "openrouter"},
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-opus-5",               "provider": "anthropic"},
         ]
     }
 
     def __init__(self):
-        self.http_timeout = 25.0
+        # 25s was not enough for a 70B model on a full thread: it timed out, and because
+        # httpx.ReadTimeout carries an empty message the trail showed "FAILED ()".
+        self.http_timeout = 60.0
 
     def get_chain_for_tier(self, tier_name: str) -> List[Dict[str, str]]:
         tier_key = FallbackTier.MEDIUM
@@ -142,6 +147,16 @@ class ModelFallbackRouter:
                         audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "success", "provider": "openai_direct"})
                         return result, audit_trail
 
+                    elif provider == "nebius":
+                        if not settings.nebius_api_key:
+                            audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "skipped", "reason": "No NEBIUS_API_KEY"})
+                            continue
+
+                        model_id = model_id or settings.nebius_model
+                        result = await self._call_nebius(client, model_id, system_prompt, user_prompt)
+                        audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "success", "provider": "nebius"})
+                        return result, audit_trail
+
                     elif provider == "anthropic":
                         if not settings.anthropic_api_key:
                             audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "skipped", "reason": "No ANTHROPIC_API_KEY"})
@@ -164,13 +179,14 @@ class ModelFallbackRouter:
                         "reason": reason
                     })
                 except Exception as e:
-                    print(f"⚠️ [Fallback Triggered] {alias} ({model_id}) error: {e}. Cascading...")
+                    reason = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                    print(f"⚠️ [Fallback Triggered] {alias} ({model_id}) error: {reason}. Cascading...")
                     audit_trail.append({
                         "step": idx,
                         "alias": alias,
                         "model": model_id,
                         "status": "failed",
-                        "reason": str(e)
+                        "reason": reason
                     })
 
         # All network models exhausted -> Ultimate local fallback
@@ -194,7 +210,6 @@ class ModelFallbackRouter:
             },
             json={
                 "model": model,
-                "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user}
@@ -206,6 +221,27 @@ class ModelFallbackRouter:
         raw_text = data["choices"][0]["message"]["content"]
         return parse_model_json(raw_text)
 
+    async def _call_nebius(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
+        """Nebius AI Studio speaks the OpenAI chat-completions shape."""
+        resp = await client.post(
+            settings.nebius_base_url.rstrip("/") + "/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.nebius_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": 4000,
+                "temperature": 0.2,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
+        )
+        resp.raise_for_status()
+        return parse_model_json(resp.json()["choices"][0]["message"]["content"])
+
     async def _call_openai(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
         resp = await client.post(
             "https://api.openai.com/v1/chat/completions",
@@ -215,7 +251,6 @@ class ModelFallbackRouter:
             },
             json={
                 "model": model,
-                "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user}

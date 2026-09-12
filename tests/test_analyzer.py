@@ -4,10 +4,23 @@ from backend.core.models import ThreadContext, ChatMessage, EvidenceLabel
 from backend.core.analyzer import ScribeBAAnalyzer
 from backend.integrations.clickup_client import ClickUpClient
 from backend.core.skills import SkillManager
+from backend.config import settings
 
 
 class TestAnalyzerAndClickUp(unittest.TestCase):
     def setUp(self):
+        # These tests assert the deterministic engine's exact output, so they must not reach a
+        # model or the team's ClickUp list: a real key would make them slow, paid and flaky.
+        # The live path has its own test in test_live_path.py, with the HTTP call replaced.
+        for name in ("scribeba_mode", "openrouter_api_key", "anthropic_api_key",
+                     "openai_api_key", "nebius_api_key"):
+            self.addCleanup(setattr, settings, name, getattr(settings, name))
+        settings.scribeba_mode = "local"
+        settings.openrouter_api_key = None
+        settings.anthropic_api_key = None
+        settings.openai_api_key = None
+        settings.nebius_api_key = None
+
         self.thread = ThreadContext(
             thread_id="th-12345",
             channel="dev-enterprise",
@@ -50,10 +63,6 @@ class TestAnalyzerAndClickUp(unittest.TestCase):
         self.assertIn("Contractual", result.clarifying_question)
 
     def test_clickup_ticket_creation(self):
-        # Forced offline: this test must not create a task in the team's real ClickUp list.
-        from backend.config import settings
-        previous, settings.scribeba_mode = settings.scribeba_mode, "local"
-        self.addCleanup(setattr, settings, "scribeba_mode", previous)
         result = asyncio.run(
             self.analyzer.analyze_thread(self.thread, skill_name="startup_lean")
         )

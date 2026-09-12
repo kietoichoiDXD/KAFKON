@@ -1,4 +1,5 @@
 import unittest
+from backend.config import settings
 import asyncio
 from backend.core.fallback_router import ModelFallbackRouter, FallbackTier, parse_model_json
 from backend.core.models import ThreadContext, ChatMessage, SkillConfig
@@ -6,6 +7,17 @@ from backend.core.models import ThreadContext, ChatMessage, SkillConfig
 class TestModelFallbackRouter(unittest.TestCase):
     def setUp(self):
         self.router = ModelFallbackRouter()
+        # Offline by default: the cascade must be exercised against its own logic, not against a
+        # paid endpoint. test_live_path.py covers the live branch with the HTTP call replaced.
+        for name in ("scribeba_mode", "openrouter_api_key", "anthropic_api_key",
+                     "openai_api_key", "nebius_api_key"):
+            self.addCleanup(setattr, settings, name, getattr(settings, name))
+        settings.scribeba_mode = "local"
+        settings.openrouter_api_key = None
+        settings.anthropic_api_key = None
+        settings.openai_api_key = None
+        settings.nebius_api_key = None
+
         self.skill = SkillConfig(name="startup_lean", team_type="early_stage_startup")
         self.thread = ThreadContext(
             thread_id="th-fallback",
