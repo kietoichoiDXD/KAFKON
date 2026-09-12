@@ -199,6 +199,8 @@ def chat():
         messages, body.get("skill", "startup_lean"), body.get("tier") or settings.fallback_tier))
     if out["type"] == "analysis":
         return jsonify({"type": "analysis", **_serialize(out["result"])})
+    if out["type"] == "ops":
+        return jsonify({"type": "ops", **out["diagnosis"]})
     return jsonify({"type": "text", "text": out["text"]})
 
 
