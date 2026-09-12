@@ -124,50 +124,63 @@ KAFKON/
 
 ## 🚀 Quickstart Guide
 
-### 1. Python Backend & CLI
+### 1. 🌐 Bản Web (ScribeBA Web Studio)
+
+Chạy giao diện Web trực quan (quản lý Room, kết nối Slack/Telegram/Discord, cấu hình Agent Skills, duyệt Evidence & INVEST score):
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Cách 1: Chạy trực tiếp từ root qua CLI (tự động bật trình duyệt)
+python -m backend.cli web
 
-# Run the 2-minute interactive demo showcase
-python -m backend.cli demo
+# Cách 2: Double-click file batch trên Windows
+run_web.bat
 
-# Analyze a conversation with a specific skill
-python -m backend.cli analyze --file demo/sample_conversation.md --skill startup_lean
-
-# Compare with agency_detailed skill
-python -m backend.cli analyze --file demo/sample_conversation.md --skill agency_detailed
-
-# Create an audited task in ClickUp
-python -m backend.cli create-ticket --file demo/sample_conversation.md --skill startup_lean
-
-# List all installed team skills
-python -m backend.cli list-skills
-
-# Run Telegram Bot (Group & Topic listening)
-python -m backend.cli telegram
-```
-
-### 2. Frontend Dashboard (React + Vite)
-
-```bash
-# Navigate to frontend directory
+# Cách 3: Chạy qua npm
 cd frontend
-
-# Install dependencies (first time only)
-npm install
-
-# Start dev server
 npm run dev
 ```
+👉 Truy cập ngay tại: **[http://localhost:3000](http://localhost:3000)**
 
-Open [http://localhost:3000/](http://localhost:3000/) to manage Skills, Connections, Agents, Knowledge, and Credentials.
+---
 
-### 3. Run Tests
+### 2. 💻 Bản Terminal (Interactive CLI Suite)
+
+Dùng trực tiếp trên Terminal với giao diện Rich màu sắc, hỗ trợ đầy đủ mọi nghiệp vụ BA, tra cứu Exa, và sync ClickUp:
 
 ```bash
-python -m unittest discover tests
+# Cách 1: Double-click file batch trên Windows
+run_cli.bat
+
+# Cách 2: Chạy các lệnh trực tiếp
+# 1. Chạy Demo 2 phút toàn bộ luồng BA + Fallback + ClickUp:
+python -m backend.cli demo
+
+# 2. Phân tích hội thoại đa kỹ năng (Lean Startup vs Agency):
+python -m backend.cli analyze --file demo/sample_conversation.md --skill startup_lean
+python -m backend.cli analyze --file demo/sample_conversation.md --skill agency_detailed
+
+# 3. Tạo task thật đẩy sang ClickUp (có audit ledger):
+python -m backend.cli create-ticket --skill startup_lean
+
+# 4. Tra cứu đối soát Exa & sinh test kiểm thử chuẩn RFC:
+python -m backend.cli exa-test --feature "Google Workspace OAuth 2.0 PKCE"
+
+# 5. Tìm kiếm ngữ nghĩa Exa thời gian thực:
+python -m backend.cli exa-search "RFC 9700 OAuth security" --limit 2
+
+# 6. Khởi chạy Telegram Bot lắng nghe trực tiếp trong nhóm:
+python -m backend.cli telegram
+
+# 7. Danh sách các kỹ năng cá nhân hóa:
+python -m backend.cli list-skills
+```
+
+---
+
+### 3. 🧪 Kiểm thử Hệ thống (18/18 Tests Passing)
+
+```bash
+python -m pytest tests/ -v
 ```
 
 ---

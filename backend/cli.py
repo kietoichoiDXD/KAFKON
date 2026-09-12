@@ -22,7 +22,7 @@ from .core.analyzer import ScribeBAAnalyzer
 from .core.skills import SkillManager
 from .integrations.clickup_client import ClickUpClient
 from .integrations.exa_client import ExaClient
-from .config import settings
+from .config import settings, BASE_DIR
 
 def load_thread_from_file(file_path: str) -> ThreadContext:
     path = Path(file_path)
@@ -324,9 +324,44 @@ def exa_search_cmd(query: str, limit: int):
             print(f"#{idx} {r.title} ({r.url})")
 
 
+@cli.command("web")
+@click.option("--port", default=3000, help="Port to host the Web UI (default 3000).")
+@click.option("--open/--no-open", "open_browser", default=True, help="Automatically open browser.")
+def web_cmd(port: int, open_browser: bool):
+    """Launch the ScribeBA React Web Studio in browser."""
+    import subprocess
+    import webbrowser
+    import time
+    import threading
+
+    frontend_dir = BASE_DIR / "frontend"
+    if not frontend_dir.exists():
+        raise click.ClickException(f"Frontend directory not found at {frontend_dir}")
+
+    url = f"http://localhost:{port}"
+    if HAS_RICH:
+        console.rule("[bold cyan]🌐 ScribeBA Web Studio[/bold cyan]")
+        console.print(f"🚀 Launching ScribeBA Web Studio at [bold green]{url}[/bold green]...")
+        console.print(f"📁 Directory: [dim]{frontend_dir}[/dim]")
+        console.print("⚡ Press [bold red]Ctrl+C[/bold red] to stop the web server.\n")
+
+    if open_browser:
+        def _open():
+            time.sleep(1.8)
+            webbrowser.open(url)
+        threading.Thread(target=_open, daemon=True).start()
+
+    try:
+        cmd = ["npx", "vite", "--port", str(port), "--host"]
+        subprocess.run(cmd, cwd=str(frontend_dir), shell=True)
+    except KeyboardInterrupt:
+        print("\n[Web Server Stopped]")
+
+
 def main():
     cli()
 
 if __name__ == "__main__":
     main()
+
 
