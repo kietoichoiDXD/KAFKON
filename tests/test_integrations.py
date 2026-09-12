@@ -64,8 +64,11 @@ class TestRegistry(unittest.TestCase):
         self.assertIsNot(a, b)
         self.assertEqual(a.namespace, "team-a")
         self.assertEqual(b.namespace, "team-b")
-        # Runbooks belong to the environment: cluster-b declares none, so it can propose nothing.
-        self.assertEqual(b.runbooks, {})
+        # Checks belong to the environment: cluster-b declares none, so it can propose nothing.
+        self.assertEqual(b.checks, [])
+        # cluster-a's legacy `runbooks:` block is accepted and normalised into an env check.
+        self.assertEqual([c["kind"] for c in a.checks], ["env"])
+        self.assertEqual(a.checks[0]["runbook"], "restore-endpoint")
 
     def test_naming_an_unknown_environment_says_what_exists(self):
         with self.assertRaises(ProviderError) as ctx:

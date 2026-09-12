@@ -1,16 +1,32 @@
-# Environments ScribeBA can investigate.
+# Environments ScribeBA can investigate, and where it asks for approval.
 #
 # Adding infrastructure is an entry here, not a code change. Restart the API after editing:
 #   python -m backend.cli serve
 #
-# Two kinds ship today:
-#   kubernetes — reads a namespace and Prometheus, and can apply the runbooks you declare
+# Kinds that ship today:
+#   kubernetes — reads a namespace and Prometheus, and can repair what you declare below
 #   http       — probes endpoints from outside; reports what it measured and proposes nothing,
 #                because it has no way to change what it is watching
 #
-# A runbook is an allowlist. The console can only ever propose what is written here, the patch is
-# built from these values, and it is pinned to the deployment's resourceVersion before anything
-# is applied. There is no free-form patch path and no shell.
+# A check is an allowlist entry. The console can only look for what is written here and can only
+# propose the repair written next to it. The patch is built from these values, pinned to the live
+# object's resourceVersion, and applied only after a human approves. There is no free-form patch
+# path and no shell.
+#
+# Check kinds:
+#   env       an environment variable drifted from the baseline        → patch the variable
+#   image     the deployment is running the wrong image                → patch the image
+#   replicas  scaled below the floor the service needs                 → patch the replica count
+#   selector  a Service selects labels no Pod carries                  → patch the selector
+#   probe     the readiness probe points at the wrong path             → patch the probe path
+#   restarts  crashes, OOM kills, image pull failures                  → reports only, never guesses
+#             a repair, because the right fix for a crash is a judgement
+
+# Where approval requests go. Leave this out and whatever has credentials is used.
+notifications:
+  - kind: slack
+    channel: C0BFQCXHM2T
+  - kind: discord          # webhook_url comes from DISCORD_WEBHOOK_URL in .env
 
 environments:
   - name: aiops-lab
@@ -26,20 +42,58 @@ environments:
         sum(rate(lab_http_requests_total{status=~"5.."}[2m]))
         / clamp_min(sum(rate(lab_http_requests_total[2m])), 0.001)
       p95_seconds: histogram_quantile(0.95, sum by (le) (rate(lab_http_request_seconds_bucket[5m])))
-    runbooks:
-      restore-endpoint/cart:
+
+    checks:
+      # F01 — Cart Service selects labels no Pod carries, so it has no endpoints
+      - kind: selector
+        runbook: restore-selector
+        target: service/cart
+        summary: Point the cart Service back at the cart Pods
+        value: {app: cart}
+
+      # F02 — Cart is looking for a Valkey that does not exist
+      - kind: env
         runbook: restore-endpoint
         target: deployment/cart
         summary: Point cart back at the in-cluster Valkey service
         env: VALKEY_ADDR
         value: valkey:6379
-      restore-endpoint/catalog:
+
+      # F03 — Catalog is looking for the wrong PostgreSQL
+      - kind: env
         runbook: restore-endpoint
         target: deployment/catalog
         summary: Point catalog back at the in-cluster PostgreSQL service
         env: DB_CONNECTION_STRING
         # Keep $(DB_PASSWORD) literal — Kubernetes expands it from the secret at runtime.
         value: postgres://lab:$(DB_PASSWORD)@postgresql:5432/lab?sslmode=disable
+
+      # F04 — Cart is pinned to an image tag that does not exist
+      - kind: image
+        runbook: restore-image
+        target: deployment/cart
+        summary: Put cart back on the baseline image
+        value: 589077667575.dkr.ecr.us-east-1.amazonaws.com/capstone-aiops-lab/cart:lab-v1
+
+      # F06 — Web's readiness probe points at a path that does not answer
+      - kind: probe
+        runbook: restore-probe
+        target: deployment/web
+        summary: Point the web readiness probe back at /healthz
+        value: /healthz
+
+      # F08 — Cart scaled to zero
+      - kind: replicas
+        runbook: set-replicas
+        target: deployment/cart
+        summary: Scale cart back to one replica
+        value: 1
+
+      # F05 and F07 — crash loops and OOM kills. Reported, never auto-repaired: the fix for a
+      # crashing container is a judgement, and guessing one is what this product argues against.
+      - kind: restarts
+        target: pod/
+        value: 0
 
   # The studio itself, watched from outside. No cluster access, no remediation — just evidence.
   - name: scribeba-local
