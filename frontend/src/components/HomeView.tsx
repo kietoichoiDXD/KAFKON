@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { MODULES_STATUS } from '../data/mockData';
 
+const LABEL_COLOR: Record<string, string> = {
+  Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Inferred: 'bg-amber-50 text-amber-700 border-amber-200',
+  Assumed: 'bg-purple-50 text-purple-700 border-purple-200',
+  Blocked: 'bg-rose-50 text-rose-700 border-rose-200',
+};
+
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
   onNavigateToAutomations: () => void;
@@ -13,6 +20,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenSkills,
 }) => {
   const [promptInput, setPromptInput] = useState('');
+  const [skill, setSkill] = useState('startup_lean');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showIntegrations, setShowIntegrations] = useState(true);
   const [showMascot, setShowMascot] = useState(true);
   const [modelMode, setModelMode] = useState('Light · Auto');
@@ -26,12 +37,43 @@ export const HomeView: React.FC<HomeViewProps> = ({
     'Compare what startup_lean and agency_detailed would file for the same thread.',
   ];
 
+  const submit = async () => {
+    const text = promptInput.trim();
+    if (!text || analyzing) return;
+    setAnalyzing(true);
+    setError(null);
+    setResult(null);
+    try {
+      // Each line is one speaker's turn, which is how a pasted Slack thread arrives.
+      const resp = await fetch('http://localhost:8000/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: text.split('\n').filter(l => l.trim()),
+          skill,
+          // The selector used to be decoration; it now picks the real cascade tier.
+          tier: modelMode.startsWith('Pro') ? 'high' : 'low',
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error ?? 'Analysis failed');
+      setResult(data);
+    } catch (e: any) {
+      setError(
+        e.message === 'Failed to fetch'
+          ? 'The API is not running. Start it with: python -m backend.cli serve'
+          : e.message
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (promptInput.trim()) {
-        onSelectPrompt(promptInput);
-        setPromptInput('');
+        submit();
       }
     }
   };
@@ -140,14 +182,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {/* Submit Button */}
               <button
                 type="button"
-                onClick={() => {
-                  if (promptInput.trim()) {
-                    onSelectPrompt(promptInput);
-                    setPromptInput('');
-                  }
-                }}
-                className="w-8 h-8 rounded-full bg-[#7b5cff] text-white flex items-center justify-center hover:bg-[#007363] transition-colors shadow-sm disabled:opacity-50"
-                disabled={!promptInput.trim()}
+                onClick={submit}
+                className="w-8 h-8 rounded-full bg-[#7b5cff] text-white flex items-center justify-center hover:bg-[#6b4ae8] transition-colors shadow-sm disabled:opacity-50"
+                disabled={!promptInput.trim() || analyzing}
               >
                 <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
               </button>
@@ -178,12 +215,57 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         )}
 
+        {(analyzing || error || result) && (
+          <div className="w-full mt-4 bg-white rounded-2xl border border-gray-200/90 p-5 space-y-3">
+            {analyzing && <p className="text-[13.5px] text-gray-500">Reading the thread…</p>}
+            {error && <p className="text-[13px] text-rose-600">{error}</p>}
+            {result && (
+              <>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="text-[16px] font-semibold text-gray-900">{result.story?.title}</h2>
+                  <span className="text-[13px] font-semibold text-[#7b5cff] shrink-0">
+                    INVEST {result.invest?.overall}/100
+                  </span>
+                </div>
+                {result.story?.as_a && (
+                  <p className="text-[13px] text-gray-700">
+                    <b>As a</b> {result.story.as_a} · <b>I want</b> {result.story.i_want} ·{' '}
+                    <b>So that</b> {result.story.so_that}
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {(result.evidence ?? []).map((e: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-[12.5px]">
+                      <span className={`px-1.5 py-0.5 rounded border shrink-0 ${LABEL_COLOR[e.label] ?? 'bg-gray-50 border-gray-200'}`}>
+                        {e.label}
+                      </span>
+                      <span className="text-gray-700">
+                        <b>{e.field}</b>: {e.value}
+                        {e.quote_source ? <i className="text-gray-500"> — {e.quote_source}</i> : null}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {result.clarifying_question && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 text-[12.5px] text-amber-900">
+                    ScribeBA would ask: {result.clarifying_question}
+                  </div>
+                )}
+                <p className="text-[11.5px] text-gray-400">
+                  Skill {skill} · tier {modelMode.startsWith('Pro') ? 'high' : 'low'} · this reads the
+                  text only. Use <b>Live run</b> to reply in a real thread and file the ticket.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Quick Suggestions List */}
         <div className="w-full mt-4 space-y-1 text-[13.5px] text-gray-600">
           {suggestions.map((s, idx) => (
             <button
               key={idx}
-              onClick={() => onSelectPrompt(s)}
+              onClick={() => { setPromptInput(s); onSelectPrompt(s); }}
               className="w-full text-left flex items-start gap-2 py-1.5 px-2 rounded-lg hover:bg-white hover:text-gray-900 transition-colors group cursor-pointer"
             >
               <span className="text-gray-400 group-hover:text-[#7b5cff] font-mono mt-0.5">↳</span>
