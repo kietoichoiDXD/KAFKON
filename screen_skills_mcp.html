@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "secondary-container": "#aef0da", "inverse-primary": "#c3c8c4", "secondary-fixed": "#aef0da", "on-primary-container": "#858a87", "secondary": "#286958", "surface-tint": "#5a5f5d", "inverse-on-surface": "#f0f1ec", "surface-container-lowest": "#ffffff", "outline": "#747875", "background": "#f9faf5", "on-tertiary-fixed": "#261900", "on-background": "#1a1c19", "on-secondary-container": "#2f6f5e", "error-container": "#ffdad6", "inverse-surface": "#2f312e", "secondary-fixed-dim": "#93d3bf", "primary-fixed-dim": "#c3c8c4", "error": "#ba1a1a", "primary-fixed": "#dfe4e0", "surface-variant": "#e2e3de", "on-primary": "#ffffff", "on-primary-fixed": "#181d1b", "on-surface": "#1a1c19", "surface-container-low": "#f3f4ef", "tertiary-container": "#2e1f00", "surface-dim": "#d9dad6", "on-secondary-fixed": "#002019", "surface-container": "#edeee9", "on-tertiary-fixed-variant": "#5d4200", "on-secondary-fixed-variant": "#055141", "on-primary-fixed-variant": "#434845", "tertiary": "#110a00", "tertiary-fixed": "#ffdea3", "primary-container": "#1e2321", "on-tertiary-container": "#ac8224", "surface": "#f9faf5", "outline-variant": "#c4c7c4", "on-surface-variant": "#434846", "primary": "#080d0b", "surface-container-high": "#e8e9e4", "tertiary-fixed-dim": "#f0bf5c", "on-secondary": "#ffffff", "on-error": "#ffffff", "on-error-container": "#93000a", "surface-container-highest": "#e2e3de", "on-tertiary": "#ffffff", "surface-bright": "#f9faf5" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2.5rem", "space-lg": "1.5rem", "gutter": "1.5rem", "margin-desktop": "3rem", "margin-tablet": "2rem", "space-sm": "0.5rem", "gutter-desktop": "2.5rem", "margin": "1rem", "space-md": "1rem", "space-xs": "0.25rem" }, "fontFamily": { "body-md": [ "\"Source Serif 4\"" ], "body-lg": [ "\"Source Serif 4\"" ], "label-lg": [ "IBM Plex Sans" ], "transcript-mono": [ "IBM Plex Sans" ], "headline-md": [ "\"Source Serif 4\"" ], "label-sm": [ "IBM Plex Sans" ], "headline-xl": [ "\"Source Serif 4\"" ], "headline-sm": [ "\"Source Serif 4\"" ], "headline-lg-mobile": [ "\"Source Serif 4\"" ], "body-sm": [ "\"Source Serif 4\"" ], "label-md": [ "IBM Plex Sans" ], "headline-xl-mobile": [ "\"Source Serif 4\"" ], "headline-lg": [ "\"Source Serif 4\"" ], "marginalia": [ "IBM Plex Sans" ] }, "fontSize": { "body-md": [ "16px", { "lineHeight": "26px", "fontWeight": "400" } ], "body-lg": [ "18px", { "lineHeight": "28px", "fontWeight": "400" } ], "label-lg": [ "15px", { "lineHeight": "20px", "fontWeight": "500" } ], "transcript-mono": [ "14px", { "lineHeight": "22px", "fontWeight": "400" } ], "headline-md": [ "22px", { "lineHeight": "30px", "fontWeight": "600" } ], "label-sm": [ "11px", { "lineHeight": "16px", "fontWeight": "500" } ], "headline-xl": [ "36px", { "lineHeight": "44px", "fontWeight": "600" } ], "headline-sm": [ "18px", { "lineHeight": "26px", "fontWeight": "600" } ], "headline-lg-mobile": [ "22px", { "lineHeight": "30px", "fontWeight": "600" } ], "body-sm": [ "14px", { "lineHeight": "22px", "fontWeight": "400" } ], "label-md": [ "13px", { "lineHeight": "18px", "fontWeight": "500" } ], "headline-xl-mobile": [ "28px", { "lineHeight": "36px", "fontWeight": "600" } ], "headline-lg": [ "28px", { "lineHeight": "36px", "fontWeight": "600" } ], "marginalia": [ "12px", { "lineHeight": "16px", "fontWeight": "400" } ] } } } }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container border-r border-outline-variant z-50 flex flex-col justify-between py-space-lg"><div class="flex flex-col"><div class="px-space-lg pb-space-lg border-b border-outline-variant flex items-center justify-between"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[22px]">history_edu</span><div><div class="font-label-lg text-label-lg text-primary tracking-tight font-medium">ScribeBA Studio</div><div class="font-marginalia text-marginalia text-on-surface-variant">v1.4.2 • Editorial BA</div></div></div></div><div class="px-space-md py-space-sm"><div class="px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Evidence Tracks</div></div><nav class="flex flex-col gap-0.5 px-space-sm" data-active-classes="bg-primary-container text-on-primary font-medium border-l-[3px] border-primary"><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="home" href="#"><span class="material-symbols-outlined text-[18px]">home</span><span>Home</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-md py-2 transition-colors bg-primary-container text-on-primary font-medium border-l-[3px] border-primary" data-path="review" href="#"><span class="material-symbols-outlined text-[18px]">rate_review</span><span>Review</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="rooms" href="#"><span class="material-symbols-outlined text-[18px]">meeting_room</span><span>Rooms</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="automations" href="#"><span class="material-symbols-outlined text-[18px]">auto_mode</span><span>Automations</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="skills" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span>Skills</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="connections" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Connections</span></a></nav></div><div class="flex flex-col gap-space-sm px-space-lg pt-space-md border-t border-outline-variant"><div class="flex items-center justify-between text-on-surface-variant"><span class="font-label-sm text-label-sm">Transcript Sync</span><span class="flex items-center gap-1 font-marginalia text-marginalia text-secondary font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-secondary"></span>Active</span></div><div class="bg-surface-container-low border border-outline-variant p-space-sm flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-label-sm text-label-sm text-primary font-medium">Trial Dossier</span><span class="font-marginalia text-marginalia text-on-surface-variant">14 days left</span></div><div class="w-full bg-surface-variant h-1"><div class="bg-secondary h-1 w-2/3"></div></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface border-b border-outline-variant z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-md"><span class="font-label-lg text-label-lg text-primary font-semibold">Acme Payments Workspace</span><span class="text-outline-variant font-label-sm">/</span><span class="font-marginalia text-marginalia text-on-secondary-container bg-secondary-container px-2 py-0.5 border border-secondary">Trial • 14 days remaining</span></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm bg-surface-container-low border border-outline-variant px-space-md py-1 text-on-surface-variant font-label-sm text-label-sm w-72 justify-between"><span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">search</span><span>Search &amp; run syntax</span></span><kbd class="bg-surface-container border border-outline-variant px-1 font-transcript-mono text-[10px] text-primary">Cmd + K</kbd></div><div class="flex items-center gap-space-md pl-space-md border-l border-outline-variant"><div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-secondary"></span><span class="font-marginalia text-marginalia text-on-surface-variant">Heartbeat 99.8%</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 bg-surface min-h-screen"><div class="w-full px-8 py-space-lg"><div class="max-w-[800px] mx-auto"><div class="border-b border-outline-variant pb-space-sm mb-space-lg flex items-center justify-between"><div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">Evidence Track • Sworn Testimony &amp; Verified Stories</div><div class="font-marginalia text-marginalia text-on-surface-variant">Editorial Record No. 2024-B</div></div><div class="flex flex-col w-full">
+<!-- Page Header Dossier Block -->
+<header class="border-b border-outline-variant pb-space-md mb-space-lg">
+<div class="flex flex-wrap items-baseline gap-2 font-marginalia text-marginalia text-on-surface-variant mb-space-xs">
+<span>Hồ sơ cấu hình</span>
+<span>/</span>
+<span class="text-primary font-medium">Kỹ năng nghiệp vụ &amp; Kết nối giao thức MCP</span>
+<span class="text-outline-variant font-label-sm">|</span>
+<span>Quy chuẩn Studio v1.4.2</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-baseline justify-between gap-space-md">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-primary font-semibold tracking-tight">Quản lý Kỹ năng &amp; Kết nối Hệ thống</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-3xl mt-1">
+          Cấu hình quy chuẩn trích xuất bằng chứng, quản lý các tệp <code class="font-transcript-mono text-[13px] bg-surface-container px-1.5 py-0.5 border border-outline-variant text-primary">SKILL.md</code> và thiết lập quyền đọc/ghi qua Model Context Protocol (MCP) kết nối với Jira, Confluence, Slack và Postgres.
+        </p>
+</div>
+<div class="flex items-center gap-space-xs shrink-0 self-start">
+<button class="bg-primary text-on-primary font-label-md text-label-md px-space-md py-1.5 border border-primary hover:bg-surface-container-highest hover:text-primary transition-colors cursor-pointer" type="button">
+          + Nhập quy chuẩn SKILL
+        </button>
+</div>
+</div>
+<!-- Segmented Editorial Paper Tabs -->
+<div class="flex items-end gap-1 mt-space-lg border-b border-outline-variant">
+<button class="px-space-md py-2 border-b-2 border-primary font-label-md text-label-md text-primary font-medium bg-surface-container-low transition-colors flex items-center gap-2" id="tab-btn-skills" onclick="switchMainTab('skills')" type="button">
+<span>Kỹ năng nghiệp vụ</span>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.5 border border-outline-variant text-on-surface-variant">5 kỹ năng</span>
+</button>
+<button class="px-space-md py-2 border-b-2 border-transparent font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors flex items-center gap-2" id="tab-btn-mcp" onclick="switchMainTab('mcp')" type="button">
+<span>Kết nối MCP &amp; Built-in</span>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.5 border border-outline-variant text-on-surface-variant">4 dịch vụ</span>
+</button>
+</div>
+</header>
+<!-- SECTION 1: Skills Repository (Dual Column Editorial Layout) -->
+<section class="flex flex-col gap-space-lg" id="section-skills">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<!-- Left Column: Skill List (~45% - 5 cols lg) -->
+<div class="lg:col-span-5 flex flex-col border border-outline-variant bg-surface-container-low">
+<div class="p-space-md border-b border-outline-variant flex items-center justify-between bg-surface-container">
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-semibold">Thư mục Kỹ năng (SKILL.md)</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant">5 sẵn sàng</span>
+</div>
+<div class="flex flex-col divide-y divide-outline-variant" id="skills-list-container">
+<!-- Skill Item 1 (Selected) -->
+<article class="p-space-md cursor-pointer bg-surface transition-colors border-l-[3px] border-secondary hover:bg-surface-container-lowest" id="skill-card-1" onclick="selectSkillItem(1)">
+<div class="flex items-start justify-between gap-2 mb-1">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-secondary"></span>
+<h2 class="font-label-lg text-label-lg text-primary font-semibold">Jira Acceptance Criteria Synthesizer</h2>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container-high px-1.5 py-0.2 border border-outline-variant text-primary font-transcript-mono">v2.3</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pl-4 mb-2">
+              Tự động định dạng kịch bản Given-When-Then chuẩn Gherkin trực tiếp từ transcript đối thoại phân tích thanh toán.
+            </p>
+<div class="flex items-center justify-between pl-4 font-marginalia text-marginalia text-on-surface-variant">
+<span class="text-secondary font-medium">Đang xem đặc tả • Verified</span>
+<span>2 ngày trước</span>
+</div>
+</article>
+<!-- Skill Item 2 -->
+<article class="p-space-md cursor-pointer bg-surface-container-low transition-colors border-l-[3px] border-transparent hover:bg-surface" id="skill-card-2" onclick="selectSkillItem(2)">
+<div class="flex items-start justify-between gap-2 mb-1">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-secondary"></span>
+<h2 class="font-label-lg text-label-lg text-primary font-medium">INVEST Score Inspector</h2>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.2 border border-outline-variant text-primary font-transcript-mono">v1.8</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pl-4 mb-2">
+              Chấm điểm 6 tiêu chí độc lập, thương lượng, giá trị, ước lượng, tinh gọn và kiểm thử được trước khi đưa vào backlog.
+            </p>
+<div class="flex items-center justify-between pl-4 font-marginalia text-marginalia text-on-surface-variant">
+<span class="text-on-tertiary-container font-medium">Inferred engine</span>
+<span>Tuần trước</span>
+</div>
+</article>
+<!-- Skill Item 3 -->
+<article class="p-space-md cursor-pointer bg-surface-container-low transition-colors border-l-[3px] border-transparent hover:bg-surface" id="skill-card-3" onclick="selectSkillItem(3)">
+<div class="flex items-start justify-between gap-2 mb-1">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-secondary"></span>
+<h2 class="font-label-lg text-label-lg text-primary font-medium">Evidence Tagger &amp; Citation Linker</h2>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.2 border border-outline-variant text-primary font-transcript-mono">v3.0</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pl-4 mb-2">
+              Liên kết từng câu trong User Story tới timestamp âm thanh hoặc câu thoại gốc của stakeholder tương ứng.
+            </p>
+<div class="flex items-center justify-between pl-4 font-marginalia text-marginalia text-on-surface-variant">
+<span class="text-secondary font-medium">Core provenance</span>
+<span>Hôm nay</span>
+</div>
+</article>
+<!-- Skill Item 4 -->
+<article class="p-space-md cursor-pointer bg-surface-container-low transition-colors border-l-[3px] border-transparent hover:bg-surface" id="skill-card-4" onclick="selectSkillItem(4)">
+<div class="flex items-start justify-between gap-2 mb-1">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-outline"></span>
+<h2 class="font-label-lg text-label-lg text-primary font-medium">Edge-Case &amp; Fallback Detector</h2>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.2 border border-outline-variant text-primary font-transcript-mono">v1.1</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pl-4 mb-2">
+              Phát hiện các nhánh rủi ro thanh toán ngoài luồng, timeout cổng ngân hàng và trạng thái tài khoản thẻ bị gián đoạn.
+            </p>
+<div class="flex items-center justify-between pl-4 font-marginalia text-marginalia text-on-surface-variant">
+<span class="text-error font-medium">Cần tinh chỉnh</span>
+<span>12 ngày trước</span>
+</div>
+</article>
+<!-- Skill Item 5 -->
+<article class="p-space-md cursor-pointer bg-surface-container-low transition-colors border-l-[3px] border-transparent hover:bg-surface" id="skill-card-5" onclick="selectSkillItem(5)">
+<div class="flex items-start justify-between gap-2 mb-1">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-secondary"></span>
+<h2 class="font-label-lg text-label-lg text-primary font-medium">Non-Functional SLO Extractor</h2>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container px-1.5 py-0.2 border border-outline-variant text-primary font-transcript-mono">v2.0</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pl-4 mb-2">
+              Trích xuất chỉ số chịu tải TPS, ngưỡng trễ p99 và chuẩn mã hóa dữ liệu thanh toán PCI-DSS từ văn bản thảo luận.
+            </p>
+<div class="flex items-center justify-between pl-4 font-marginalia text-marginalia text-on-surface-variant">
+<span class="text-secondary font-medium">Verified</span>
+<span>3 ngày trước</span>
+</div>
+</article>
+</div>
+<div class="p-space-md border-t border-outline-variant bg-surface-container">
+<button class="w-full py-2 px-space-md border border-outline bg-surface hover:bg-surface-container-highest transition-colors font-label-md text-label-md text-primary text-center" type="button">
+            + Thêm kỹ năng mới (Tạo từ template SKILL.md)
+          </button>
+</div>
+</div>
+<!-- Right Column: Skill Detail Pane (~55% - 7 cols lg) -->
+<div class="lg:col-span-7 flex flex-col border border-outline-variant bg-surface-container-lowest">
+<!-- Detail Header -->
+<div class="p-space-md border-b border-outline-variant bg-surface-container flex flex-col gap-space-sm">
+<div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-1.5 py-0.5 border border-secondary font-medium">Hoạt động trong Acme Payments</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant">Bản ghi số #SKL-8022</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-primary mt-1 font-semibold">Jira Acceptance Criteria Synthesizer</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="font-transcript-mono text-label-md text-primary font-medium bg-surface px-2 py-0.5 border border-outline-variant">v2.3</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant pl-1">Cập nhật 2 ngày trước</span>
+</div>
+</div>
+<!-- Action bar -->
+<div class="flex flex-wrap items-center gap-2 pt-space-xs border-t border-outline-variant/60">
+<button class="font-label-sm text-label-sm px-space-sm py-1 bg-primary text-on-primary hover:bg-surface-container-highest hover:text-primary transition-colors border border-primary" type="button">
+              Chỉnh sửa SKILL.md
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 bg-surface text-primary border border-outline hover:bg-surface-container transition-colors" type="button">
+              Sao chép prompt
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 bg-surface text-on-surface-variant border border-outline-variant hover:bg-surface-container transition-colors" type="button">
+              Tạm dừng kỹ năng
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 bg-surface text-error border border-error/50 hover:bg-error-container hover:text-on-error-container transition-colors ml-auto" type="button">
+              Lưu trữ
+            </button>
+</div>
+</div>
+<!-- Metadata Sub-strip -->
+<div class="p-space-md border-b border-outline-variant bg-surface-container-low flex flex-col gap-2 font-marginalia text-marginalia">
+<div class="flex items-baseline gap-2">
+<span class="text-on-surface-variant w-32 shrink-0 font-medium">Phạm vi áp dụng:</span>
+<span class="text-primary font-body-sm text-body-sm">Sprint Planning, Tech-Sync, 1-on-1 Discovery, Khảo sát nghiệp vụ cổng thanh toán</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-on-surface-variant w-32 shrink-0 font-medium">Tệp đính kèm kèm theo:</span>
+<div class="flex flex-wrap items-center gap-2">
+<span class="font-transcript-mono bg-surface border border-outline-variant px-1.5 py-0.5 text-primary">gherkin_standard_v2.json</span>
+<span class="font-transcript-mono bg-surface border border-outline-variant px-1.5 py-0.5 text-primary">vietnamese_fintech_vocab.md</span>
+<span class="font-transcript-mono bg-surface border border-outline-variant px-1.5 py-0.5 text-primary">iso_8583_message_codes.csv</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-on-surface-variant w-32 shrink-0 font-medium">Ngưỡng tin cậy tối thiểu:</span>
+<span class="text-secondary font-medium flex items-center gap-1">
+<span class="w-2 h-0.5 bg-secondary inline-block"></span> Verified &amp; Inferred (Không phân tích nội dung Assumed)
+            </span>
+</div>
+</div>
+<!-- SKILL.md Reader (Legal typewriter paper styling) -->
+<div class="p-space-md flex flex-col">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm border-b border-outline-variant">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">Tập tin quy chuẩn: SKILL.md</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant">Chế độ xem trước tài liệu</span>
+</div>
+<div class="bg-surface-container-low border border-outline-variant p-space-md font-transcript-mono text-[13px] leading-relaxed text-primary overflow-x-auto select-text">
+<pre class="whitespace-pre-wrap"># ROLE: Lead BA Acceptance Criteria Engine
+## OBJECTIVE: Chuyển đổi hội thoại thô thành Gherkin Scenarios chuẩn mực
+
+## CONSTRAINTS:
+- Chỉ tạo kịch bản cho các chi tiết đã có nhãn Verified hoặc Inferred.
+- Tuyệt đối gắn tag @blocked vào các trường hợp chưa thống nhất thời gian timeout hoặc chưa rõ mã phản hồi HTTP.
+- Bắt buộc kiểm tra điều kiện tiên quyết (Pre-condition: Cho rằng khách hàng đã có ví liên kết).
+
+## EVIDENCE LINKAGE RULES:
+- Mọi kịch bản Gherkin phải dẫn nguồn tham chiếu tới câu thoại của Product Owner hoặc Tech Lead.
+- Cấu trúc xuất ra:
+  gherkin
+  @evidence-id: TS-4820
+  Tính năng: Hoàn tiền giao dịch thẻ nội địa tức thì
+    Kịch bản: Hoàn tiền thành công trong thời hạn T+0
+      Cho rằng tài khoản thương viên có đủ số dư ký quỹ &gt;= 5.000.000 VND
+      Khi hệ thống nhận lệnh Reversal từ Cổng thanh toán NAPAS
+      Thì cập nhật trạng thái đơn hàng thành "ĐÃ_HOÀN_TIỀN" trong vòng 800ms
+      Và gửi webhook thông báo mã lý do 00 (Thành công)
+  
+
+## OUTPUT FORMAT:
+- Markdown khối code chuẩn Gherkin, có tiền tố nhãn phân loại bằng chứng.</pre>
+</div>
+<!-- Proofing / Verification Footer Actions -->
+<div class="mt-space-md pt-space-sm border-t border-outline-variant flex flex-col sm:flex-row items-center justify-between gap-space-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">verified</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant">Đã kiểm duyệt cú pháp bởi Ban Thẩm Định BA • Không phát hiện lỗi cú pháp Gherkin</span>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<button class="px-space-md py-1.5 border border-outline bg-surface hover:bg-surface-container text-primary font-label-md text-label-md" type="button">
+                Chạy thử trên mẫu đối thoại (Dry Run)
+              </button>
+<button class="px-space-md py-1.5 bg-primary text-on-primary hover:bg-surface-container-highest hover:text-primary transition-colors font-label-md text-label-md border border-primary" type="button">
+                Lưu và đồng bộ
+              </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 2: MCP Protocol & Built-in Tools (Dossier Grid) -->
+<section class="flex flex-col gap-space-md mt-space-xl pt-space-md border-t border-outline-variant" id="section-mcp">
+<div class="flex flex-col md:flex-row md:items-baseline justify-between gap-2">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider mb-1">Giao thức MCP (Model Context Protocol) • Quyền truy cập mở rộng</div>
+<h2 class="font-headline-lg text-headline-lg text-primary font-semibold">Kết nối Giao thức Ngữ cảnh &amp; Dịch vụ Tích hợp</h2>
+</div>
+<div class="flex items-center gap-2 font-marginalia text-marginalia text-on-surface-variant">
+<span>Giao thức chuẩn: MCP RFC-2024</span>
+<span class="text-outline-variant">|</span>
+<span class="text-secondary font-medium">Bảo mật Token mTLS Kích hoạt</span>
+</div>
+</div>
+<!-- MCP Servers Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md mt-space-sm">
+<!-- Connection Card 1: Jira MCP -->
+<div class="border border-outline-variant bg-surface-container-lowest p-space-md flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-2 border-b border-outline-variant pb-space-xs mb-space-sm">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">MCP Server • Backlog Service</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-semibold">Atlassian Jira Server MCP</h3>
+</div>
+<span class="font-marginalia text-marginalia bg-secondary-container text-on-secondary-container px-2 py-0.5 border border-secondary shrink-0 font-medium">
+              Đã kết nối • 42ms
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Kết nối quản lý backlog sprint, tạo story nháp và cập nhật trực tiếp Acceptance Criteria đã qua kiểm duyệt vào Jira Issue tương ứng.
+          </p>
+<div class="bg-surface-container-low border border-outline-variant p-space-sm mb-space-md flex flex-col gap-1.5 font-marginalia text-marginalia">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Phạm vi quyền hạn (Scopes):</span>
+<span class="font-transcript-mono text-primary text-[11px]">jira:issues.read, jira:issues.write_draft</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Không gian làm việc:</span>
+<span class="text-primary font-transcript-mono text-[11px]">ACME-FINTECH-BOARD</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Kiểm duyệt đẩy vé:</span>
+<span class="text-secondary font-medium">Bắt bu��c xác nhận trên màn hình Review</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant">
+<span class="font-marginalia text-marginalia text-on-surface-variant">Đồng bộ: 4 phút trước</span>
+<div class="flex items-center gap-2">
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline bg-surface hover:bg-surface-container text-primary" type="button">
+              Kiểm tra Ping
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline-variant bg-surface hover:bg-surface-container text-primary" type="button">
+              Cấu hình
+            </button>
+</div>
+</div>
+</div>
+<!-- Connection Card 2: Confluence Knowledge MCP -->
+<div class="border border-outline-variant bg-surface-container-lowest p-space-md flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-2 border-b border-outline-variant pb-space-xs mb-space-sm">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">MCP Server • Knowledge Repository</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-semibold">Confluence Knowledge MCP</h3>
+</div>
+<span class="font-marginalia text-marginalia bg-secondary-container text-on-secondary-container px-2 py-0.5 border border-secondary shrink-0 font-medium">
+              Đã kết nối • 68ms
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Trích xuất tài liệu kiến trúc kỹ thuật hiện tại, từ điển dữ liệu cổng thanh toán và các văn bản quy định phòng chống gian lận thẻ.
+          </p>
+<div class="bg-surface-container-low border border-outline-variant p-space-sm mb-space-md flex flex-col gap-1.5 font-marginalia text-marginalia">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Phạm vi quyền hạn (Scopes):</span>
+<span class="font-transcript-mono text-primary text-[11px]">confluence:content.read_only</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Không gian tài liệu:</span>
+<span class="text-primary font-transcript-mono text-[11px]">SPACE_ARCH_PAYMENTS_V2</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Chỉ m���c đối chiếu:</span>
+<span class="text-primary">1.240 trang tài liệu</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant">
+<span class="font-marginalia text-marginalia text-on-surface-variant">Đồng bộ: 1 giờ trước</span>
+<div class="flex items-center gap-2">
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline bg-surface hover:bg-surface-container text-primary" type="button">
+              Kiểm tra Ping
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline-variant bg-surface hover:bg-surface-container text-primary" type="button">
+              Cấu hình
+            </button>
+</div>
+</div>
+</div>
+<!-- Connection Card 3: Google Drive Sync -->
+<div class="border border-outline-variant bg-surface-container-lowest p-space-md flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-2 border-b border-outline-variant pb-space-xs mb-space-sm">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">Built-in Service • Ingestion Pipeline</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-semibold">Google Drive Transcript Sync</h3>
+</div>
+<span class="font-marginalia text-marginalia bg-surface-container text-primary px-2 py-0.5 border border-outline-variant shrink-0 font-medium">
+              Đồng bộ tự động 15p
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Tự động nạp file ghi âm cuộc họp Google Meet và file phụ đề `.vtt` từ thư mục được chỉ định trong Google Drive của dự án.
+          </p>
+<div class="bg-surface-container-low border border-outline-variant p-space-sm mb-space-md flex flex-col gap-1.5 font-marginalia text-marginalia">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Thư mục nguồn:</span>
+<span class="text-primary font-transcript-mono text-[11px]">/Acme_Shared/Sprint_Discovery_Recordings</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Định dạng chấp nhận:</span>
+<span class="text-primary font-transcript-mono text-[11px]">.m4a, .mp3, .wav, .vtt, .txt</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">File đã xử lý:</span>
+<span class="text-primary">38 cuộc họp</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant">
+<span class="font-marginalia text-marginalia text-on-surface-variant">Lần nạp cuối: 8 phút trước</span>
+<div class="flex items-center gap-2">
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline bg-surface hover:bg-surface-container text-primary" type="button">
+              Quét ngay
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline-variant bg-surface hover:bg-surface-container text-primary" type="button">
+              Cấu hình
+            </button>
+</div>
+</div>
+</div>
+<!-- Connection Card 4: Postgres Ledger Read-Replica -->
+<div class="border border-outline-variant bg-surface-container-lowest p-space-md flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-2 border-b border-outline-variant pb-space-xs mb-space-sm">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">Database Replica • Error Lookup</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-semibold">Postgres Ledger Read-Replica</h3>
+</div>
+<span class="font-marginalia text-marginalia bg-error-container text-error px-2 py-0.5 border border-error shrink-0 font-medium">
+              Cần cấu hình lại token
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Đối chiếu mã lỗi thanh toán thực tế (ISO-8583 response codes) và bảng định tuyến ngân hàng khi BA phân tích các ca ngoại lệ.
+          </p>
+<div class="bg-surface-container-low border border-outline-variant p-space-sm mb-space-md flex flex-col gap-1.5 font-marginalia text-marginalia">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Chế độ kết nối:</span>
+<span class="text-error font-medium">Bản sao chỉ đọc (Read Replica) - Token hết hạn</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Bảng dữ liệu:</span>
+<span class="text-primary font-transcript-mono text-[11px]">cfg_bank_codes, log_settlement_errors</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-medium">Giao thức SSL:</span>
+<span class="text-primary">TLSv1.3 bắt buộc</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant">
+<span class="font-marginalia text-marginalia text-error">Gián đoạn từ 08:30 sáng</span>
+<div class="flex items-center gap-2">
+<button class="font-label-sm text-label-sm px-space-sm py-1 bg-error text-on-error hover:bg-error-container hover:text-on-error-container transition-colors border border-error" type="button">
+              Cấp lại Token
+            </button>
+<button class="font-label-sm text-label-sm px-space-sm py-1 border border-outline-variant bg-surface hover:bg-surface-container text-primary" type="button">
+              Nhật ký lỗi
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Legal Approval Gate Notice -->
+<div class="border border-outline-variant bg-surface-container p-space-md flex items-start gap-space-md mt-space-sm">
+<span class="material-symbols-outlined text-primary text-[24px] shrink-0">gavel</span>
+<div class="flex flex-col gap-1">
+<div class="font-label-md text-label-md text-primary font-semibold">Quy chuẩn Thẩm quyền &amp; Phê duyệt (Approval Gate Law)</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Mọi thao tác ghi vé hoặc đẩy dữ liệu ra hệ thống bên ngoài (Jira, Confluence, Postgres) đều không được phép tự động chạy ngầm. Mọi bản nháp do AI tạo lập dựa trên SKILL.md bắt buộc phải thông qua trạng thái kiểm duyệt chữ ký tay tại màn hình <strong class="text-primary font-medium">Review</strong> của chuyên viên BA chịu trách nhiệm.
+        </p>
+</div>
+</div>
+</section>
+<!-- Interactive script to switch tabs and select skill items -->
+<script>
+    function switchMainTab(tab) {
+      const skillsBtn = document.getElementById('tab-btn-skills');
+      const mcpBtn = document.getElementById('tab-btn-mcp');
+      const secSkills = document.getElementById('section-skills');
+      const secMcp = document.getElementById('section-mcp');
+
+      if (tab === 'skills') {
+        skillsBtn.className = 'px-space-md py-2 border-b-2 border-primary font-label-md text-label-md text-primary font-medium bg-surface-container-low transition-colors flex items-center gap-2';
+        mcpBtn.className = 'px-space-md py-2 border-b-2 border-transparent font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors flex items-center gap-2';
+        secSkills.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        mcpBtn.className = 'px-space-md py-2 border-b-2 border-primary font-label-md text-label-md text-primary font-medium bg-surface-container-low transition-colors flex items-center gap-2';
+        skillsBtn.className = 'px-space-md py-2 border-b-2 border-transparent font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors flex items-center gap-2';
+        secMcp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function selectSkillItem(id) {
+      for (let i = 1; i <= 5; i++) {
+        const item = document.getElementById('skill-card-' + i);
+        if (item) {
+          if (i === id) {
+            item.className = 'p-space-md cursor-pointer bg-surface transition-colors border-l-[3px] border-secondary hover:bg-surface-container-lowest';
+          } else {
+            item.className = 'p-space-md cursor-pointer bg-surface-container-low transition-colors border-l-[3px] border-transparent hover:bg-surface';
+          }
+        }
+      }
+    }
+  </script>
+</div></div></div></main></div></body></html>

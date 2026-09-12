@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "secondary-container": "#aef0da", "inverse-primary": "#c3c8c4", "secondary-fixed": "#aef0da", "on-primary-container": "#858a87", "secondary": "#286958", "surface-tint": "#5a5f5d", "inverse-on-surface": "#f0f1ec", "surface-container-lowest": "#ffffff", "outline": "#747875", "background": "#f9faf5", "on-tertiary-fixed": "#261900", "on-background": "#1a1c19", "on-secondary-container": "#2f6f5e", "error-container": "#ffdad6", "inverse-surface": "#2f312e", "secondary-fixed-dim": "#93d3bf", "primary-fixed-dim": "#c3c8c4", "error": "#ba1a1a", "primary-fixed": "#dfe4e0", "surface-variant": "#e2e3de", "on-primary": "#ffffff", "on-primary-fixed": "#181d1b", "on-surface": "#1a1c19", "surface-container-low": "#f3f4ef", "tertiary-container": "#2e1f00", "surface-dim": "#d9dad6", "on-secondary-fixed": "#002019", "surface-container": "#edeee9", "on-tertiary-fixed-variant": "#5d4200", "on-secondary-fixed-variant": "#055141", "on-primary-fixed-variant": "#434845", "tertiary": "#110a00", "tertiary-fixed": "#ffdea3", "primary-container": "#1e2321", "on-tertiary-container": "#ac8224", "surface": "#f9faf5", "outline-variant": "#c4c7c4", "on-surface-variant": "#434846", "primary": "#080d0b", "surface-container-high": "#e8e9e4", "tertiary-fixed-dim": "#f0bf5c", "on-secondary": "#ffffff", "on-error": "#ffffff", "on-error-container": "#93000a", "surface-container-highest": "#e2e3de", "on-tertiary": "#ffffff", "surface-bright": "#f9faf5" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2.5rem", "space-lg": "1.5rem", "gutter": "1.5rem", "margin-desktop": "3rem", "margin-tablet": "2rem", "space-sm": "0.5rem", "gutter-desktop": "2.5rem", "margin": "1rem", "space-md": "1rem", "space-xs": "0.25rem" }, "fontFamily": { "body-md": [ "\"Source Serif 4\"" ], "body-lg": [ "\"Source Serif 4\"" ], "label-lg": [ "IBM Plex Sans" ], "transcript-mono": [ "IBM Plex Sans" ], "headline-md": [ "\"Source Serif 4\"" ], "label-sm": [ "IBM Plex Sans" ], "headline-xl": [ "\"Source Serif 4\"" ], "headline-sm": [ "\"Source Serif 4\"" ], "headline-lg-mobile": [ "\"Source Serif 4\"" ], "body-sm": [ "\"Source Serif 4\"" ], "label-md": [ "IBM Plex Sans" ], "headline-xl-mobile": [ "\"Source Serif 4\"" ], "headline-lg": [ "\"Source Serif 4\"" ], "marginalia": [ "IBM Plex Sans" ] }, "fontSize": { "body-md": [ "16px", { "lineHeight": "26px", "fontWeight": "400" } ], "body-lg": [ "18px", { "lineHeight": "28px", "fontWeight": "400" } ], "label-lg": [ "15px", { "lineHeight": "20px", "fontWeight": "500" } ], "transcript-mono": [ "14px", { "lineHeight": "22px", "fontWeight": "400" } ], "headline-md": [ "22px", { "lineHeight": "30px", "fontWeight": "600" } ], "label-sm": [ "11px", { "lineHeight": "16px", "fontWeight": "500" } ], "headline-xl": [ "36px", { "lineHeight": "44px", "fontWeight": "600" } ], "headline-sm": [ "18px", { "lineHeight": "26px", "fontWeight": "600" } ], "headline-lg-mobile": [ "22px", { "lineHeight": "30px", "fontWeight": "600" } ], "body-sm": [ "14px", { "lineHeight": "22px", "fontWeight": "400" } ], "label-md": [ "13px", { "lineHeight": "18px", "fontWeight": "500" } ], "headline-xl-mobile": [ "28px", { "lineHeight": "36px", "fontWeight": "600" } ], "headline-lg": [ "28px", { "lineHeight": "36px", "fontWeight": "600" } ], "marginalia": [ "12px", { "lineHeight": "16px", "fontWeight": "400" } ] } } } }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container border-r border-outline-variant z-50 flex flex-col justify-between py-space-lg"><div class="flex flex-col"><div class="px-space-lg pb-space-lg border-b border-outline-variant flex items-center justify-between"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[22px]">history_edu</span><div><div class="font-label-lg text-label-lg text-primary tracking-tight font-medium">ScribeBA Studio</div><div class="font-marginalia text-marginalia text-on-surface-variant">v1.4.2 • Editorial BA</div></div></div></div><div class="px-space-md py-space-sm"><div class="px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Evidence Tracks</div></div><nav class="flex flex-col gap-0.5 px-space-sm" data-active-classes="bg-primary-container text-on-primary font-medium border-l-[3px] border-primary"><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="home" href="#"><span class="material-symbols-outlined text-[18px]">home</span><span>Home</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-md py-2 transition-colors bg-primary-container text-on-primary font-medium border-l-[3px] border-primary" data-path="review" href="#"><span class="material-symbols-outlined text-[18px]">rate_review</span><span>Review</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="rooms" href="#"><span class="material-symbols-outlined text-[18px]">meeting_room</span><span>Rooms</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="automations" href="#"><span class="material-symbols-outlined text-[18px]">auto_mode</span><span>Automations</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="skills" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span>Skills</span></a><a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-md text-label-md" data-path="connections" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Connections</span></a></nav></div><div class="flex flex-col gap-space-sm px-space-lg pt-space-md border-t border-outline-variant"><div class="flex items-center justify-between text-on-surface-variant"><span class="font-label-sm text-label-sm">Transcript Sync</span><span class="flex items-center gap-1 font-marginalia text-marginalia text-secondary font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-secondary"></span>Active</span></div><div class="bg-surface-container-low border border-outline-variant p-space-sm flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-label-sm text-label-sm text-primary font-medium">Trial Dossier</span><span class="font-marginalia text-marginalia text-on-surface-variant">14 days left</span></div><div class="w-full bg-surface-variant h-1"><div class="bg-secondary h-1 w-2/3"></div></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface border-b border-outline-variant z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-md"><span class="font-label-lg text-label-lg text-primary font-semibold">Acme Payments Workspace</span><span class="text-outline-variant font-label-sm">/</span><span class="font-marginalia text-marginalia text-on-secondary-container bg-secondary-container px-2 py-0.5 border border-secondary">Trial • 14 days remaining</span></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm bg-surface-container-low border border-outline-variant px-space-md py-1 text-on-surface-variant font-label-sm text-label-sm w-72 justify-between"><span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">search</span><span>Search &amp; run syntax</span></span><kbd class="bg-surface-container border border-outline-variant px-1 font-transcript-mono text-[10px] text-primary">Cmd + K</kbd></div><div class="flex items-center gap-space-md pl-space-md border-l border-outline-variant"><div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-secondary"></span><span class="font-marginalia text-marginalia text-on-surface-variant">Heartbeat 99.8%</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 bg-surface min-h-screen"><div class="w-full px-8 py-space-lg"><div class="max-w-[800px] mx-auto"><div class="border-b border-outline-variant pb-space-sm mb-space-lg flex items-center justify-between"><div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">Evidence Track • Sworn Testimony &amp; Verified Stories</div><div class="font-marginalia text-marginalia text-on-surface-variant">Editorial Record No. 2024-B</div></div><div class="flex flex-col w-full">
+<!-- Top Document Header & Action -->
+<header class="pb-space-lg">
+<div class="flex items-center gap-2 font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider mb-2">
+<span class="material-symbols-outlined text-[15px] text-primary">schema</span>
+<span>Quy trình tự động hoá • Scheduled Evidence Ingestion &amp; Pipeline</span>
+<span class="text-outline-variant">/</span>
+<span class="text-on-secondary-container bg-secondary-container/40 px-1.5 py-0.2 border border-secondary font-transcript-mono">RULE-ENGINE-V2</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-space-md">
+<div class="max-w-2xl">
+<h1 class="font-headline-xl text-headline-xl text-primary tracking-tight">
+          Quản lý Lịch chạy trích xuất &amp; Automations
+        </h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">
+          Thiết lập lịch quét biên bản ghi âm định kỳ, liên kết luồng nghe với kho kỹ năng <span class="font-transcript-mono text-[13px] text-primary bg-surface-container px-1 py-0.5 border border-outline-variant">SKILL.md</span> và cưỡng chế kiểm tra qua <span class="font-label-md text-label-md text-primary">Approval Gate</span> trước khi xuất bản ticket chính thức.
+        </p>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="inline-flex items-center gap-2 bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md px-4 py-2 border border-primary transition-colors cursor-pointer" onclick="document.getElementById('modal-new-pipeline').classList.toggle('hidden')" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>+ Tạo lịch trích xuất mới</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Editorial Forensic Status Metrics -->
+<section class="border-t border-b border-outline-variant py-space-md my-space-md bg-surface-container-low/50">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-y-4 md:gap-y-0 divide-y md:divide-y-0 md:divide-x divide-outline-variant">
+<div class="px-space-md flex flex-col gap-1">
+<div class="flex items-center justify-between text-on-surface-variant font-marginalia text-marginalia">
+<span class="uppercase tracking-wider">Phiên họp đã quét (24h)</span>
+<span class="font-transcript-mono">INGEST: OK</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary font-semibold">14</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">phiên ghi âm tự động nạp</span>
+</div>
+<div class="flex items-center gap-1.5 font-marginalia text-marginalia text-secondary pt-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span>100% tệp âm thanh đ��ng bộ thành công</span>
+</div>
+</div>
+<div class="px-space-md flex flex-col gap-1">
+<div class="flex items-center justify-between text-on-surface-variant font-marginalia text-marginalia">
+<span class="uppercase tracking-wider">User Story nháp khởi tạo</span>
+<span class="font-transcript-mono">DRAFT_GEN</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary font-semibold">28</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">bản thảo đính kèm bằng chứng</span>
+</div>
+<div class="flex items-center gap-2 pt-1 font-marginalia text-marginalia">
+<span class="inline-flex items-center gap-1 text-[#2F6F5E]"><span class="w-1.5 h-1.5 bg-[#2F6F5E]"></span>22 Verified</span>
+<span class="inline-flex items-center gap-1 text-[#B08628]"><span class="w-1.5 h-1.5 bg-[#B08628]"></span>5 Inferred</span>
+<span class="inline-flex items-center gap-1 text-[#7A5FA0]"><span class="w-1.5 h-1.5 bg-[#7A5FA0]"></span>1 Assumed</span>
+</div>
+</div>
+<div class="px-space-md flex flex-col gap-1">
+<div class="flex items-center justify-between text-on-surface-variant font-marginalia text-marginalia">
+<span class="uppercase tracking-wider">Kiểm duyệt chủ quyền BA</span>
+<span class="font-transcript-mono">GATE_PROTOCOL</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary font-semibold">100%</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">độc quyền duyệt thủ công</span>
+</div>
+<div class="flex items-center gap-1.5 font-marginalia text-marginalia text-on-surface-variant pt-1">
+<span class="material-symbols-outlined text-[14px] text-primary">verified_user</span>
+<span>Không tự động xuất ticket Jira ngoài hàng đợi</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Filter Controls & Ledger Navigation -->
+<nav class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm border-b border-outline-variant pb-2">
+<div class="flex items-center gap-6 font-label-md text-label-md">
+<button class="text-primary font-medium border-b-2 border-primary pb-2 flex items-center gap-1.5">
+<span>Tất cả quy trình</span>
+<span class="bg-surface-container px-1.5 py-0.2 text-[11px] font-transcript-mono text-primary">6</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors pb-2 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-[#2F6F5E]"></span>
+<span>Đang hoạt động (Active)</span>
+<span class="bg-surface-container px-1.5 py-0.2 text-[11px] font-transcript-mono">4</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors pb-2 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span>Tạm dừng (Paused)</span>
+<span class="bg-surface-container px-1.5 py-0.2 text-[11px] font-transcript-mono">2</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors pb-2 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-[#B4402D]"></span>
+<span>Gặp lỗi xác thực</span>
+<span class="bg-surface-container px-1.5 py-0.2 text-[11px] font-transcript-mono">0</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-marginalia text-marginalia text-on-surface-variant">Sắp xếp:</span>
+<select class="bg-transparent border border-outline-variant px-2 py-1 font-label-sm text-label-sm text-primary focus:outline-none focus:border-primary">
+<option>Mã định danh (ID tự tăng)</option>
+<option>Lịch thực thi gần nhất</option>
+<option>Mức độ ưu tiên kiểm duyệt</option>
+</select>
+</div>
+</nav>
+<!-- Scheduled Pipelines Ledger (Continuous Ruled Format) -->
+<section class="w-full mt-2 divide-y divide-outline-variant border-b border-outline-variant">
+<!-- Row Header -->
+<div class="py-2.5 px-2 grid grid-cols-12 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider bg-surface-container-high/40">
+<div class="col-span-12 lg:col-span-4">Quy trình &amp; Nguồn trích xuất</div>
+<div class="hidden lg:block lg:col-span-3">Lịch chạy định kỳ • Trạng thái</div>
+<div class="hidden lg:block lg:col-span-3">Bộ Skill gắn kèm • Gate</div>
+<div class="hidden lg:block lg:col-span-2 text-right">Thao tác</div>
+</div>
+<!-- Row 1: Active -->
+<article class="py-space-md px-2 hover:bg-surface-container-low/40 transition-colors grid grid-cols-12 gap-y-3 lg:gap-y-0 items-start">
+<div class="col-span-12 lg:col-span-4 pr-space-md">
+<div class="flex items-center gap-2">
+<span class="font-transcript-mono text-[12px] text-on-surface-variant font-medium">AUTO-01</span>
+<span class="border-l-[3px] border-[#2F6F5E] pl-1.5 font-label-sm text-label-sm text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">Active</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-primary mt-1">
+          Sprint Planning Google Meet Ingestion
+        </h2>
+<div class="flex items-center gap-2 mt-1.5 font-marginalia text-marginalia text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">video_camera_front</span>
+<span>Google Meet Webhook • Thư mục drive <code class="font-transcript-mono text-primary text-[11px]">/AcmePayments/MeetRecordings</code></span>
+</div>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col justify-start">
+<div class="flex items-center gap-1.5 text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
+<span>Thứ 2 &amp; Thứ 5 hàng tuần • 18:00</span>
+</div>
+<p class="font-marginalia text-marginalia text-on-surface-variant mt-1">
+          Kích hoạt 15 phút sau phiên Sprint Planning chính thức. Chờ Google Drive kết xuất phụ đề VTT.
+        </p>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col gap-1.5 pr-2">
+<div class="flex items-center gap-1">
+<span class="font-marginalia text-marginalia text-on-surface-variant uppercase">Attached Skill:</span>
+<a class="font-transcript-mono text-[12px] text-primary underline decoration-outline-variant hover:decoration-primary" href="#">
+            Jira Acceptance Criteria Synthesizer v2.3
+          </a>
+</div>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-marginalia text-marginalia">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0 mt-0.5">door_front</span>
+<span>Đích: Tạo bản nháp tại <strong>Review Queue</strong> (Yêu cầu BA xác nhận bằng tay)</span>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2">
+<button class="font-label-sm text-label-sm text-primary hover:bg-surface-container-high px-2.5 py-1 border border-outline-variant transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span>
+<span>Chạy ngay</span>
+</button>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<button class="hover:text-primary underline" type="button">Tạm dừng</button>
+<span>•</span>
+<button class="hover:text-primary underline" type="button">Nhật ký chạy</button>
+</div>
+</div>
+</article>
+<!-- Row 2: Active -->
+<article class="py-space-md px-2 hover:bg-surface-container-low/40 transition-colors grid grid-cols-12 gap-y-3 lg:gap-y-0 items-start">
+<div class="col-span-12 lg:col-span-4 pr-space-md">
+<div class="flex items-center gap-2">
+<span class="font-transcript-mono text-[12px] text-on-surface-variant font-medium">AUTO-02</span>
+<span class="border-l-[3px] border-[#2F6F5E] pl-1.5 font-label-sm text-label-sm text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">Active</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-primary mt-1">
+          Daily Standup &amp; Tech Sync Audio Scraper
+        </h2>
+<div class="flex items-center gap-2 mt-1.5 font-marginalia text-marginalia text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">mic</span>
+<span>Zoom Cloud Recordings API • Kênh đồng bộ hạ tầng Backend Core</span>
+</div>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col justify-start">
+<div class="flex items-center gap-1.5 text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">alarm</span>
+<span>Hàng ngày lúc 10:30 sáng</span>
+</div>
+<p class="font-marginalia text-marginalia text-on-surface-variant mt-1">
+          Quét các câu phát biểu có từ khoá "blocker", "phụ thuộc", "API version break".
+        </p>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col gap-1.5 pr-2">
+<div class="flex items-center gap-1">
+<span class="font-marginalia text-marginalia text-on-surface-variant uppercase">Attached Skill:</span>
+<a class="font-transcript-mono text-[12px] text-primary underline decoration-outline-variant hover:decoration-primary" href="#">
+            Edge-Case &amp; Blocker Detector v1.1
+          </a>
+</div>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-marginalia text-marginalia">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0 mt-0.5">door_front</span>
+<span>Đích: Cảnh báo Inferred Risk vào <strong>Review Queue</strong></span>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2">
+<button class="font-label-sm text-label-sm text-primary hover:bg-surface-container-high px-2.5 py-1 border border-outline-variant transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span>
+<span>Chạy ngay</span>
+</button>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<button class="hover:text-primary underline" type="button">Tạm dừng</button>
+<span>•</span>
+<button class="hover:text-primary underline" type="button">Nhật ký chạy</button>
+</div>
+</div>
+</article>
+<!-- Row 3: Active (Event driven) -->
+<article class="py-space-md px-2 hover:bg-surface-container-low/40 transition-colors grid grid-cols-12 gap-y-3 lg:gap-y-0 items-start">
+<div class="col-span-12 lg:col-span-4 pr-space-md">
+<div class="flex items-center gap-2">
+<span class="font-transcript-mono text-[12px] text-on-surface-variant font-medium">AUTO-03</span>
+<span class="border-l-[3px] border-[#2F6F5E] pl-1.5 font-label-sm text-label-sm text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">Active</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-primary mt-1">
+          Khảo sát Merchant &amp; Stakeholder Interview Watcher
+        </h2>
+<div class="flex items-center gap-2 mt-1.5 font-marginalia text-marginalia text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">cloud_upload</span>
+<span>Google Drive Ingestion Watcher • <code class="font-transcript-mono text-primary text-[11px]">/Interviews/Raw_WAV</code></span>
+</div>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col justify-start">
+<div class="flex items-center gap-1.5 text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span>
+<span>Event-driven • Ngay khi tải tệp lên</span>
+</div>
+<p class="font-marginalia text-marginalia text-on-surface-variant mt-1">
+          Tự động chạy trích xuất speaker diariation qua mô hình Whisper-BA trước khi áp dụng luật.
+        </p>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col gap-1.5 pr-2">
+<div class="flex items-center gap-1">
+<span class="font-marginalia text-marginalia text-on-surface-variant uppercase">Attached Skill:</span>
+<a class="font-transcript-mono text-[12px] text-primary underline decoration-outline-variant hover:decoration-primary" href="#">
+            INVEST Score &amp; Verbatim Story Builder
+          </a>
+</div>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-marginalia text-marginalia">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0 mt-0.5">door_front</span>
+<span>Đích: Ghi chú tạm vào <strong>Room Thảo luận #Merchant</strong></span>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2">
+<button class="font-label-sm text-label-sm text-primary hover:bg-surface-container-high px-2.5 py-1 border border-outline-variant transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span>
+<span>Chạy ngay</span>
+</button>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<button class="hover:text-primary underline" type="button">Tạm dừng</button>
+<span>•</span>
+<button class="hover:text-primary underline" type="button">Nhật ký chạy</button>
+</div>
+</div>
+</article>
+<!-- Row 4: Paused -->
+<article class="py-space-md px-2 hover:bg-surface-container-low/40 transition-colors grid grid-cols-12 gap-y-3 lg:gap-y-0 items-start opacity-75">
+<div class="col-span-12 lg:col-span-4 pr-space-md">
+<div class="flex items-center gap-2">
+<span class="font-transcript-mono text-[12px] text-on-surface-variant font-medium">AUTO-04</span>
+<span class="border-l-[3px] border-outline-variant pl-1.5 font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-1 py-0.2">Paused</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-primary mt-1">
+          Slack Channel Requirement Extractor #fintech-core
+        </h2>
+<div class="flex items-center gap-2 mt-1.5 font-marginalia text-marginalia text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">forum</span>
+<span>Slack Bot Stream API • Lắng nghe tin nhắn ghim • Channel #fintech-core</span>
+</div>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col justify-start">
+<div class="flex items-center gap-1.5 text-on-surface font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">schedule</span>
+<span>Chạy 3 giờ một lần (Tạm dừng bởi BA Lead)</span>
+</div>
+<p class="font-marginalia text-marginalia text-on-surface-variant mt-1">
+          Đang dừng để hiệu chỉnh lại biểu thức chính quy nhận dạng định mức phí chiết khấu giao dịch.
+        </p>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col gap-1.5 pr-2">
+<div class="flex items-center gap-1">
+<span class="font-marginalia text-marginalia text-on-surface-variant uppercase">Attached Skill:</span>
+<a class="font-transcript-mono text-[12px] text-primary underline decoration-outline-variant hover:decoration-primary" href="#">
+            Slack Thread Synthesis Engine v1.0
+          </a>
+</div>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-marginalia text-marginalia">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0 mt-0.5">door_front</span>
+<span>Đích: Tạo nháp ticket Pending tại <strong>Review Queue</strong></span>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2">
+<button class="font-label-sm text-label-sm text-primary hover:bg-surface-container-high px-2.5 py-1 border border-outline-variant transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">refresh</span>
+<span>Kích hoạt lại</span>
+</button>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<button class="hover:text-primary underline" type="button">Chỉnh sửa</button>
+<span>•</span>
+<button class="hover:text-primary underline" type="button">Nhật ký chạy</button>
+</div>
+</div>
+</article>
+<!-- Row 5: Active -->
+<article class="py-space-md px-2 hover:bg-surface-container-low/40 transition-colors grid grid-cols-12 gap-y-3 lg:gap-y-0 items-start">
+<div class="col-span-12 lg:col-span-4 pr-space-md">
+<div class="flex items-center gap-2">
+<span class="font-transcript-mono text-[12px] text-on-surface-variant font-medium">AUTO-05</span>
+<span class="border-l-[3px] border-[#2F6F5E] pl-1.5 font-label-sm text-label-sm text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">Active</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-primary mt-1">
+          Weekly Backlog Refinement Recording Pipeline
+        </h2>
+<div class="flex items-center gap-2 mt-1.5 font-marginalia text-marginalia text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">record_voice_over</span>
+<span>MS Teams Recording Hub • Nhóm Thanh toán Trực tuyến</span>
+</div>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col justify-start">
+<div class="flex items-center gap-1.5 text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">event</span>
+<span>Thứ Tư hàng tuần • 17:00</span>
+</div>
+<p class="font-marginalia text-marginalia text-on-surface-variant mt-1">
+          Phân rã tiêu chuẩn nghiệm thu Gherkin (Given-When-Then) đối chiếu với biên bản trước.
+        </p>
+</div>
+<div class="col-span-12 sm:col-span-6 lg:col-span-3 flex flex-col gap-1.5 pr-2">
+<div class="flex items-center gap-1">
+<span class="font-marginalia text-marginalia text-on-surface-variant uppercase">Attached Skill:</span>
+<a class="font-transcript-mono text-[12px] text-primary underline decoration-outline-variant hover:decoration-primary" href="#">
+            Gherkin Acceptance Formatter v3.0
+          </a>
+</div>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-marginalia text-marginalia">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0 mt-0.5">door_front</span>
+<span>Đích: Cập nhật tài liệu kỹ thuật vào <strong>Review Queue</strong></span>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2">
+<button class="font-label-sm text-label-sm text-primary hover:bg-surface-container-high px-2.5 py-1 border border-outline-variant transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span>
+<span>Chạy ngay</span>
+</button>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<button class="hover:text-primary underline" type="button">Tạm dừng</button>
+<span>•</span>
+<button class="hover:text-primary underline" type="button">Nhật ký chạy</button>
+</div>
+</div>
+</article>
+</section>
+<!-- Execution Audit Log Section (Legal Ruled Table) -->
+<section class="mt-space-xl">
+<div class="flex items-center justify-between border-b border-primary pb-2 mb-space-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">history</span>
+<h2 class="font-headline-md text-headline-md text-primary">
+          Nhật ký kích hoạt gần nhất (Execution Audit Log)
+        </h2>
+</div>
+<div class="flex items-center gap-3 font-marginalia text-marginalia text-on-surface-variant">
+<span>Ghi nhật ký thời gian thực theo chuẩn ISO-8601</span>
+<span class="font-transcript-mono text-primary">[SYNC_READY]</span>
+</div>
+</div>
+<!-- Table of Executions -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse font-body-sm text-body-sm">
+<thead>
+<tr class="border-b border-outline-variant font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider bg-surface-container-low/30">
+<th class="py-2.5 px-3 font-medium">Thời gian thực thi</th>
+<th class="py-2.5 px-3 font-medium">Quy trình nguồn</th>
+<th class="py-2.5 px-3 font-medium">Tệp dữ liệu gốc (Evidence File)</th>
+<th class="py-2.5 px-3 font-medium">Phân tích nhãn chứng cứ</th>
+<th class="py-2.5 px-3 font-medium">Kết quả &amp; Gate Target</th>
+<th class="py-2.5 px-3 font-medium text-right">Hành động</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Log 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-3 font-transcript-mono text-[13px] text-primary whitespace-nowrap">
+              14:30:12 <span class="text-on-surface-variant text-[11px]">Hôm nay</span>
+</td>
+<td class="py-3 px-3 font-label-md text-label-md text-primary whitespace-nowrap">
+              AUTO-01: Sprint Planning
+            </td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">audio_file</span>
+<code class="font-transcript-mono text-[12px] text-primary bg-surface-container px-1 py-0.5 border border-outline-variant">Sprint42_Refinement_Audio.m4a</code>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="border-l-[2px] border-[#2F6F5E] pl-1 text-[11px] font-transcript-mono text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">42 Verified</span>
+<span class="border-l-[2px] border-[#7A5FA0] pl-1 text-[11px] font-transcript-mono text-[#7A5FA0] bg-[#7A5FA0]/10 px-1 py-0.2">6 Assumed</span>
+<span class="border-l-[2px] border-[#B4402D] pl-1 text-[11px] font-transcript-mono text-[#B4402D] bg-[#B4402D]/10 px-1 py-0.2">1 Blocked</span>
+</div>
+</td>
+<td class="py-3 px-3 text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-primary">
+<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+<span>Đã đẩy vào Review Queue (Draft)</span>
+</div>
+</td>
+<td class="py-3 px-3 text-right whitespace-nowrap">
+<a class="font-label-sm text-label-sm text-primary hover:underline font-medium inline-flex items-center gap-1" href="#">
+<span>Xem bản nháp</span>
+<span class="material-symbols-outlined text-[13px]">arrow_forward</span>
+</a>
+</td>
+</tr>
+<!-- Log 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-3 font-transcript-mono text-[13px] text-primary whitespace-nowrap">
+              09:15:40 <span class="text-on-surface-variant text-[11px]">Sáng nay</span>
+</td>
+<td class="py-3 px-3 font-label-md text-label-md text-primary whitespace-nowrap">
+              AUTO-02: Daily Standup
+            </td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span>
+<code class="font-transcript-mono text-[12px] text-primary bg-surface-container px-1 py-0.5 border border-outline-variant">DailyStandup_Oct15.vtt</code>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="border-l-[2px] border-[#2F6F5E] pl-1 text-[11px] font-transcript-mono text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">18 Verified</span>
+<span class="border-l-[2px] border-[#B08628] pl-1 text-[11px] font-transcript-mono text-[#B08628] bg-[#B08628]/10 px-1 py-0.2">4 Inferred</span>
+</div>
+</td>
+<td class="py-3 px-3 text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-primary">
+<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+<span>Chờ BA duyệt 2 Blocker</span>
+</div>
+</td>
+<td class="py-3 px-3 text-right whitespace-nowrap">
+<a class="font-label-sm text-label-sm text-primary hover:underline font-medium inline-flex items-center gap-1" href="#">
+<span>Xem bản nháp</span>
+<span class="material-symbols-outlined text-[13px]">arrow_forward</span>
+</a>
+</td>
+</tr>
+<!-- Log 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-3 font-transcript-mono text-[13px] text-primary whitespace-nowrap">
+              18:04:02 <span class="text-on-surface-variant text-[11px]">Hôm qua</span>
+</td>
+<td class="py-3 px-3 font-label-md text-label-md text-primary whitespace-nowrap">
+              AUTO-03: Merchant Interview
+            </td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">audio_file</span>
+<code class="font-transcript-mono text-[12px] text-primary bg-surface-container px-1 py-0.5 border border-outline-variant">Interview_Merchant_ShopeePay_Sync.wav</code>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="border-l-[2px] border-[#2F6F5E] pl-1 text-[11px] font-transcript-mono text-[#2F6F5E] bg-[#2F6F5E]/10 px-1 py-0.2">54 Verified</span>
+<span class="border-l-[2px] border-[#B08628] pl-1 text-[11px] font-transcript-mono text-[#B08628] bg-[#B08628]/10 px-1 py-0.2">8 Inferred</span>
+<span class="border-l-[2px] border-[#7A5FA0] pl-1 text-[11px] font-transcript-mono text-[#7A5FA0] bg-[#7A5FA0]/10 px-1 py-0.2">3 Assumed</span>
+</div>
+</td>
+<td class="py-3 px-3 text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-primary">
+<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+<span>Lưu Room #Merchant (Draft)</span>
+</div>
+</td>
+<td class="py-3 px-3 text-right whitespace-nowrap">
+<a class="font-label-sm text-label-sm text-primary hover:underline font-medium inline-flex items-center gap-1" href="#">
+<span>Mở Room</span>
+<span class="material-symbols-outlined text-[13px]">arrow_forward</span>
+</a>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Approval Gate Security Protocol Footer Banner -->
+<footer class="mt-space-xl pt-space-md border-t-2 border-primary bg-surface-container-low p-space-md">
+<div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-sm max-w-2xl">
+<span class="material-symbols-outlined text-primary text-[24px] mt-0.5">policy</span>
+<div>
+<div class="font-label-md text-label-md text-primary font-semibold tracking-tight">
+            NGUYÊN TẮC BẢO MẬT &amp; CHỦ QUYỀN DUYỆT (APPROVAL GATE PROTOCOL V1.2)
+          </div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Mọi automation trích xuất chỉ có thẩm quyền lưu tạo tài liệu ở trạng thái <strong>Bản nháp (Draft)</strong>. Hệ thống nghiêm cấm tự ý đồng bộ hoặc phát hành ticket sang Jira Cloud / Linear nếu chưa có ít nhất một chữ ký phê duyệt thủ công của Business Analyst phụ trách evidence track này.
+          </p>
+</div>
+</div>
+<div class="shrink-0 flex items-center gap-2">
+<span class="font-transcript-mono text-[11px] text-on-surface-variant border border-outline-variant bg-surface px-2 py-1">
+          ENFORCEMENT: STRICT_MANUAL_REVIEW
+        </span>
+</div>
+</div>
+</footer>
+<!-- Slide-over Modal / Sheet: New Pipeline (Hidden by default, toggleable via JS) -->
+<div class="hidden fixed inset-0 z-50 bg-primary/40 backdrop-blur-[1px] flex justify-end" id="modal-new-pipeline">
+<div class="w-full max-w-lg bg-surface h-full border-l border-primary p-space-lg flex flex-col justify-between overflow-y-auto">
+<div>
+<div class="flex items-center justify-between border-b border-outline-variant pb-space-sm">
+<div>
+<div class="font-marginalia text-marginalia text-on-surface-variant uppercase tracking-wider">New Ingestion Rule</div>
+<h3 class="font-headline-sm text-headline-sm text-primary">Tạo lịch trích xuất mới</h3>
+</div>
+<button class="text-primary hover:text-outline cursor-pointer p-1" onclick="document.getElementById('modal-new-pipeline').classList.add('hidden')" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<form class="flex flex-col gap-space-md mt-space-md" onsubmit="event.preventDefault(); document.getElementById('modal-new-pipeline').classList.add('hidden');">
+<div>
+<label class="block font-label-sm text-label-sm text-primary uppercase tracking-wider mb-1">Tên định danh quy trình (Pipeline Name)</label>
+<input class="w-full bg-surface-container-low border border-outline-variant px-3 py-2 font-label-md text-label-md text-primary focus:border-primary focus:outline-none" placeholder="vd: Customer Feedback Zoom Ingestion" type="text"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-primary uppercase tracking-wider mb-1">Nguồn tiếp nhận bằng chứng (Source Stream)</label>
+<select class="w-full bg-surface-container-low border border-outline-variant px-3 py-2 font-label-md text-label-md text-primary focus:border-primary focus:outline-none">
+<option>Google Drive Folder Watcher (.m4a, .mp3, .wav)</option>
+<option>Google Meet Webhook Recording Bridge</option>
+<option>Zoom Cloud Transcript Recording API</option>
+<option>Slack Bot Message / Thread Crawler</option>
+</select>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-primary uppercase tracking-wider mb-1">Đường dẫn thư mục / Webhook URL</label>
+<input class="w-full bg-surface-container-low border border-outline-variant px-3 py-2 font-transcript-mono text-[13px] text-primary focus:border-primary focus:outline-none" placeholder="/AcmePayments/Transcripts/Raw" type="text"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-primary uppercase tracking-wider mb-1">Chu kỳ kích hoạt (Schedule)</label>
+<div class="grid grid-cols-2 gap-2">
+<label class="flex items-center gap-2 p-2 border border-outline-variant bg-surface-container-low text-label-sm cursor-pointer">
+<input checked="" class="accent-primary" name="sched_type" type="radio"/>
+<span>Theo lịch định kỳ (Cron)</span>
+</label>
+<label class="flex items-center gap-2 p-2 border border-outline-variant bg-surface-container-low text-label-sm cursor-pointer">
+<input class="accent-primary" name="sched_type" type="radio"/>
+<span>Theo sự kiện (Event-driven)</span>
+</label>
+</div>
+<input class="w-full mt-2 bg-surface-container-low border border-outline-variant px-3 py-2 font-transcript-mono text-[13px] text-primary focus:border-primary focus:outline-none" placeholder="0 18 * * 1,4 (Thứ 2, 5 lúc 18:00)" type="text"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-primary uppercase tracking-wider mb-1">Liên kết SKILL.md Chuyên môn</label>
+<select class="w-full bg-surface-container-low border border-outline-variant px-3 py-2 font-label-md text-label-md text-primary focus:border-primary focus:outline-none">
+<option>Jira Acceptance Criteria Synthesizer v2.3</option>
+<option>Edge-Case &amp; Blocker Detector v1.1</option>
+<option>INVEST Score &amp; Verbatim Story Builder</option>
+<option>Gherkin Acceptance Formatter v3.0</option>
+</select>
+</div>
+<div class="p-3 bg-[#2F6F5E]/5 border-l-[3px] border-[#2F6F5E]">
+<span class="font-label-sm text-label-sm text-[#2F6F5E] font-medium block">Cổng kiểm soát bắt buộc</span>
+<span class="font-marginalia text-marginalia text-on-surface-variant block mt-0.5">
+              Đích đến mặc định: <strong>Review Queue</strong>. Kết quả tạo sẽ được gắn nhãn Inferred hoặc Assumed cho đến khi BA gắn nhãn Verified.
+            </span>
+</div>
+</form>
+</div>
+<div class="pt-space-md border-t border-outline-variant flex items-center justify-end gap-space-sm">
+<button class="px-4 py-2 border border-outline-variant font-label-md text-label-md text-primary hover:bg-surface-container transition-colors cursor-pointer" onclick="document.getElementById('modal-new-pipeline').classList.add('hidden')" type="button">
+          Huỷ bỏ
+        </button>
+<button class="px-4 py-2 bg-primary text-on-primary font-label-md text-label-md border border-primary hover:bg-primary/90 transition-colors cursor-pointer" onclick="document.getElementById('modal-new-pipeline').classList.add('hidden')" type="button">
+          Lưu &amp; Kích hoạt Pipeline
+        </button>
+</div>
+</div>
+</div>
+</div></div></div></main></div></body></html>

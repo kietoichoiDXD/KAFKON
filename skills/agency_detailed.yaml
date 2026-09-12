@@ -1,0 +1,38 @@
+name: agency_detailed
+version: "2.0.0"
+description: "Rigorous agency specification template with scope boundaries, GDPR flags, and sign-off criteria"
+team_type: "client_agency"
+
+formatting:
+  title_prefix: "[Feature-Spec]"
+  user_story_format: "As {stakeholder}, I require {capability}, So that our system achieves {commercial_objective}"
+  acceptance_criteria_format: "Requirement #{id}: Given {precondition}, When {action}, Then {verification} [Sign-off: Required]"
+
+required_fields:
+  - user_story
+  - in_scope
+  - out_of_scope
+  - data_privacy_compliance
+  - effort_estimate_hours
+  - acceptance_criteria
+
+invest_thresholds:
+  overall_min_score: 85
+  require_independent: true
+  require_estimable: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: true  # Agencies cannot assume without client liability risk
+  ask_on_blocked: true
+  max_questions_per_round: 2
+
+clickup_mapping:
+  priority: "urgent"
+  custom_fields:
+    billing_status: "billable"
+    compliance_check: "pending_review"
+  tags:
+    - "client-deliverable"
+    - "contract-scope"
+    - "audited"
