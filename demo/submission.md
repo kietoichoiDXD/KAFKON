@@ -32,13 +32,18 @@ of context about who holds which role; it cannot know that the security lead's "
 ranks the frontend dev's aside, or that a question nobody answered is a Blocked field rather than an
 invitation to invent one.
 
-**What is live, verified end to end today**: reading a real Slack thread, replying in-thread with
-Block Kit, asking the clarifying question, and creating a real ClickUp task carrying the Slack
-permalink. **What is not**: the analysis runs on our deterministic engine tuned to this conversation
-shape — we had no model key during the build; the router switches it to OpenRouter with one
-environment variable, and the Slack and ClickUp paths do not change. The Telegram and Discord
-adapters are written but were not exercised, and the React dashboard still reads mock data. The
-README carries this same table, because a claim a judge can disprove costs more than an honest line.
+**What is live, verified end to end today**: reading a real Slack thread; analysis by
+`anthropic/claude-sonnet-5` through OpenRouter; replying in-thread with Block Kit; asking the
+clarifying question; creating a real ClickUp task carrying the Slack permalink; and Exa for grounded
+lookups. Every run prints which engine answered, and the transcript is masked for tokens, cards, IPs,
+phone numbers and email local parts before it leaves the process.
+
+If OpenRouter is down or out of credit the cascade falls to **Nebius** and keeps working — we tested
+that by killing the key — and a deterministic local engine is the last resort so a demo never dies on
+stage. **What is not live**: the Telegram and Discord adapters are written but were never given a
+token, and every screen of the dashboard except Live run and Evidence Review still reads sample data.
+The README carries this same table, because a claim a judge can disprove costs more than an honest
+line.
 
 Built during the event. First commit 12:51, 12 September 2026.
 
