@@ -1,14 +1,14 @@
 import unittest
 from pathlib import Path
-from src.core.models import (
+from backend.core.models import (
     UserStory,
     AcceptanceCriterion,
     EvidenceItem,
     EvidenceLabel,
     SkillConfig,
 )
-from src.core.scorer import InvestScorer
-from src.core.skills import SkillManager
+from backend.core.scorer import InvestScorer
+from backend.core.skills import SkillManager
 
 
 class TestInvestScorer(unittest.TestCase):
