@@ -199,6 +199,52 @@ class ModelFallbackRouter:
         })
         return None, audit_trail
 
+    async def complete_text(self, system_prompt: str, user_prompt: str, tier: str = "low") -> Optional[str]:
+        """Plain-prose completion through the same cascade.
+
+        execute_with_fallback expects JSON back; a question like "what does this do?" deserves a
+        sentence, not a user story. Returns None when no vendor answered, so the caller can say so
+        instead of inventing a reply.
+        """
+        chain = self.get_chain_for_tier(tier)
+        async with httpx.AsyncClient(timeout=self.http_timeout) as client:
+            for item in chain:
+                provider, model = item["provider"], item["model"]
+                try:
+                    if provider == "openrouter" and settings.openrouter_api_key:
+                        return await self._text_openai_shape(
+                            client, "https://openrouter.ai/api/v1/chat/completions",
+                            settings.openrouter_api_key, model, system_prompt, user_prompt)
+                    if provider == "nebius" and settings.nebius_api_key:
+                        return await self._text_openai_shape(
+                            client, settings.nebius_base_url.rstrip("/") + "/chat/completions",
+                            settings.nebius_api_key, model or settings.nebius_model,
+                            system_prompt, user_prompt)
+                    if provider == "anthropic" and settings.anthropic_api_key:
+                        resp = await client.post(
+                            "https://api.anthropic.com/v1/messages",
+                            headers={"x-api-key": settings.anthropic_api_key,
+                                     "anthropic-version": "2023-06-01",
+                                     "content-type": "application/json"},
+                            json={"model": model, "max_tokens": 1200, "system": system_prompt,
+                                  "messages": [{"role": "user", "content": user_prompt}]})
+                        resp.raise_for_status()
+                        return "".join(b.get("text", "") for b in resp.json().get("content", []))
+                except Exception as e:
+                    print(f"⚠️ [Chat fallback] {model} failed: {type(e).__name__}. Cascading…")
+        return None
+
+    async def _text_openai_shape(self, client, url, key, model, system, user) -> str:
+        resp = await client.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": model, "max_tokens": 1200,
+                  "messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": user}]},
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
     async def _call_openrouter(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
         resp = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",

@@ -12,6 +12,7 @@ interface HomeViewProps {
 type Turn =
   | { role: 'you'; text: string }
   | { role: 'agent'; result: any; skill: string; tier: string }
+  | { role: 'reply'; text: string }
   | { role: 'error'; text: string };
 
 const SUGGESTIONS = [
@@ -110,14 +111,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       text,
     ].flatMap(m => m.split('\n').filter(l => l.trim()));
     try {
-      const resp = await fetch('http://localhost:8000/api/analyze', {
+      const resp = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, skill, tier }),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error ?? 'Analysis failed');
-      setTurns(t => [...t, { role: 'agent', result: data, skill, tier }]);
+      if (!resp.ok) throw new Error(data.error ?? 'Request failed');
+      // A pasted discussion comes back as a labelled analysis; a question comes back as prose.
+      setTurns(t => [...t, data.type === 'text'
+        ? { role: 'reply', text: data.text }
+        : { role: 'agent', result: data, skill, tier }]);
     } catch (e: any) {
       setTurns(t => [...t, {
         role: 'error',
@@ -219,6 +223,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
                 </div>
               ) : t.role === 'agent' ? (
                 <Analysis key={i} result={t.result} skill={t.skill} tier={t.tier} />
+              ) : t.role === 'reply' ? (
+                <div key={i} className="bg-white rounded-2xl border border-gray-200/90 px-5 py-4 shadow-sm">
+                  <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap m-0">{t.text}</p>
+                </div>
               ) : (
                 <p key={i} className="text-[13px] text-rose-600 border border-rose-200 bg-rose-50 rounded-xl px-4 py-3 m-0">
                   {t.text}

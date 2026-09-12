@@ -59,7 +59,25 @@ Open the **Live run** tab: pick a channel, paste a thread ts, choose a starter p
 **Evidence Review** shows the labelled claims from runs this backend actually performed.
 `python -m backend.cli serve` runs the API alone.
 
-## 5. Other commands
+## 5. The terminal app
+
+```bash
+python -m backend.cli            # or: python -m backend.cli chat
+```
+
+A prompt, not a menu. Type anything: a question gets an answer, a pasted discussion comes back as
+a labelled story. The conversation carries forward, so a follow-up like "8h or 24h?" is read
+against everything said before it.
+
+| Command | |
+|---|---|
+| `/slack <channel> <ts>` | read a real thread, reply in it, file the ticket |
+| `/ops` | diagnose the cluster, see the exact patch, approve or refuse |
+| `/ticket` | file the last analysis in ClickUp |
+| `/skill` `/tier` | switch the Skill file or the model tier |
+| `/status` `/clear` `/help` `/exit` | |
+
+## 6. Other commands
 
 ```bash
 python -m backend.cli analyze --file demo/sample_conversation.md --skill agency_detailed
