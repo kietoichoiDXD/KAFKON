@@ -8,6 +8,29 @@
 
 ---
 
+## ✅ What is live, and what is simulated
+
+Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp list `Project 1`:
+
+| Path | State | Evidence |
+|---|---|---|
+| Slack thread read (`conversations.replies`) | **Live** | 8 messages read from a real thread |
+| Slack in-thread reply (`chat.postMessage`, Block Kit) | **Live** | Analysis, clarifying question and ticket confirmation all posted into the thread |
+| ClickUp task creation (`POST /api/v2/list/{id}/task`) | **Live** | Task `86eyw9yf1`, description carries the Slack permalink and a real sha256 seal |
+| Analysis engine | **Deterministic local engine** | No LLM key at build time. `fallback_router.py` routes to OpenRouter/Anthropic the moment `OPENROUTER_API_KEY` is set — the pipeline is unchanged either way |
+| Telegram / Discord adapters | **Not exercised** | Code present, no token configured |
+| React dashboard | **Mock data** | Reads `frontend/src/data/mockData.ts`, not the backend |
+
+Run the live path yourself:
+
+```bash
+cp .env.example .env        # fill SLACK_USER_TOKEN + CLICKUP_API_KEY + CLICKUP_LIST_ID
+python demo/seed_slack_thread.py <CHANNEL_ID>      # prints the thread ts
+python -m backend.cli slack-run --channel <CHANNEL_ID> --ts <TS> --skill startup_lean
+```
+
+---
+
 ## 💡 The Problem ScribeBA Solves
 
 1. **Decisions get lost in the scroll**: Crucial architectural choices and edge-case concessions made during Slack/Discord arguments evaporate without reaching task management.

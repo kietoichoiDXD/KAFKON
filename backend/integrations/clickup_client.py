@@ -1,5 +1,6 @@
 import os
 import uuid
+import hashlib
 from typing import Optional, Dict, Any, List
 import httpx
 from ..core.models import AnalysisResult, TicketPayload, SkillConfig
@@ -89,9 +90,10 @@ class ClickUpClient:
             f"- **Inferred Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Inferred')}",
             f"- **Assumed Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Assumed')}",
             f"- **Blocked Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Blocked')}",
-            "- **Integrity Seal**: `sha256:8f4c2b9a781d09e3f1c8491cba09e1e2d78bfb04d67e61a938cf1a4b60029b3`"
         ]
-        return "\n".join(audit_trail)
+        body = "\n".join(audit_trail)
+        seal = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        return f"{body}\n- **Integrity Seal**: `sha256:{seal}`"
 
     async def _create_task_live(
         self,
