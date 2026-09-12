@@ -55,6 +55,8 @@ def _serialize(result) -> dict:
         "evidence": [e.model_dump(mode="json") for e in result.evidence_items],
         "clarifying_question": result.clarifying_question,
         "metadata": result.metadata,
+        # Which engine actually answered. /api/health reports configuration; this reports the run.
+        "engine": (result.metadata.get("fallback_trail") or [{"alias": "local_engine"}])[-1]["alias"],
     }
 
 
@@ -172,6 +174,7 @@ def slack_run():
             "permalink": permalink,
             "title": result.story.title,
             "invest": result.invest_score.overall,
+            "engine": payload["engine"],
             "evidence": payload["evidence"],
             "clarifying_question": result.clarifying_question,
             "ticket": payload.get("ticket"),

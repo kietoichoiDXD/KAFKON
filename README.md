@@ -17,7 +17,9 @@ Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp li
 | Slack thread read (`conversations.replies`) | **Live** | 8 messages read from a real thread |
 | Slack in-thread reply (`chat.postMessage`, Block Kit) | **Live** | Analysis, clarifying question and ticket confirmation all posted into the thread |
 | ClickUp task creation (`POST /api/v2/list/{id}/task`) | **Live** | Task `86eyw9yf1`, description carries the Slack permalink and a real sha256 seal |
-| Analysis engine | **Deterministic engine, tuned to this conversation shape — not general** | We had no model key during the build. `fallback_router.py` sends the same thread to OpenRouter the moment `OPENROUTER_API_KEY` is set; the Slack and ClickUp paths are identical either way |
+| Analysis engine | **Live** | `anthropic/claude-sonnet-5` via OpenRouter, step 1 of the cascade. The model reads the thread itself — on the sample thread it labelled the session timeout **Blocked** rather than Assumed, because the last message is cut off |
+| Model failover | **Live** | Kill the OpenRouter key and the cascade falls to **Nebius** (`Qwen/Qwen3-30B-A3B-Instruct-2507`, ~1 s) and still returns a scored story; the deterministic local engine is the last resort, never the silent default |
+| Exa neural search | **Live** | `python -m backend.cli exa-search "SOC2 idle session timeout"` returns grounded sources |
 | Telegram / Discord adapters | **Not exercised** | Code present, no token configured |
 | React dashboard — **Live run** view | **Live** | Calls the backend API; the button posts into the real thread and files the real ticket |
 | React dashboard — other views | **Mock data** | Still read `frontend/src/data/mockData.ts` |
@@ -37,12 +39,16 @@ Or drive the same loop from the studio — one command brings up the API and the
 python -m backend.cli web      # API on :8000, studio on :3000, open the "Live run" tab
 ```
 
-**Turning on a real model**: set `OPENROUTER_API_KEY` and nothing else changes. Every model id in
-`backend/core/fallback_router.py` was checked against `GET https://openrouter.ai/api/v1/models` on
-2026-09-12 — `anthropic/claude-haiku-4.5` (low), `anthropic/claude-sonnet-5` (medium),
-`anthropic/claude-opus-5` (high), each with an OpenRouter fallback and a direct-Anthropic backup.
-Check any id you add against that endpoint first: an unknown id 404s, the cascade swallows the
-error, and the run quietly degrades to the local engine.
+**Which engine answered** is printed by every run (`→ Engine: openrouter_primary
+(anthropic/claude-sonnet-5)`) and carried in the API payload, because "a key is configured" and
+"the model actually answered" are different claims.
+
+Every model id in `backend/core/fallback_router.py` was checked against
+`GET https://openrouter.ai/api/v1/models` on 2026-09-12 — `anthropic/claude-haiku-4.5` (low),
+`anthropic/claude-sonnet-5` (medium), `anthropic/claude-opus-5` (high), each with OpenRouter
+alternates, then Nebius, then Anthropic direct. Check any id you add against that endpoint first:
+an unknown id 404s, the cascade swallows the error, and the run quietly degrades to the local
+engine.
 
 ---
 

@@ -215,6 +215,8 @@ def slack_run_cmd(channel: str, ts: str, skill: str):
 
         result = await analyzer.analyze_thread(thread, skill_name=skill)
         await slack.post_analysis_summary(channel, ts, result)
+        trail = result.metadata.get("fallback_trail") or [{"alias": "local_engine"}]
+        print(f"→ Engine: {trail[-1]['alias']} ({trail[-1].get('model', 'deterministic')})")
         print(f"→ Posted analysis in-thread (INVEST {result.invest_score.overall}/100)")
 
         if result.clarifying_question:

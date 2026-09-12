@@ -1,4 +1,5 @@
 import unittest
+from backend.config import settings
 import asyncio
 from backend.platforms.telegram_adapter import TelegramAdapter
 from backend.core.analyzer import ScribeBAAnalyzer
@@ -6,6 +7,15 @@ from backend.core.models import TicketPayload, EvidenceLabel
 
 class TestTelegramAdapter(unittest.TestCase):
     def setUp(self):
+        # Offline: these assert the adapter's formatting, not a model's wording.
+        for name in ("scribeba_mode", "openrouter_api_key", "anthropic_api_key",
+                     "openai_api_key", "nebius_api_key"):
+            self.addCleanup(setattr, settings, name, getattr(settings, name))
+        settings.scribeba_mode = "local"
+        settings.openrouter_api_key = None
+        settings.anthropic_api_key = None
+        settings.openai_api_key = None
+        settings.nebius_api_key = None
         self.adapter = TelegramAdapter(bot_token=None)
         self.analyzer = ScribeBAAnalyzer()
 

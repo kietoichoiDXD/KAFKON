@@ -76,10 +76,13 @@ Run it once before recording (`--skill agency_detailed`) and open both tickets i
 
 ## If asked in Q&A
 
-- **"Is the analysis a real LLM call?"** — No. It's a deterministic engine tuned to this conversation
-  shape; it is not general, and we say so rather than let you find it. We had no model key during the
-  build. `backend/core/fallback_router.py` sends the same thread to OpenRouter the moment the key is
-  set, and the Slack and ClickUp paths you just watched do not change.
+- **"Is the analysis a real LLM call?"** — Yes: `anthropic/claude-sonnet-5` through OpenRouter. Every
+  run prints which engine answered, so you never have to take our word for it. If OpenRouter is down
+  or out of credit the cascade moves to Nebius and keeps going; a deterministic local engine is the
+  last resort so a demo never dies on stage, and the trail says when it was used.
+- **"What happens to our Slack thread?"** — It is masked before it leaves the process:
+  `backend/core/redaction.py` strips Slack, GitHub, OpenAI, ClickUp and AWS tokens, card numbers,
+  IPs, phone numbers and email local parts, and every run prints what it masked.
 - **"Is it a bot?"** — The Slack integration runs on a user token with `channels:history` and
   `chat:write`. A bot token is a one-line env swap; we did not have app-install rights in time.
 - **"What was built today?"** — Everything in `backend/`, `frontend/` and `skills/`. First commit
