@@ -19,7 +19,9 @@ Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp li
 | ClickUp task creation (`POST /api/v2/list/{id}/task`) | **Live** | Task `86eyw9yf1`, description carries the Slack permalink and a real sha256 seal |
 | Analysis engine | **Deterministic engine, tuned to this conversation shape — not general** | We had no model key during the build. `fallback_router.py` sends the same thread to OpenRouter the moment `OPENROUTER_API_KEY` is set; the Slack and ClickUp paths are identical either way |
 | Telegram / Discord adapters | **Not exercised** | Code present, no token configured |
-| React dashboard | **Mock data** | Reads `frontend/src/data/mockData.ts`, not the backend |
+| React dashboard — **Live run** view | **Live** | Calls the backend API; the button posts into the real thread and files the real ticket |
+| React dashboard — other views | **Mock data** | Still read `frontend/src/data/mockData.ts` |
+| PII / secret redaction before egress | **Live** | `backend/core/redaction.py` masks Slack/GitHub/OpenAI/ClickUp/AWS tokens, cards, IPs, phone numbers and email local-parts before any model call |
 
 Run the live path yourself:
 
@@ -28,6 +30,19 @@ cp .env.example .env        # fill SLACK_USER_TOKEN + CLICKUP_API_KEY + CLICKUP_
 python demo/seed_slack_thread.py <CHANNEL_ID>      # prints the thread ts
 python -m backend.cli slack-run --channel <CHANNEL_ID> --ts <TS> --skill startup_lean
 ```
+
+Or drive the same loop from the studio — one command brings up the API and the UI:
+
+```bash
+python -m backend.cli web      # API on :8000, studio on :3000, open the "Live run" tab
+```
+
+**Turning on a real model**: set `OPENROUTER_API_KEY` and nothing else changes. Every model id in
+`backend/core/fallback_router.py` was checked against `GET https://openrouter.ai/api/v1/models` on
+2026-09-12 — `anthropic/claude-haiku-4.5` (low), `anthropic/claude-sonnet-5` (medium),
+`anthropic/claude-opus-5` (high), each with an OpenRouter fallback and a direct-Anthropic backup.
+Check any id you add against that endpoint first: an unknown id 404s, the cascade swallows the
+error, and the run quietly degrades to the local engine.
 
 ---
 

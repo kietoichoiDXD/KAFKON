@@ -3,6 +3,7 @@ import { ViewType, WorkspaceTab } from './types';
 import { Sidebar } from './components/Sidebar';
 import { HomeView } from './components/HomeView';
 import { RoomsView } from './components/RoomsView';
+import { LiveRunView } from './components/LiveRunView';
 import { ArtifactsView } from './components/ArtifactsView';
 import { AutomationsView } from './components/AutomationsView';
 import { ReviewView } from './components/ReviewView';
@@ -44,6 +45,8 @@ export function App() {
             onOpenSkills={() => handleOpenModal('Skills')}
           />
         )}
+
+        {currentView === 'live' && <LiveRunView />}
 
         {currentView === 'rooms' && <RoomsView />}
 

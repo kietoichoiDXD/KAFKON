@@ -50,6 +50,10 @@ class TestAnalyzerAndClickUp(unittest.TestCase):
         self.assertIn("Contractual", result.clarifying_question)
 
     def test_clickup_ticket_creation(self):
+        # Forced offline: this test must not create a task in the team's real ClickUp list.
+        from backend.config import settings
+        previous, settings.scribeba_mode = settings.scribeba_mode, "local"
+        self.addCleanup(setattr, settings, "scribeba_mode", previous)
         result = asyncio.run(
             self.analyzer.analyze_thread(self.thread, skill_name="startup_lean")
         )

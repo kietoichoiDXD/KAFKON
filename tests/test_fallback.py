@@ -15,21 +15,24 @@ class TestModelFallbackRouter(unittest.TestCase):
             ]
         )
 
-    def test_tier_chains_contain_requested_models(self):
-        # Must contain: gpt, luna, sonet, 5, gpt sol
+    def test_every_tier_ends_at_a_direct_anthropic_backup(self):
         for tier in [FallbackTier.LOW, FallbackTier.MEDIUM, FallbackTier.HIGH]:
             chain = self.router.get_chain_for_tier(tier.value)
             aliases = [item["alias"] for item in chain]
-            self.assertIn("gpt", aliases)
-            self.assertIn("luna", aliases)
-            self.assertIn("sonet", aliases)
-            self.assertIn("5", aliases)
-            self.assertIn("gpt sol", aliases)
+            self.assertEqual(aliases[0], "openrouter_primary")
+            self.assertIn("anthropic_direct", aliases)
+
+    def test_openrouter_ids_are_namespaced(self):
+        """An id without a vendor prefix is not an OpenRouter id and will 404 silently."""
+        for tier in [FallbackTier.LOW, FallbackTier.MEDIUM, FallbackTier.HIGH]:
+            for item in self.router.get_chain_for_tier(tier.value):
+                if item["provider"] == "openrouter":
+                    self.assertIn("/", item["model"], f"{item['model']} is not an OpenRouter id")
 
     def test_low_tier_uses_cost_effective_models(self):
         low_chain = self.router.get_chain_for_tier("low")
-        gpt_item = next(item for item in low_chain if item["alias"] == "gpt")
-        self.assertEqual(gpt_item["model"], "gpt-4o-mini")
+        primary = low_chain[0]
+        self.assertEqual(primary["model"], "anthropic/claude-haiku-4.5")
 
     def test_high_tier_uses_advanced_reasoners(self):
         high_chain = self.router.get_chain_for_tier("high")

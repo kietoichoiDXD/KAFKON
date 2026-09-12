@@ -186,6 +186,13 @@ def create_ticket_cmd(file: str, skill: str):
     else:
         print(f"Ticket Created: {ticket.created_task_id} -> {ticket.clickup_url}")
 
+@cli.command("serve")
+@click.option("--port", default=8000, help="Port for the ScribeBA API (default 8000).")
+def serve_cmd(port: int):
+    """Run the HTTP API the Web Studio talks to."""
+    from .api import app as api_app
+    api_app.run(host="127.0.0.1", port=port)
+
 @cli.command("slack-run")
 @click.option("--channel", "-c", required=True, help="Slack channel ID, e.g. C0BFQCXHM2T.")
 @click.option("--ts", required=True, help="Thread parent message ts, e.g. 1757661234.123456.")
@@ -395,11 +402,14 @@ def web_cmd(port: int, open_browser: bool):
             webbrowser.open(url)
         threading.Thread(target=_open, daemon=True).start()
 
+    # The studio calls the API on 8000; start it here so one command brings up both halves.
+    api = subprocess.Popen([sys.executable, "-m", "backend.cli", "serve"], cwd=str(BASE_DIR))
     try:
-        cmd = ["npx", "vite", "--port", str(port), "--host"]
-        subprocess.run(cmd, cwd=str(frontend_dir), shell=True)
+        subprocess.run(["npx", "vite", "--port", str(port), "--host"], cwd=str(frontend_dir))
     except KeyboardInterrupt:
         print("\n[Web Server Stopped]")
+    finally:
+        api.terminate()
 
 
 def main():

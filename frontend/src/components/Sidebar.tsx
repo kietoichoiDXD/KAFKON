@@ -77,6 +77,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Navigation Items */}
         <nav className="px-2 space-y-0.5">
           <button
+            onClick={() => onSelectView('live')}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
+              currentView === 'live'
+                ? 'bg-gray-100/90 text-gray-900 font-semibold'
+                : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[19px] text-gray-500">bolt</span>
+              {!isCollapsed && <span>Live run</span>}
+            </div>
+            {!isCollapsed && (
+              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#008775]/40 text-[#008775] uppercase">
+                Live
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => onSelectView('rooms')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'rooms'

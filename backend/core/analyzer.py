@@ -12,6 +12,7 @@ from .models import (
 )
 from .skills import SkillManager
 from .scorer import InvestScorer
+from .redaction import redact
 from .fallback_router import ModelFallbackRouter, FallbackTier
 from ..config import settings
 
@@ -311,7 +312,11 @@ Return strictly valid JSON matching this schema:
   "clarifying_question": "string or null",
   "ready_for_ticket": false
 }}"""
-        user_prompt = f"Analyze this conversation thread:\n\n{transcript}"
+        # Nothing leaves the building unmasked: a Slack thread is where people paste tokens.
+        safe_transcript, redacted = redact(transcript)
+        if redacted:
+            print(f"[Redaction] masked before egress: {redacted}")
+        user_prompt = f"Analyze this conversation thread:\n\n{safe_transcript}"
 
         parsed, audit_trail = await self.fallback_router.execute_with_fallback(
             system_prompt=system_prompt,
