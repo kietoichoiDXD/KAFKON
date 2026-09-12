@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Discord
     discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
 
+    # Telegram Integration
+    telegram_bot_token: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+
     # Sponsor Integrations: OpenRouter & Fallback
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(default="anthropic/claude-3.7-sonnet", alias="OPENROUTER_MODEL")

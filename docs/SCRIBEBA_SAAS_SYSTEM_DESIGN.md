@@ -130,7 +130,7 @@ These artifacts are embedded directly into the ClickUp Task payload as an attach
 
 | Capability | Free Tier (Community) | Pro ($29/user/month) | Enterprise ($79/seat/month) |
 |---|---|---|---|
-| **Platform Integrations** | Slack (1 Channel) | Slack + Discord (Unlimited) | Slack, Teams, Linear, ClickUp, Jira |
+| **Platform Integrations** | Slack + Telegram (1 Channel) | Slack, Discord, Telegram (Unlimited) | Slack, Teams, Telegram, ClickUp, Jira |
 | **Active Team Skills** | Default Scrum | Startup Lean + Agency Detailed | Custom YAML Skills + Internal Wiki RAG |
 | **Model Routing** | OpenRouter Haiku | OpenRouter Sonnet 3.7 + GPT-4o | Dedicated LLM VPC + On-Prem fallback |
 | **Exa Spec Grounding** | 10 searches/month | 500 searches/month | Unlimited Neural Search + Private Docs |

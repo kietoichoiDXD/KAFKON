@@ -90,7 +90,8 @@ KAFKON/
 │   │   ├── base.py                 # Abstract platform adapter
 │   │   ├── slack_adapter.py        # Slack Bolt integration
 │   │   ├── discord_adapter.py      # Discord adapter
-│   │   └── message_formatter.py    # Rich Block Kit formatters
+│   │   ├── telegram_adapter.py     # Telegram Bot API long-polling adapter
+│   │   └── message_formatter.py    # Rich Block Kit & HTML formatters
 │   └── integrations/
 │       ├── __init__.py
 │       └── clickup_client.py       # ClickUp task creation & audit
@@ -143,6 +144,9 @@ python -m backend.cli create-ticket --file demo/sample_conversation.md --skill s
 
 # List all installed team skills
 python -m backend.cli list-skills
+
+# Run Telegram Bot (Group & Topic listening)
+python -m backend.cli telegram
 ```
 
 ### 2. Frontend Dashboard (React + Vite)
