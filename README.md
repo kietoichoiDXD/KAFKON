@@ -8,6 +8,17 @@
 
 ---
 
+## 🗺️ Architecture
+
+![ScribeBA architecture](docs/architecture.png)
+
+The interactive version is `docs/architecture.html` — open it in a browser for guided views,
+relationship tracing and export. Built with [archify](https://github.com/tt-a1i/archify).
+
+![ScribeBA Studio](docs/ui-studio.png)
+
+---
+
 ## ✅ What is live, and what is simulated
 
 Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp list `Project 1`:
