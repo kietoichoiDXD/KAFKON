@@ -96,5 +96,5 @@ export interface CommandItem {
   description: string;
   tags: string[];
   category: 'Cost Optimization' | 'Security' | 'Operational Excellence' | 'Agents';
-  source: 'CloudThinker' | 'Custom';
+  source: 'KAFKON' | 'Custom';
 }

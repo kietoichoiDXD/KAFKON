@@ -2,10 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* KAFKON — ScribeBA Studio.
+   Anime-leaning palette: sakura pink into iris violet, on warm paper rather than clinical white.
+   One accent, used sparingly, so the evidence labels keep their meaning. */
 @layer base {
-  body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  :root {
+    --kf-sakura: #ff5f9e;
+    --kf-iris: #7b5cff;
+    --kf-ink: #221733;
+    --kf-paper: #fdf7fb;
   }
+
+  body {
+    font-family: 'Plus Jakarta Sans', 'Zen Maru Gothic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--kf-ink);
+  }
+}
+
+@layer components {
+  .kf-gradient {
+    background-image: linear-gradient(120deg, var(--kf-sakura) 0%, var(--kf-iris) 100%);
+  }
+
+  .kf-gradient-text {
+    background-image: linear-gradient(120deg, var(--kf-sakura) 0%, var(--kf-iris) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* The soft glow an anime UI leans on, kept low enough to read all day. */
+  .kf-glow {
+    box-shadow: 0 6px 24px -12px rgba(123, 92, 255, 0.55), 0 2px 6px -3px rgba(255, 95, 158, 0.4);
+  }
+
+  .kf-jp {
+    font-family: 'Zen Maru Gothic', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: 0.14em;
+  }
+}
+
+/* Petals drifting behind the page. Decorative only: pointer-events none, and it stops for
+   anyone who asked their OS for reduced motion. */
+.kf-petal {
+  position: fixed;
+  top: -8%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  animation: kf-fall linear infinite;
+}
+
+@keyframes kf-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); }
+  100% { transform: translateY(110vh) rotate(420deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kf-petal { display: none; }
 }
 
 /* Custom subtle scrollbar */
@@ -17,14 +71,13 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #e6d3e8;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #c9a9d4;
 }
 
-/* Sharp focus ring matching Stitch / CloudThinker */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-[#008775]/20 focus:border-[#008775];
+  @apply focus:outline-none focus:ring-2 focus:ring-[#7b5cff]/25 focus:border-[#7b5cff];
 }

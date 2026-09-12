@@ -34,16 +34,31 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto bg-[#f8faf9] flex flex-col items-center justify-start p-6 relative">
+    <div className="flex-1 h-screen overflow-y-auto flex flex-col items-center justify-start p-6 relative"
+         style={{
+           background:
+             'radial-gradient(1100px 480px at 50% -12%, rgba(255,95,158,0.16), transparent 62%),' +
+             'radial-gradient(900px 420px at 92% 8%, rgba(123,92,255,0.14), transparent 60%), #fdf7fb',
+         }}>
       {/* Top spacing */}
       <div className="w-full max-w-3xl pt-12 pb-6 flex flex-col items-center">
         {/* Main Greeting */}
-        <h1 className="text-3xl md:text-[34px] font-medium text-[#008775] tracking-tight text-center mb-6">
-          Where should we begin, Kiet Tran Quoc?
-        </h1>
+        <div className="flex flex-col items-center mb-6 relative z-10">
+          <div className="w-14 h-14 rounded-2xl kf-gradient kf-glow flex items-center justify-center text-white text-[22px] font-extrabold mb-3">
+            K
+          </div>
+          <p className="kf-jp text-[10px] text-[#a78bd0] mb-1">スクライブ・ビーエー · 議論を仕様へ</p>
+          <h1 className="text-3xl md:text-[34px] font-extrabold tracking-tight text-center kf-gradient-text">
+            Where should we begin, Kiet Tran Quoc?
+          </h1>
+          <p className="text-[13px] text-gray-500 mt-2 text-center max-w-lg">
+            ScribeBA reads the thread where the decision actually happened, labels every claim, and
+            asks the channel when something is missing.
+          </p>
+        </div>
 
         {/* Prompt Input Box */}
-        <div className="w-full bg-white rounded-2xl border border-gray-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-4 relative transition-all focus-within:border-[#008775]/60 focus-within:shadow-[0_8px_30px_-4px_rgba(0,135,117,0.12)]">
+        <div className="w-full bg-white rounded-2xl border border-gray-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-4 relative transition-all focus-within:border-[#7b5cff]/60 focus-within:shadow-[0_8px_30px_-4px_rgba(0,135,117,0.12)]">
           {/* Quick tags */}
           <div className="flex items-center gap-3 text-xs text-gray-400 font-mono mb-2 overflow-x-auto pb-1">
             <span
@@ -63,7 +78,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 setPromptInput(p => (p ? `${p} /skills ` : '/skills '));
                 onOpenSkills();
               }}
-              className="cursor-pointer hover:text-[#008775] font-semibold transition-colors"
+              className="cursor-pointer hover:text-[#7b5cff] font-semibold transition-colors"
             >
               /skills
             </span>
@@ -80,7 +95,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             value={promptInput}
             onChange={e => setPromptInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask CloudThinker or enter an architectural instruction..."
+            placeholder="Paste a thread, or point ScribeBA at a channel..."
             rows={3}
             className="w-full resize-none border-0 p-0 text-[15px] text-gray-800 placeholder-gray-400 focus:ring-0 focus:outline-none bg-transparent leading-relaxed"
           />
@@ -128,7 +143,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     setPromptInput('');
                   }
                 }}
-                className="w-8 h-8 rounded-full bg-[#008775] text-white flex items-center justify-center hover:bg-[#007363] transition-colors shadow-sm disabled:opacity-50"
+                className="w-8 h-8 rounded-full bg-[#7b5cff] text-white flex items-center justify-center hover:bg-[#007363] transition-colors shadow-sm disabled:opacity-50"
                 disabled={!promptInput.trim()}
               >
                 <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
@@ -141,7 +156,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {showIntegrations && (
           <div className="w-full mt-2.5 py-2 px-3 rounded-xl bg-gray-100/70 border border-gray-200/60 flex items-center justify-between text-xs text-gray-500">
             <div className="flex items-center gap-2 truncate">
-              <span className="truncate">Connect your clouds, apps, and tools to CloudThinker</span>
+              <span className="truncate">Connect Slack, ClickUp and your model provider to ScribeBA</span>
               <div className="flex items-center gap-1.5 text-gray-600 ml-1">
                 <span className="material-symbols-outlined text-[16px] text-teal-600" title="Cloud MCP">cloud_sync</span>
                 <span className="material-symbols-outlined text-[16px] text-amber-600" title="AWS">dns</span>
@@ -168,7 +183,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               onClick={() => onSelectPrompt(s)}
               className="w-full text-left flex items-start gap-2 py-1.5 px-2 rounded-lg hover:bg-white hover:text-gray-900 transition-colors group cursor-pointer"
             >
-              <span className="text-gray-400 group-hover:text-[#008775] font-mono mt-0.5">↳</span>
+              <span className="text-gray-400 group-hover:text-[#7b5cff] font-mono mt-0.5">↳</span>
               <span className="flex-1">{s}</span>
             </button>
           ))}
@@ -220,7 +235,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </span>
             <button
               onClick={onNavigateToAutomations}
-              className="text-xs text-[#008775] font-semibold hover:underline"
+              className="text-xs text-[#7b5cff] font-semibold hover:underline"
             >
               Manage
             </button>

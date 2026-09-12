@@ -41,7 +41,7 @@ export const RoomsView: React.FC = () => {
         {/* CTA Button */}
         <button
           onClick={() => setIsModalOpen(true)}
-          className="px-6 py-2.5 rounded-full bg-[#008775] text-white text-sm font-medium hover:bg-[#007363] transition-all shadow-sm hover:shadow flex items-center gap-2 mb-12"
+          className="px-6 py-2.5 rounded-full bg-[#7b5cff] text-white text-sm font-medium hover:bg-[#007363] transition-all shadow-sm hover:shadow flex items-center gap-2 mb-12"
         >
           <span className="material-symbols-outlined text-[18px]">add</span>
           <span>Create your first room</span>
@@ -59,7 +59,7 @@ export const RoomsView: React.FC = () => {
                   key={i}
                   className="flex items-center gap-2 p-3 rounded-lg border border-gray-100 bg-gray-50/50 hover:bg-teal-50/40 hover:border-teal-200 transition-colors cursor-pointer"
                 >
-                  <span className="text-[#008775] font-bold text-base">#</span>
+                  <span className="text-[#7b5cff] font-bold text-base">#</span>
                   <span className="text-sm font-medium text-gray-800">{r}</span>
                   <span className="ml-auto text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
                 </div>
@@ -116,7 +116,7 @@ export const RoomsView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Card 1 */}
             <div className="p-5 rounded-2xl bg-white border border-gray-200/80 shadow-sm flex flex-col">
-              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#008775] flex items-center justify-center mb-3">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#7b5cff] flex items-center justify-center mb-3">
                 <span className="material-symbols-outlined text-[19px]">forum</span>
               </div>
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Answers, not logs</h3>
@@ -128,7 +128,7 @@ export const RoomsView: React.FC = () => {
 
             {/* Card 2 */}
             <div className="p-5 rounded-2xl bg-white border border-gray-200/80 shadow-sm flex flex-col">
-              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#008775] flex items-center justify-center mb-3">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#7b5cff] flex items-center justify-center mb-3">
                 <span className="material-symbols-outlined text-[19px]">density_medium</span>
               </div>
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Side threads</h3>
@@ -139,7 +139,7 @@ export const RoomsView: React.FC = () => {
 
             {/* Card 3 */}
             <div className="p-5 rounded-2xl bg-white border border-gray-200/80 shadow-sm flex flex-col">
-              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#008775] flex items-center justify-center mb-3">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#7b5cff] flex items-center justify-center mb-3">
                 <span className="material-symbols-outlined text-[19px]">alternate_email</span>
               </div>
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Team and agents</h3>
@@ -167,7 +167,7 @@ export const RoomsView: React.FC = () => {
                 placeholder="room-topic"
                 value={roomName}
                 onChange={e => setRoomName(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#008775]"
+                className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#7b5cff]"
                 autoFocus
               />
             </div>
@@ -180,7 +180,7 @@ export const RoomsView: React.FC = () => {
               </button>
               <button
                 onClick={handleCreateRoom}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
               >
                 Create Room
               </button>

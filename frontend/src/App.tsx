@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { HomeView } from './components/HomeView';
 import { RoomsView } from './components/RoomsView';
 import { LiveRunView } from './components/LiveRunView';
+import { Petals } from './components/Petals';
 import { ArtifactsView } from './components/ArtifactsView';
 import { AutomationsView } from './components/AutomationsView';
 import { ReviewView } from './components/ReviewView';
@@ -25,7 +26,8 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f8faf9] text-gray-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#fdf7fb] text-[#221733]">
+      <Petals />
       {/* Sidebar */}
       <Sidebar
         currentView={currentView}

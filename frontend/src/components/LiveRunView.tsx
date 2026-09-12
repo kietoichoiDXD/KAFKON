@@ -121,7 +121,7 @@ export function LiveRunView() {
             </label>
           </div>
           <button onClick={run} disabled={running || !channel || !ts}
-                  className="px-4 py-2 rounded-full bg-[#008775] text-white text-[13.5px] font-medium disabled:opacity-40">
+                  className="px-4 py-2 rounded-full bg-[#7b5cff] text-white text-[13.5px] font-medium disabled:opacity-40">
             {running ? 'Running…' : 'Run in thread'}
           </button>
           {error && <p className="text-[12.5px] text-rose-600">{error}</p>}
@@ -135,14 +135,14 @@ export function LiveRunView() {
                 <span className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-600">
                   engine: {result.engine}
                 </span>
-                <span className="text-[13px] text-[#008775] font-semibold">INVEST {result.invest.overall}/100</span>
+                <span className="text-[13px] text-[#7b5cff] font-semibold">INVEST {result.invest.overall}/100</span>
               </span>
             </div>
             <p className="text-[13px] text-gray-700">
               <b>As a</b> {result.story.as_a} · <b>I want</b> {result.story.i_want} · <b>So that</b> {result.story.so_that}
             </p>
             <p className="text-[12.5px] text-gray-500">
-              Read {result.messages_read} messages · <a className="text-[#008775] underline" href={result.permalink} target="_blank" rel="noreferrer">source thread</a>
+              Read {result.messages_read} messages · <a className="text-[#7b5cff] underline" href={result.permalink} target="_blank" rel="noreferrer">source thread</a>
             </p>
 
             <div className="space-y-1.5">
@@ -162,7 +162,7 @@ export function LiveRunView() {
 
             {result.ticket && (
               <a href={result.ticket.url} target="_blank" rel="noreferrer"
-                 className="inline-block text-[13px] text-[#008775] underline">
+                 className="inline-block text-[13px] text-[#7b5cff] underline">
                 ClickUp {result.ticket.id} — {result.ticket.title}
               </a>
             )}
