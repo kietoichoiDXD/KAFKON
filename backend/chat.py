@@ -55,6 +55,16 @@ CHECK_HINTS = re.compile(
 )
 
 
+APPLY_HINTS = re.compile(
+    r"(?i)(\bfix (it|this|now)|\bapply\b|\bapprove\b|\bdo it\b|\bgo ahead\b|\bproceed\b|"
+    r"sửa (đi|luôn|ngay)|áp dụng|duyệt|làm đi)"
+)
+
+
+def wants_to_apply(messages: List[str]) -> bool:
+    return bool(APPLY_HINTS.search(messages[-1] if messages else ""))
+
+
 def wants_an_infra_check(messages: List[str]) -> bool:
     latest = messages[-1] if messages else ""
     return bool(INFRA_HINTS.search(latest) and CHECK_HINTS.search(latest))
@@ -77,6 +87,24 @@ def looks_like_a_discussion(messages: List[str]) -> bool:
     return len(joined.split()) > 25 and bool(DISCUSSION_HINTS.search(joined))
 
 
+def _environments_line() -> str:
+    from . import ops
+    try:
+        envs = ops.environments()
+    except Exception:
+        return "No environments are configured for investigation."
+    if not envs:
+        return "No environments are configured for investigation."
+    bits = ", ".join(
+        f"{e['name']} ({e['kind']}, {e['target']}"
+        f"{', can remediate' if e['can_remediate'] else ', read-only'})"
+        for e in envs
+    )
+    return ("Environments you can investigate right now, without being told a namespace: "
+            f"{bits}. If the user asks you to check their infrastructure, you already know where "
+            "to look — never ask them for a namespace you have configured.")
+
+
 def _context_line() -> str:
     return (
         f"This instance right now: model provider "
@@ -94,17 +122,26 @@ class ChatResponder:
         self.analyzer = ScribeBAAnalyzer(self.skills)
         self.router = ModelFallbackRouter()
 
-    async def respond(self, messages: List[str], skill: str, tier: str) -> Dict[str, Any]:
+    async def respond(self, messages: List[str], skill: str, tier: str,
+                      environment: str = None, pending_action: str = None) -> Dict[str, Any]:
+        from . import ops
+
+        # "fix it" after a diagnosis should show the patch and an approve button — not ask which
+        # namespace, and not write anything off the back of a sentence.
+        if pending_action and wants_to_apply(messages):
+            action = ops.get_proposal(pending_action)
+            if action:
+                return {"type": "approve", "proposal": action}
+
         if wants_an_infra_check(messages):
-            from . import ops
             try:
-                return {"type": "ops", "diagnosis": ops.diagnose()}
+                return {"type": "ops", "diagnosis": ops.diagnose(environment)}
             except Exception as e:
+                configured = ", ".join(e_["name"] for e_ in ops.environments()) or "none"
                 return {"type": "text", "text": (
-                    f"I tried to read the cluster and could not: {e}\n\n"
-                    f"The console reads {ops.NAMESPACE} on context {ops.CONTEXT} using the "
-                    f"kubeconfig at {ops.KUBECONFIG}. Check that the file exists and the context "
-                    f"is reachable, then ask again."
+                    f"I tried to read the environment and could not: {e}\n\n"
+                    f"Configured environments: {configured}. They are declared in "
+                    f"integrations.yaml; check the entry is reachable, then ask again."
                 )}
 
         if looks_like_a_discussion(messages):
@@ -128,7 +165,7 @@ class ChatResponder:
             print(f"[Redaction] masked before egress: {masked}")
 
         reply = await self.router.complete_text(
-            f"{SYSTEM}\n\n{_context_line()}", transcript, tier=tier
+            f"{SYSTEM}\n\n{_context_line()}\n{_environments_line()}", transcript, tier=tier
         )
         if reply:
             return reply.strip()

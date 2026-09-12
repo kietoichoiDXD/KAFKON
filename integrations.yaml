@@ -1,0 +1,50 @@
+# Environments ScribeBA can investigate.
+#
+# Adding infrastructure is an entry here, not a code change. Restart the API after editing:
+#   python -m backend.cli serve
+#
+# Two kinds ship today:
+#   kubernetes — reads a namespace and Prometheus, and can apply the runbooks you declare
+#   http       — probes endpoints from outside; reports what it measured and proposes nothing,
+#                because it has no way to change what it is watching
+#
+# A runbook is an allowlist. The console can only ever propose what is written here, the patch is
+# built from these values, and it is pinned to the deployment's resourceVersion before anything
+# is applied. There is no free-form patch path and no shell.
+
+environments:
+  - name: aiops-lab
+    kind: kubernetes
+    kubeconfig: ~/.lab-state/admin-kubeconfig
+    context: capstone-aiops-lab
+    namespace: lab-app
+    prometheus: http://localhost:19090
+    healthy_error_rate: 0.02
+    queries:
+      rps: sum(rate(lab_http_requests_total[2m]))
+      error_rate: >-
+        sum(rate(lab_http_requests_total{status=~"5.."}[2m]))
+        / clamp_min(sum(rate(lab_http_requests_total[2m])), 0.001)
+      p95_seconds: histogram_quantile(0.95, sum by (le) (rate(lab_http_request_seconds_bucket[5m])))
+    runbooks:
+      restore-endpoint/cart:
+        runbook: restore-endpoint
+        target: deployment/cart
+        summary: Point cart back at the in-cluster Valkey service
+        env: VALKEY_ADDR
+        value: valkey:6379
+      restore-endpoint/catalog:
+        runbook: restore-endpoint
+        target: deployment/catalog
+        summary: Point catalog back at the in-cluster PostgreSQL service
+        env: DB_CONNECTION_STRING
+        # Keep $(DB_PASSWORD) literal — Kubernetes expands it from the secret at runtime.
+        value: postgres://lab:$(DB_PASSWORD)@postgresql:5432/lab?sslmode=disable
+
+  # The studio itself, watched from outside. No cluster access, no remediation — just evidence.
+  - name: scribeba-local
+    kind: http
+    slow_ms: 1200
+    checks:
+      - url: http://localhost:8000/api/health
+      - url: http://localhost:3000

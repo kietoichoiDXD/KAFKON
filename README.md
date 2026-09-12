@@ -38,6 +38,44 @@ samples — because "the API write succeeded" and "the business flow works" are 
 
 ---
 
+## 🔌 Integrations
+
+Infrastructure is pluggable. An environment is an entry in `integrations.yaml`, not a code change:
+
+```yaml
+environments:
+  - name: aiops-lab
+    kind: kubernetes
+    kubeconfig: ~/.lab-state/admin-kubeconfig
+    context: capstone-aiops-lab
+    namespace: lab-app
+    prometheus: http://localhost:19090
+    runbooks:                    # the allowlist — the console can propose nothing else
+      restore-endpoint/cart:
+        target: deployment/cart
+        env: VALKEY_ADDR
+        value: valkey:6379
+
+  - name: payments-staging      # a second cluster is a second entry
+    kind: kubernetes
+    ...
+
+  - name: partner-api           # infrastructure you cannot patch is still worth watching
+    kind: http
+    checks:
+      - url: https://api.partner.example/health
+```
+
+Two kinds ship today. `kubernetes` reads a namespace and Prometheus and can apply the runbooks you
+declare. `http` probes endpoints from outside and **proposes nothing** — it has no way to change
+what it measures, and saying so is better than inventing an action.
+
+A new kind is one class implementing `InfraProvider` (`state`, `diagnose`, `verify`, `target`, and
+`apply` if it can remediate) plus a line in the registry. The console, the chat, the terminal and
+the Slack approval loop all work against the interface, so they gain the new environment for free.
+
+---
+
 ## ✅ What is live, and what is simulated
 
 Verified end to end on 2026-09-12 against Slack workspace `AIOPS` and ClickUp list `Project 1`:
