@@ -26,4 +26,4 @@ live = [
 ]
 
 [project.scripts]
-scribeba = "src.cli:cli"
+scribeba = "backend.cli:cli"

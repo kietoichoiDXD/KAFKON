@@ -1,9 +1,9 @@
 import unittest
 import asyncio
-from src.core.models import ThreadContext, ChatMessage, EvidenceLabel
-from src.core.analyzer import ScribeBAAnalyzer
-from src.integrations.clickup_client import ClickUpClient
-from src.core.skills import SkillManager
+from backend.core.models import ThreadContext, ChatMessage, EvidenceLabel
+from backend.core.analyzer import ScribeBAAnalyzer
+from backend.integrations.clickup_client import ClickUpClient
+from backend.core.skills import SkillManager
 
 
 class TestAnalyzerAndClickUp(unittest.TestCase):
