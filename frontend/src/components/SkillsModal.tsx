@@ -250,7 +250,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                   placeholder="Search skills"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
               <button
@@ -315,7 +315,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                 <button
                   onClick={() => toggleSkillEnabled(currentSkill.id)}
                   className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
-                    currentSkill.enabled ? 'bg-[#008775]' : 'bg-gray-300'
+                    currentSkill.enabled ? 'bg-[#7b5cff]' : 'bg-gray-300'
                   }`}
                 >
                   <span
@@ -335,7 +335,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                       type="checkbox"
                       checked={currentSkill.availableIn.chat}
                       onChange={() => toggleAvailability('chat')}
-                      className="rounded text-[#008775] focus:ring-[#008775]"
+                      className="rounded text-[#7b5cff] focus:ring-[#7b5cff]"
                     />
                     <span className="text-gray-700">Chat</span>
                   </label>
@@ -344,7 +344,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                       type="checkbox"
                       checked={currentSkill.availableIn.review}
                       onChange={() => toggleAvailability('review')}
-                      className="rounded text-[#008775] focus:ring-[#008775]"
+                      className="rounded text-[#7b5cff] focus:ring-[#7b5cff]"
                     />
                     <span className="text-gray-700">Review</span>
                   </label>
@@ -353,7 +353,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                       type="checkbox"
                       checked={currentSkill.availableIn.incident}
                       onChange={() => toggleAvailability('incident')}
-                      className="rounded text-[#008775] focus:ring-[#008775]"
+                      className="rounded text-[#7b5cff] focus:ring-[#7b5cff]"
                     />
                     <span className="text-gray-700">Incident</span>
                   </label>
@@ -362,7 +362,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                       type="checkbox"
                       checked={currentSkill.availableIn.assessment}
                       onChange={() => toggleAvailability('assessment')}
-                      className="rounded text-[#008775] focus:ring-[#008775]"
+                      className="rounded text-[#7b5cff] focus:ring-[#7b5cff]"
                     />
                     <span className="text-gray-700">Assessment</span>
                   </label>

@@ -43,7 +43,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
   // Commands State
   const [commands, setCommands] = useState<CommandItem[]>(COMMANDS_LIST);
-  const [commandFilter, setCommandFilter] = useState<'All' | 'Your Commands' | "CloudThinker's Commands">('All');
+  const [commandFilter, setCommandFilter] = useState<'All' | 'Your Commands' | "KAFKON's Commands">('All');
   const [commandSearch, setCommandSearch] = useState('');
   const [isNewCommandOpen, setIsNewCommandOpen] = useState(false);
   const [newCmdName, setNewCmdName] = useState('');
@@ -73,7 +73,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   // Commands filtered
   const filteredCommands = commands.filter(cmd => {
     if (commandFilter === 'Your Commands' && cmd.source !== 'Custom') return false;
-    if (commandFilter === "CloudThinker's Commands" && cmd.source !== 'CloudThinker') return false;
+    if (commandFilter === "KAFKON's Commands" && cmd.source !== 'KAFKON') return false;
     if (commandSearch.trim()) {
       const q = commandSearch.toLowerCase();
       return cmd.command.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q);
@@ -214,7 +214,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   >
                     <span
                       className={`material-symbols-outlined text-[17px] ${
-                        activeTab === t ? 'text-[#008775]' : 'text-gray-400'
+                        activeTab === t ? 'text-[#7b5cff]' : 'text-gray-400'
                       }`}
                     >
                       {t === 'Connections'
@@ -251,7 +251,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   >
                     <span
                       className={`material-symbols-outlined text-[17px] ${
-                        activeTab === t ? 'text-[#008775]' : 'text-gray-400'
+                        activeTab === t ? 'text-[#7b5cff]' : 'text-gray-400'
                       }`}
                     >
                       {t === 'Commands' ? 'terminal' : 'check_circle'}
@@ -373,7 +373,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     onClick={() => setAgentTab('Identity')}
                     className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       agentTab === 'Identity'
-                        ? 'bg-teal-100/70 text-[#008775] border border-teal-300'
+                        ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
@@ -383,7 +383,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     onClick={() => setAgentTab('Connections')}
                     className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       agentTab === 'Connections'
-                        ? 'bg-teal-100/70 text-[#008775] border border-teal-300'
+                        ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
@@ -417,7 +417,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed font-mono"
                       />
                       <div className="text-[11px] text-gray-400 mt-1">
-                        Type <code className="text-[#008775] font-semibold">{currentAgent.mention}</code> in any chat to summon this agent.
+                        Type <code className="text-[#7b5cff] font-semibold">{currentAgent.mention}</code> in any chat to summon this agent.
                       </div>
                     </div>
 
@@ -425,7 +425,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
                         <span>Role *</span>
                         <span className="text-[10px] text-gray-400 font-normal">
-                          Set by CloudThinker, can't be changed
+                          Set by KAFKON, can’t be changed
                         </span>
                       </div>
                       <input
@@ -440,7 +440,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
                         <span>Goal *</span>
                         <span className="text-[10px] text-gray-400 font-normal">
-                          Set by CloudThinker, can't be changed
+                          Set by KAFKON, can’t be changed
                         </span>
                       </div>
                       <textarea
@@ -455,7 +455,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
                         <span>Instructions (System Architecture Persona)</span>
                         <span className="text-[10px] text-gray-400 font-normal">
-                          Set by CloudThinker, can't be changed
+                          Set by KAFKON, can’t be changed
                         </span>
                       </div>
                       <textarea
@@ -492,7 +492,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       <button
                         type="button"
                         onClick={() => alert('Saved agent configuration.')}
-                        className="px-5 py-2 text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg shadow-sm"
+                        className="px-5 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg shadow-sm"
                       >
                         Save
                       </button>
@@ -509,12 +509,12 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         onClick={() => setConnectionSubTab('Builtin')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors ${
                           connectionSubTab === 'Builtin'
-                            ? 'bg-teal-100/70 text-[#008775] border border-teal-300'
+                            ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
                             : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
                         <span>Builtin</span>
-                        <span className="bg-[#008775] text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                        <span className="bg-[#7b5cff] text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
                           {currentAgent.builtinConnections.length}
                         </span>
                       </button>
@@ -523,7 +523,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         onClick={() => setConnectionSubTab('MCP')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors ${
                           connectionSubTab === 'MCP'
-                            ? 'bg-teal-100/70 text-[#008775] border border-teal-300'
+                            ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
                             : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
@@ -570,7 +570,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       <p className="text-gray-400 mb-1">All connections are assigned.</p>
                       <p className="text-gray-400 text-[11px] flex items-center gap-1">
                         <span className="material-symbols-outlined text-[13px]">lock</span>
-                        <span>Connections for this agent are managed by CloudThinker.</span>
+                        <span>Connections for this agent are managed by KAFKON.</span>
                       </p>
                     </div>
                   </div>
@@ -594,7 +594,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       placeholder="Search skills"
                       value={skillSearch}
                       onChange={e => setSkillSearch(e.target.value)}
-                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#008775]"
+                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
                     />
                   </div>
                   <button
@@ -662,7 +662,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         )
                       }
                       className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
-                        currentSkill.enabled ? 'bg-[#008775]' : 'bg-gray-300'
+                        currentSkill.enabled ? 'bg-[#7b5cff]' : 'bg-gray-300'
                       }`}
                     >
                       <span
@@ -681,7 +681,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                           type="checkbox"
                           checked={currentSkill.availableIn.chat}
                           onChange={() => {}}
-                          className="rounded text-[#008775]"
+                          className="rounded text-[#7b5cff]"
                         />
                         <span className="text-gray-700">Chat</span>
                       </label>
@@ -690,7 +690,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                           type="checkbox"
                           checked={currentSkill.availableIn.review}
                           onChange={() => {}}
-                          className="rounded text-[#008775]"
+                          className="rounded text-[#7b5cff]"
                         />
                         <span className="text-gray-700">Review</span>
                       </label>
@@ -699,7 +699,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                           type="checkbox"
                           checked={currentSkill.availableIn.incident}
                           onChange={() => {}}
-                          className="rounded text-[#008775]"
+                          className="rounded text-[#7b5cff]"
                         />
                         <span className="text-gray-700">Incident</span>
                       </label>
@@ -708,7 +708,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                           type="checkbox"
                           checked={currentSkill.availableIn.assessment}
                           onChange={() => {}}
-                          className="rounded text-[#008775]"
+                          className="rounded text-[#7b5cff]"
                         />
                         <span className="text-gray-700">Assessment</span>
                       </label>
@@ -825,7 +825,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               {/* Header & Filter Bar */}
               <div className="flex items-center justify-between gap-4 pb-4 border-b border-gray-100">
                 <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs">
-                  {(['All', 'Your Commands', "CloudThinker's Commands"] as const).map(tab => (
+                  {(['All', 'Your Commands', "KAFKON's Commands"] as const).map(tab => (
                     <button
                       key={tab}
                       onClick={() => setCommandFilter(tab)}
@@ -849,7 +849,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     placeholder="Search commands..."
                     value={commandSearch}
                     onChange={e => setCommandSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#008775]"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
                   />
                 </div>
 
@@ -872,7 +872,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
                   <button
                     onClick={() => setIsNewCommandOpen(true)}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
                   >
                     <span className="material-symbols-outlined text-[16px]">add</span>
                     <span>New Command</span>
@@ -912,7 +912,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
               {/* Footer */}
               <div className="mt-8 flex items-center">
-                <span className="text-xs text-[#008775] font-semibold bg-teal-50 border border-teal-200 px-3 py-1 rounded-md">
+                <span className="text-xs text-[#7b5cff] font-semibold bg-teal-50 border border-teal-200 px-3 py-1 rounded-md">
                   1-{filteredCommands.length} of {commands.length} commands
                 </span>
               </div>
@@ -932,13 +932,13 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     placeholder="Search knowledge bases..."
                     value={kbSearch}
                     onChange={e => setKbSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#008775]"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
                   />
                 </div>
 
                 <button
                   onClick={() => setIsCreateKbOpen(true)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
                 >
                   <span className="material-symbols-outlined text-[16px]">add</span>
                   <span>Create KB</span>
@@ -975,7 +975,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                             {kb.tags.map((t, i) => (
                               <span
                                 key={i}
-                                className="px-2 py-0.5 bg-teal-50 text-[#008775] rounded text-[10px] font-semibold"
+                                className="px-2 py-0.5 bg-teal-50 text-[#7b5cff] rounded text-[10px] font-semibold"
                               >
                                 {t}
                               </span>
@@ -999,7 +999,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             <div className="flex-1 overflow-y-auto bg-white p-8 flex flex-col items-center justify-center">
               {credentials.length === 0 ? (
                 <div className="flex flex-col items-center text-center max-w-sm">
-                  <div className="w-14 h-14 rounded-full bg-teal-50 text-[#008775] flex items-center justify-center mb-4">
+                  <div className="w-14 h-14 rounded-full bg-teal-50 text-[#7b5cff] flex items-center justify-center mb-4">
                     <span className="material-symbols-outlined text-[28px]">key</span>
                   </div>
                   <h3 className="text-base font-bold text-gray-900 mb-1">No credentials yet</h3>
@@ -1020,7 +1020,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     <h3 className="text-sm font-bold text-gray-800">Stored Credentials ({credentials.length})</h3>
                     <button
                       onClick={() => setIsAddCredOpen(true)}
-                      className="px-3 py-1.5 bg-[#008775] text-white text-xs font-semibold rounded-lg"
+                      className="px-3 py-1.5 bg-[#7b5cff] text-white text-xs font-semibold rounded-lg"
                     >
                       + Add Credential
                     </button>
@@ -1138,7 +1138,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="/c4-container-audit"
                   value={newCmdName}
                   onChange={e => setNewCmdName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775] font-mono"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] font-mono"
                 />
               </div>
               <div>
@@ -1146,7 +1146,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <select
                   value={newCmdCategory}
                   onChange={e => setNewCmdCategory(e.target.value as CommandItem['category'])}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775] bg-white"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] bg-white"
                 >
                   <option>Cost Optimization</option>
                   <option>Security</option>
@@ -1161,7 +1161,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="Explain what architectural task this command executes..."
                   value={newCmdDesc}
                   onChange={e => setNewCmdDesc(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
             </div>
@@ -1174,7 +1174,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddCommand}
-                className="px-4 py-2 font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
               >
                 Create Command
               </button>
@@ -1199,7 +1199,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="e.g. Distributed System Architecture ADRs"
                   value={newKbTitle}
                   onChange={e => setNewKbTitle(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
               <div>
@@ -1209,7 +1209,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="e.g. Architecture"
                   value={newKbTag}
                   onChange={e => setNewKbTag(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
             </div>
@@ -1222,7 +1222,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddKb}
-                className="px-4 py-2 font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
               >
                 Create KB
               </button>
@@ -1247,7 +1247,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="e.g. Stitch MCP API Key"
                   value={credName}
                   onChange={e => setCredName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
               <div>
@@ -1255,7 +1255,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <select
                   value={credType}
                   onChange={e => setCredType(e.target.value as CredentialItem['type'])}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775] bg-white"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] bg-white"
                 >
                   <option>API Key</option>
                   <option>OAuth Token</option>
@@ -1270,7 +1270,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="Enter secret or API key (e.g. AQ.Ab8RN6...)"
                   value={credSecret}
                   onChange={e => setCredSecret(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775] font-mono"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] font-mono"
                 />
               </div>
             </div>
@@ -1283,7 +1283,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddCredential}
-                className="px-4 py-2 font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
               >
                 Save Credential
               </button>

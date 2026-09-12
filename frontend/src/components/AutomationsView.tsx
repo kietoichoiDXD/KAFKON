@@ -42,7 +42,7 @@ export const AutomationsView: React.FC = () => {
 
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="px-4 py-2 rounded-lg bg-[#008775] text-white text-xs font-medium hover:bg-[#007363] transition-all shadow-sm flex items-center gap-1.5"
+            className="px-4 py-2 rounded-lg bg-[#7b5cff] text-white text-xs font-medium hover:bg-[#007363] transition-all shadow-sm flex items-center gap-1.5"
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
             <span>New automation</span>
@@ -57,7 +57,7 @@ export const AutomationsView: React.FC = () => {
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === tab
-                  ? 'bg-teal-100/70 text-[#008775] border border-teal-300/80 font-semibold'
+                  ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300/80 font-semibold'
                   : 'text-gray-600 hover:bg-gray-100 border border-transparent'
               }`}
             >
@@ -78,14 +78,14 @@ export const AutomationsView: React.FC = () => {
             placeholder="Search automations by name..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#008775]"
+            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#7b5cff]"
           />
         </div>
 
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="bg-white border border-gray-200 rounded-lg text-xs text-gray-700 px-3 py-2 focus:outline-none focus:border-[#008775]"
+          className="bg-white border border-gray-200 rounded-lg text-xs text-gray-700 px-3 py-2 focus:outline-none focus:border-[#7b5cff]"
         >
           <option>All states</option>
           <option>Active</option>
@@ -107,7 +107,7 @@ export const AutomationsView: React.FC = () => {
             </p>
             <button
               onClick={() => setIsCreateOpen(true)}
-              className="text-xs font-semibold text-[#008775] hover:underline"
+              className="text-xs font-semibold text-[#7b5cff] hover:underline"
             >
               + Create an automation
             </button>
@@ -120,7 +120,7 @@ export const AutomationsView: React.FC = () => {
                 className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between hover:border-teal-300 transition-all"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-teal-50 text-[#008775] flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-lg bg-teal-50 text-[#7b5cff] flex items-center justify-center font-bold">
                     <span className="material-symbols-outlined text-[20px]">bolt</span>
                   </div>
                   <div>
@@ -171,7 +171,7 @@ export const AutomationsView: React.FC = () => {
                   placeholder="e.g. Daily AWS S3 Security Sweep"
                   value={newAutoName}
                   onChange={e => setNewAutoName(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775]"
+                  className="w-full text-xs px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
 
@@ -180,7 +180,7 @@ export const AutomationsView: React.FC = () => {
                 <select
                   value={newTrigger}
                   onChange={e => setNewTrigger(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border rounded-lg focus:outline-none focus:border-[#008775] bg-white"
+                  className="w-full text-xs px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] bg-white"
                 >
                   <option>Schedule (Cron)</option>
                   <option>GitHub Webhook (PR Created)</option>
@@ -199,7 +199,7 @@ export const AutomationsView: React.FC = () => {
               </button>
               <button
                 onClick={handleCreate}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg shadow-sm"
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg shadow-sm"
               >
                 Create Automation
               </button>

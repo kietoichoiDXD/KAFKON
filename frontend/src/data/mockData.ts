@@ -21,7 +21,7 @@ export const CHAT_HISTORY: ChatItem[] = [
   { id: '9', title: 'Grill-me request', time: '6d' },
   { id: '10', title: 'Skill creation workflow', time: '6d' },
   { id: '11', title: 'AWS account overview', time: '6d' },
-  { id: '12', title: 'CloudThinker onboarding ..', time: '6d' },
+  { id: '12', title: 'ScribeBA onboarding ..', time: '6d' },
 ];
 
 export const ARTIFACTS_LIST: ArtifactItem[] = [
@@ -91,7 +91,7 @@ export const ARTIFACTS_LIST: ArtifactItem[] = [
   {
     id: 'art-8',
     title: 'AWS Stack Optimization Assessment — ap-southeast-1',
-    source: 'CloudThinker onboarding guide',
+    source: 'ScribeBA onboarding guide',
     time: '7 days ago',
     type: 'REPORT',
     visibility: 'Private',
@@ -332,7 +332,7 @@ ACT, don't route. You are the user's primary operator.
 - Pod Disruption Budgets (PDB) and topology spread constraints across multi-AZ.
 - NetworkPolicies to isolate namespace tenant boundaries.`,
     language: 'Match the user',
-    builtinConnections: ['Kubernetes', 'CloudThinker Cluster Agent'],
+    builtinConnections: ['Kubernetes', 'KAFKON Thread Agent'],
     mcpConnections: [],
     systemDesignDomain: 'Cloud-Native Orchestration & Service Mesh'
   },
@@ -363,49 +363,49 @@ export const COMMANDS_LIST: CommandItem[] = [
     id: 'cmd-1',
     command: '/cost-allocation-tagging',
     description: 'Implement consistent resource tagging for cost allocation. Track costs by department, project, or environment to improve budget visibility and accountability across multi-account AWS organizations.',
-    tags: ['CloudThinker', 'Cost Optimization'],
+    tags: ['KAFKON', 'Cost Optimization'],
     category: 'Cost Optimization',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   },
   {
     id: 'cmd-2',
     command: '/security-configuration-audit',
     description: 'Audit security configurations across your infrastructure. Review access controls, encryption settings, and compliance with security best practices and benchmark standards.',
-    tags: ['CloudThinker', 'Security'],
+    tags: ['KAFKON', 'Security'],
     category: 'Security',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   },
   {
     id: 'cmd-3',
     command: '/monitoring-alerting-setup',
     description: 'Configure comprehensive monitoring and alerting for key metrics. Set up alerts for resource utilization, performance issues, and cost anomalies.',
-    tags: ['CloudThinker', 'Operational Excellence'],
+    tags: ['KAFKON', 'Operational Excellence'],
     category: 'Operational Excellence',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   },
   {
     id: 'cmd-4',
     command: '/automated-backup-strategy',
     description: 'Review and optimize backup schedules and retention policies. Ensure critical data is backed up regularly while avoiding unnecessary storage costs through automated lifecycle transitions.',
-    tags: ['CloudThinker', 'Operational Excellence'],
+    tags: ['KAFKON', 'Operational Excellence'],
     category: 'Operational Excellence',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   },
   {
     id: 'cmd-5',
     command: '/resource-rightsizing-analysis',
     description: 'Identify underutilized resources across your infrastructure. Analyze CPU, memory, and storage usage patterns to find instances that can be downsized or decommissioned.',
-    tags: ['CloudThinker', 'Cost Optimization'],
+    tags: ['KAFKON', 'Cost Optimization'],
     category: 'Cost Optimization',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   },
   {
     id: 'cmd-6',
     command: '/create-agent',
     description: "Call load_skill for the creating-agent skill. Then follow that skill's workflow: interview me, clarify requirements, and help me design a new custom AI agent for this workspace.",
-    tags: ['CloudThinker', 'Agents'],
+    tags: ['KAFKON', 'Agents'],
     category: 'Agents',
-    source: 'CloudThinker'
+    source: 'KAFKON'
   }
 ];
 

@@ -38,10 +38,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="h-14 px-3 flex items-center justify-between border-b border-gray-100">
           {!isCollapsed && (
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => onSelectView('home')}>
-              <div className="w-6 h-6 rounded bg-[#008775] flex items-center justify-center text-white shadow-sm">
-                <span className="material-symbols-outlined text-[16px]">cloud</span>
+              <div className="w-7 h-7 rounded-lg kf-gradient kf-glow flex items-center justify-center text-white font-extrabold text-[13px]">
+                K
               </div>
-              <span className="font-semibold text-gray-800 text-[15px] tracking-tight">Cloud Thinker</span>
+              <div className="leading-none">
+                <div className="font-extrabold text-[15px] tracking-tight kf-gradient-text">ScribeBA</div>
+                <div className="kf-jp text-[8.5px] text-gray-400 mt-0.5">カフコン · KAFKON</div>
+              </div>
             </div>
           )}
           <button
@@ -67,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={onNewChat}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-full border border-gray-200 hover:border-[#008775] text-[#008775] hover:bg-[#008775]/5 text-[13.5px] font-medium transition-all shadow-sm group"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-full border border-gray-200 hover:border-[#7b5cff] text-[#7b5cff] hover:bg-[#7b5cff]/5 text-[13.5px] font-medium transition-all shadow-sm group"
           >
             <span className="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform">add_circle</span>
             {!isCollapsed && <span>New chat</span>}
@@ -80,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectView('live')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'live'
-                ? 'bg-gray-100/90 text-gray-900 font-semibold'
+                ? 'bg-gradient-to-r from-[#ff5f9e]/12 to-[#7b5cff]/12 text-[#3d2b63] font-semibold ring-1 ring-[#7b5cff]/15'
                 : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
             }`}
           >
@@ -89,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && <span>Live run</span>}
             </div>
             {!isCollapsed && (
-              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#008775]/40 text-[#008775] uppercase">
+              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#7b5cff]/40 text-[#7b5cff] uppercase">
                 Live
               </span>
             )}
@@ -99,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectView('rooms')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'rooms'
-                ? 'bg-gray-100/90 text-gray-900 font-semibold'
+                ? 'bg-gradient-to-r from-[#ff5f9e]/12 to-[#7b5cff]/12 text-[#3d2b63] font-semibold ring-1 ring-[#7b5cff]/15'
                 : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
             }`}
           >
@@ -108,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && <span>Rooms</span>}
             </div>
             {!isCollapsed && (
-              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#008775]/40 text-[#008775] uppercase">
+              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#7b5cff]/40 text-[#7b5cff] uppercase">
                 New
               </span>
             )}
@@ -118,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectView('artifacts')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'artifacts'
-                ? 'bg-gray-100/90 text-gray-900 font-semibold'
+                ? 'bg-gradient-to-r from-[#ff5f9e]/12 to-[#7b5cff]/12 text-[#3d2b63] font-semibold ring-1 ring-[#7b5cff]/15'
                 : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
             }`}
           >
@@ -132,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectView('automations')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'automations'
-                ? 'bg-gray-100/90 text-gray-900 font-semibold'
+                ? 'bg-gradient-to-r from-[#ff5f9e]/12 to-[#7b5cff]/12 text-[#3d2b63] font-semibold ring-1 ring-[#7b5cff]/15'
                 : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
             }`}
           >
@@ -141,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && <span>Automations</span>}
             </div>
             {!isCollapsed && (
-              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#008775]/40 text-[#008775] uppercase">
+              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#7b5cff]/40 text-[#7b5cff] uppercase">
                 New
               </span>
             )}
@@ -152,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectView('review')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
               currentView === 'review'
-                ? 'bg-[#008775]/10 text-[#008775] font-semibold'
+                ? 'bg-[#7b5cff]/10 text-[#7b5cff] font-semibold'
                 : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
             }`}
           >
@@ -207,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   placeholder="Filter chats..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full text-xs px-2 py-1 border rounded bg-white focus:outline-none focus:border-[#008775]"
+                  className="w-full text-xs px-2 py-1 border rounded bg-white focus:outline-none focus:border-[#7b5cff]"
                 />
               </div>
             )}
@@ -235,7 +238,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="truncate">{chat.title}</span>
                     </div>
                     {isActive ? (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#008775] shrink-0"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#7b5cff] shrink-0"></span>
                     ) : chat.time ? (
                       <span className="text-[11px] text-gray-400 shrink-0">{chat.time}</span>
                     ) : null}
@@ -253,13 +256,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="p-2.5 rounded-xl border border-teal-200/80 bg-gradient-to-r from-teal-50/50 to-emerald-50/30">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[12px] font-semibold text-[#008775]">Team trial · 7 days left</div>
+                <div className="text-[12px] font-semibold text-[#7b5cff]">Team trial · 7 days left</div>
                 <div className="text-[11px] text-gray-500 mt-0.5">
                   Ends Sep 18, 2026 ·{' '}
-                  <span className="underline cursor-pointer hover:text-[#008775]">Upgrade</span>
+                  <span className="underline cursor-pointer hover:text-[#7b5cff]">Upgrade</span>
                 </div>
               </div>
-              <span className="material-symbols-outlined text-[#008775] text-[16px] mt-0.5">schedule</span>
+              <span className="material-symbols-outlined text-[#7b5cff] text-[16px] mt-0.5">schedule</span>
             </div>
           </div>
         )}
@@ -282,7 +285,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && (
             <div className="relative p-1 text-gray-400 hover:text-gray-600">
               <span className="material-symbols-outlined text-[19px]">notifications</span>
-              <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-[#008775] text-white text-[9px] font-bold flex items-center justify-center">
+              <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-[#7b5cff] text-white text-[9px] font-bold flex items-center justify-center">
                 31
               </span>
             </div>

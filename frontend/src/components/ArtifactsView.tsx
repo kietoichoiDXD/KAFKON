@@ -60,14 +60,14 @@ export const ArtifactsView: React.FC = () => {
                 onClick={() => setActiveTab(tab.label)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                   activeTab === tab.label
-                    ? 'bg-teal-100/70 text-[#008775] border border-teal-300/80 font-semibold'
+                    ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300/80 font-semibold'
                     : 'text-gray-600 hover:bg-gray-100 border border-transparent'
                 }`}
               >
                 <span>{tab.label}</span>
                 <span
                   className={`text-[10px] px-1 rounded-full ${
-                    activeTab === tab.label ? 'bg-[#008775] text-white' : 'text-gray-400'
+                    activeTab === tab.label ? 'bg-[#7b5cff] text-white' : 'text-gray-400'
                   }`}
                 >
                   {tab.count}
@@ -94,7 +94,7 @@ export const ArtifactsView: React.FC = () => {
             placeholder="Search artifacts..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#008775]"
+            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#7b5cff]"
           />
         </div>
 
@@ -127,7 +127,7 @@ export const ArtifactsView: React.FC = () => {
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="text-[13.5px] font-semibold text-gray-900 group-hover:text-[#008775] transition-colors leading-snug line-clamp-2">
+                  <h3 className="text-[13.5px] font-semibold text-gray-900 group-hover:text-[#7b5cff] transition-colors leading-snug line-clamp-2">
                     {art.title}
                   </h3>
                   <div className="flex items-center gap-1 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -184,7 +184,7 @@ export const ArtifactsView: React.FC = () => {
 
         {/* Footer info */}
         <div className="mt-8 flex items-center justify-start">
-          <div className="text-xs text-[#008775] font-semibold bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-md">
+          <div className="text-xs text-[#7b5cff] font-semibold bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-md">
             1-{filteredArtifacts.length} of {ARTIFACTS_LIST.length} artifacts
           </div>
         </div>
@@ -196,7 +196,7 @@ export const ArtifactsView: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 flex flex-col max-h-[85vh]">
             <div className="flex items-start justify-between border-b border-gray-100 pb-4">
               <div>
-                <span className="text-[10px] font-bold text-[#008775] uppercase tracking-wider bg-teal-50 px-2 py-0.5 rounded">
+                <span className="text-[10px] font-bold text-[#7b5cff] uppercase tracking-wider bg-teal-50 px-2 py-0.5 rounded">
                   {selectedArtifact.type}
                 </span>
                 <h2 className="text-lg font-bold text-gray-900 mt-2">
@@ -240,7 +240,7 @@ export const ArtifactsView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => alert(`Exporting ${selectedArtifact.title}...`)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#008775] hover:bg-[#007363] rounded-lg shadow-sm"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg shadow-sm"
                 >
                   Export PDF
                 </button>
