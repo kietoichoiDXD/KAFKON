@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     # Discord
     discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
 
+    # Sponsor Integrations: OpenRouter & Fallback
+    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
+    openrouter_model: str = Field(default="anthropic/claude-3.7-sonnet", alias="OPENROUTER_MODEL")
+    openrouter_triage_model: str = Field(default="anthropic/claude-3.5-haiku", alias="OPENROUTER_TRIAGE_MODEL")
+
+    # Sponsor Integrations: Exa Neural Web Search
+    exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
+
+    # Sponsor Integrations: OpenAI Codex / E2E Test Generator
+    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    codex_model: str = Field(default="gpt-4o", alias="CODEX_MODEL")
+
     # Skills
     default_skill: str = Field(default="startup_lean", alias="DEFAULT_SKILL")
     skills_dir: Path = Field(default_factory=lambda: BASE_DIR / "skills")
