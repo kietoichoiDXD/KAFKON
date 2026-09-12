@@ -176,6 +176,40 @@ def create_ticket_cmd(file: str, skill: str):
     else:
         print(f"Ticket Created: {ticket.created_task_id} -> {ticket.clickup_url}")
 
+@cli.command("slack-run")
+@click.option("--channel", "-c", required=True, help="Slack channel ID, e.g. C0BFQCXHM2T.")
+@click.option("--ts", required=True, help="Thread parent message ts, e.g. 1757661234.123456.")
+@click.option("--skill", "-s", default="startup_lean", help="Skill template name.")
+def slack_run_cmd(channel: str, ts: str, skill: str):
+    """Read a real Slack thread, analyze it, reply in-thread, and create a real ClickUp task."""
+    from .platforms.slack_adapter import SlackAdapter
+
+    async def run():
+        slack = SlackAdapter()
+        if not slack.is_live:
+            raise click.ClickException("No Slack token found. Set SLACK_USER_TOKEN or SLACK_BOT_TOKEN in .env.")
+        skill_manager = SkillManager()
+        active_skill = skill_manager.get_skill(skill)
+        analyzer = ScribeBAAnalyzer(skill_manager)
+
+        thread = await slack.fetch_thread(channel, ts)
+        permalink = await slack.get_permalink(channel, ts)
+        print(f"→ Read {len(thread.messages)} messages from {permalink}")
+
+        result = await analyzer.analyze_thread(thread, skill_name=skill)
+        await slack.post_analysis_summary(channel, ts, result)
+        print(f"→ Posted analysis in-thread (INVEST {result.invest_score.overall}/100)")
+
+        if result.clarifying_question:
+            await slack.post_clarification_question(channel, ts, result.clarifying_question)
+            print("→ Asked the clarifying question in-thread instead of guessing")
+
+        ticket = await ClickUpClient().create_task_from_analysis(result, active_skill, thread_url=permalink)
+        await slack.post_ticket_confirmation(channel, ts, ticket)
+        print(f"→ ClickUp task {ticket.created_task_id}: {ticket.clickup_url}")
+
+    asyncio.run(run())
+
 @cli.command("list-skills")
 def list_skills_cmd():
     """List all available team skills and their required fields."""
