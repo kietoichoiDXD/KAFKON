@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ViewType, ChatItem } from '../types';
-import { CHAT_HISTORY } from '../data/mockData';
+import { get, Run } from '../api';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -20,11 +20,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeChatId, setActiveChatId] = useState('1');
+  const [activeChatId, setActiveChatId] = useState('0');
+  const [runs, setRuns] = useState<Run[] | null>(null);
 
-  const filteredChats = CHAT_HISTORY.filter(c =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // The history is the runs this backend performed - not a list of invented conversations.
+  useEffect(() => {
+    get<Run[]>('/api/runs').then(setRuns);
+  }, []);
+
+  const filteredChats = (runs ?? [])
+    .map((r, i) => ({ id: String(i), title: r.title, time: r.at.slice(11, 16), engine: r.engine }))
+    .filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <aside
@@ -94,6 +100,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!isCollapsed && (
               <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-[#7b5cff]/40 text-[#7b5cff] uppercase">
                 Live
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => onSelectView('ops')}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
+              currentView === 'ops'
+                ? 'bg-gradient-to-r from-[#ff5f9e]/12 to-[#7b5cff]/12 text-[#3d2b63] font-semibold ring-1 ring-[#7b5cff]/15'
+                : 'text-gray-600 hover:bg-gray-100/60 hover:text-gray-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[19px] text-gray-500">emergency_home</span>
+              {!isCollapsed && <span>Incidents</span>}
+            </div>
+            {!isCollapsed && (
+              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border border-rose-400/50 text-rose-500 uppercase">
+                Ops
               </span>
             )}
           </button>
@@ -216,6 +241,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             <div className="flex-1 overflow-y-auto space-y-0.5 mt-1 pr-1">
+              {filteredChats.length === 0 && (
+                <p className="px-2.5 py-3 text-[12px] text-gray-400 m-0">
+                  {runs === null ? 'Backend not running.' : 'No runs yet. Start one from Live run.'}
+                </p>
+              )}
               {filteredChats.map(chat => {
                 const isActive = activeChatId === chat.id;
                 return (
@@ -252,21 +282,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Section */}
       <div className="p-2.5 border-t border-gray-100 space-y-2">
-        {!isCollapsed && (
-          <div className="p-2.5 rounded-xl border border-teal-200/80 bg-gradient-to-r from-teal-50/50 to-emerald-50/30">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[12px] font-semibold text-[#7b5cff]">Team trial · 7 days left</div>
-                <div className="text-[11px] text-gray-500 mt-0.5">
-                  Ends Sep 18, 2026 ·{' '}
-                  <span className="underline cursor-pointer hover:text-[#7b5cff]">Upgrade</span>
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-[#7b5cff] text-[16px] mt-0.5">schedule</span>
-            </div>
-          </div>
-        )}
-
         {/* User Workspace Profile */}
         <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-gray-100/70 transition-colors cursor-pointer">
           <div className="flex items-center gap-2.5 min-w-0">

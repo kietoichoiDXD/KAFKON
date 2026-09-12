@@ -75,6 +75,43 @@ def health():
     })
 
 
+@app.get("/api/ops/state")
+def ops_state():
+    from . import ops
+    try:
+        return jsonify(ops.cluster_state())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/api/ops/diagnose")
+def ops_diagnose():
+    from . import ops
+    try:
+        return jsonify(ops.diagnose())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/api/ops/apply")
+def ops_apply():
+    from . import ops
+    body = request.get_json(force=True)
+    try:
+        return jsonify(ops.apply_action(body["action_id"], body.get("approver", "operator")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.get("/api/ops/verify")
+def ops_verify():
+    from . import ops
+    try:
+        return jsonify(ops.verify())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.get("/api/runs")
 def runs():
     """Every analysis this backend actually performed, newest first."""

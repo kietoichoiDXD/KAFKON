@@ -1,12 +1,5 @@
-import React, { useState } from 'react';
-import { MODULES_STATUS } from '../data/mockData';
-
-const LABEL_COLOR: Record<string, string> = {
-  Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Inferred: 'bg-amber-50 text-amber-700 border-amber-200',
-  Assumed: 'bg-purple-50 text-purple-700 border-purple-200',
-  Blocked: 'bg-rose-50 text-rose-700 border-rose-200',
-};
+import React, { useEffect, useState } from 'react';
+import { get, Health, Run, LABEL_COLOR } from '../api';
 
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
@@ -24,8 +17,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [runs, setRuns] = useState<Run[] | null>(null);
+
+  useEffect(() => {
+    get<Health>('/api/health').then(setHealth);
+    get<Run[]>('/api/runs').then(setRuns);
+  }, []);
+
+  // A claim nobody answered is the thing actually waiting on a person.
+  const open = (runs ?? [])
+    .map(r => ({ title: r.title, blocked: r.evidence.filter(e => e.label === 'Blocked' || e.label === 'Assumed').length }))
+    .filter(r => r.blocked > 0);
   const [showIntegrations, setShowIntegrations] = useState(true);
-  const [showMascot, setShowMascot] = useState(true);
   const [modelMode, setModelMode] = useState('Light · Auto');
 
   // Starter prompts. They exist so a first-time visitor can press one instead of facing an
@@ -275,77 +279,68 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom Dashboard Cards (3 Columns) */}
+      {/* Three panels, all fed by the running backend. */}
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-4 mt-auto mb-6">
-        {/* Card 1: NEEDS YOU */}
-        <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm flex flex-col justify-between min-h-[190px]">
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            NEEDS YOU
-          </div>
-          <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
-            Nothing is waiting on you.
-          </div>
-        </div>
+        <section className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm flex flex-col min-h-[190px]">
+          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Needs you</h2>
+          {open.length === 0 ? (
+            <p className="flex-1 flex items-center justify-center text-[13px] text-gray-400 m-0">
+              {runs === null ? 'Backend not running' : 'No unanswered questions.'}
+            </p>
+          ) : (
+            <ul className="flex-1 space-y-2 list-none p-0 m-0">
+              {open.slice(0, 3).map((r, i) => (
+                <li key={i} className="text-[12px] text-gray-700 leading-snug">
+                  <span className="text-rose-600 font-semibold">{r.blocked}</span> open ·{' '}
+                  <span className="text-gray-500">{r.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-        {/* Card 2: MODULES */}
-        <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm min-h-[190px] flex flex-col">
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            MODULES
-          </div>
+        <section className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm min-h-[190px] flex flex-col">
+          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Connections</h2>
           <div className="space-y-2 flex-1">
-            {MODULES_STATUS.map((m, idx) => (
-              <div key={idx} className="flex items-center justify-between text-xs text-gray-600">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-400">
-                    {m.icon}
-                  </span>
-                  <span className="font-medium text-gray-700">{m.name}</span>
-                  {m.tag && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                      {m.tag}
-                    </span>
-                  )}
-                </div>
-                <span className="text-gray-400">{m.status}</span>
+            {(health
+              ? [
+                  ['Slack', health.slack, health.slack ? 'token loaded' : 'no token'],
+                  ['ClickUp', health.clickup, health.clickup ? 'list configured' : 'not configured'],
+                  ['Model', health.analysis !== 'local-deterministic', health.analysis],
+                  ['Exa', health.exa, health.exa ? 'key loaded' : 'no key'],
+                ]
+              : [['Backend', false, 'not running']]
+            ).map(([name, on, note]: any) => (
+              <div key={name} className="flex items-center justify-between text-[12px]">
+                <span className="flex items-center gap-2 font-medium text-gray-700">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${on ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                  {name}
+                </span>
+                <span className="text-gray-400 font-mono text-[11px]">{note}</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Card 3: AUTOMATION TODAY */}
-        <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm min-h-[190px] flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              AUTOMATION TODAY
-            </span>
-            <button
-              onClick={onNavigateToAutomations}
-              className="text-xs text-[#7b5cff] font-semibold hover:underline"
-            >
-              Manage
-            </button>
-          </div>
-          <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
-            Nothing is scheduled for today.
-          </div>
-        </div>
+        <section className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm min-h-[190px] flex flex-col">
+          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Recent runs</h2>
+          {!runs || runs.length === 0 ? (
+            <p className="flex-1 flex items-center justify-center text-[13px] text-gray-400 m-0">
+              {runs === null ? 'Backend not running' : 'No runs yet.'}
+            </p>
+          ) : (
+            <ul className="flex-1 space-y-2 list-none p-0 m-0">
+              {runs.slice(0, 3).map((r, i) => (
+                <li key={i} className="text-[12px] leading-snug">
+                  <span className="font-semibold text-gray-800">{r.invest}</span>
+                  <span className="text-gray-400"> · {r.skill} · </span>
+                  <span className="text-gray-500 font-mono text-[11px]">{r.at.slice(11, 16)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-
-      {/* Floating Mascot Widget */}
-      {showMascot && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-white rounded-full pl-2 pr-3 py-1.5 shadow-lg border border-gray-200 transition-all hover:scale-105">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-teal-400 to-emerald-500 flex items-center justify-center text-white text-xs font-bold">
-            🤖
-          </div>
-          <span className="text-xs font-bold text-gray-700">2/6</span>
-          <button
-            onClick={() => setShowMascot(false)}
-            className="text-gray-400 hover:text-gray-600 p-0.5 ml-1"
-          >
-            <span className="material-symbols-outlined text-[13px]">close</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 };
