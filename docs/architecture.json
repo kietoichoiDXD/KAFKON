@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ScribeBA — from a Slack argument to an audited ticket",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1240,
+      760
+    ],
+    "views": [
+      {
+        "id": "main-path",
+        "label": "The loop",
+        "focus": [
+          "slack",
+          "entry",
+          "api",
+          "redact",
+          "cascade",
+          "scorer",
+          "clickup"
+        ],
+        "note": "Read the thread, mask it, reason over it, label every claim, file the ticket, link back."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "slack",
+      "type": "external",
+      "label": "Slack thread",
+      "sublabel": "the argument",
+      "pos": [
+        40,
+        220
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "entry",
+      "type": "frontend",
+      "label": "ScribeBA",
+      "sublabel": "CLI + Studio",
+      "pos": [
+        250,
+        220
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Flask API",
+      "sublabel": "backend/api.py",
+      "pos": [
+        460,
+        220
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "redact",
+      "type": "security",
+      "label": "Redaction",
+      "sublabel": "masks secrets",
+      "pos": [
+        670,
+        220
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "cascade",
+      "type": "backend",
+      "label": "Model cascade",
+      "sublabel": "OpenRouter → Nebius → local",
+      "pos": [
+        900,
+        220
+      ],
+      "size": [
+        200,
+        68
+      ]
+    },
+    {
+      "id": "scorer",
+      "type": "backend",
+      "label": "INVEST scorer",
+      "sublabel": "4 evidence labels",
+      "pos": [
+        670,
+        500
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "exa",
+      "type": "external",
+      "label": "Exa",
+      "sublabel": "grounding",
+      "pos": [
+        940,
+        500
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "skills",
+      "type": "database",
+      "label": "Skill files",
+      "sublabel": "team rules",
+      "pos": [
+        670,
+        650
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "clickup",
+      "type": "external",
+      "label": "ClickUp",
+      "sublabel": "audited ticket",
+      "pos": [
+        250,
+        500
+      ],
+      "size": [
+        150,
+        68
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "read",
+      "from": "slack",
+      "to": "entry",
+      "label": "read thread",
+      "variant": "emphasis"
+    },
+    {
+      "id": "invoke",
+      "from": "entry",
+      "to": "api",
+      "label": "run"
+    },
+    {
+      "id": "transcript",
+      "from": "api",
+      "to": "redact",
+      "label": "transcript"
+    },
+    {
+      "id": "masked",
+      "from": "redact",
+      "to": "cascade",
+      "label": "masked text",
+      "variant": "emphasis"
+    },
+    {
+      "id": "labelled",
+      "from": "cascade",
+      "to": "scorer",
+      "label": "labelled claims",
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "rules",
+      "from": "skills",
+      "to": "scorer",
+      "label": "thresholds",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "ground",
+      "from": "scorer",
+      "to": "exa",
+      "label": "lookup",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    },
+    {
+      "id": "file",
+      "from": "scorer",
+      "to": "clickup",
+      "label": "create task",
+      "variant": "emphasis"
+    },
+    {
+      "id": "reply",
+      "from": "clickup",
+      "to": "slack",
+      "label": "reply in thread",
+      "fromSide": "left",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Why it belongs in the thread",
+      "items": [
+        "Reads who said what, who agreed, and who stayed silent",
+        "A field nobody answered becomes Blocked, not invented",
+        "The clarifying question is asked in the channel, not guessed"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "The cascade, in order",
+      "items": [
+        "1. OpenRouter anthropic/claude-sonnet-5 — answers today",
+        "2. OpenRouter alternates, then Nebius Qwen3-30B on 402 / 429 / timeout",
+        "3. Anthropic direct, then the deterministic local engine as last resort"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Verified on 2026-09-12",
+      "items": [
+        "Slack read and reply, ClickUp ticket, OpenRouter analysis — all live",
+        "Every run prints the engine that answered",
+        "Kill the OpenRouter key and Nebius still returns a scored story"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Nothing leaves unmasked",
+      "items": [
+        "Slack, GitHub, OpenAI, ClickUp and AWS tokens",
+        "Card numbers, IPs, phone numbers, email local parts",
+        "Each run reports what it masked"
+      ]
+    }
+  ]
+}
