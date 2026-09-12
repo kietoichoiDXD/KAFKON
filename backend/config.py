@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     clickup_team_id: Optional[str] = Field(default=None, alias="CLICKUP_TEAM_ID")
     clickup_space_id: Optional[str] = Field(default=None, alias="CLICKUP_SPACE_ID")
     clickup_list_id: Optional[str] = Field(default=None, alias="CLICKUP_LIST_ID")
+    clickup_client_id: Optional[str] = Field(default=None, alias="CLICKUP_CLIENT_ID")
+    clickup_client_secret: Optional[str] = Field(default=None, alias="CLICKUP_CLIENT_SECRET")
 
     # Slack
     slack_bot_token: Optional[str] = Field(default=None, alias="SLACK_BOT_TOKEN")
