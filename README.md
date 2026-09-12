@@ -87,6 +87,10 @@ a Service with no endpoints but proposes nothing when the selector is already co
 scaled-to-zero looks identical from there, and patching a correct selector would hide the real
 cause.
 
+**Drills are declared too.** A `faults:` block lists scenarios the console may inject, each one
+reversible by a check above — so the Incidents screen has a **Trigger fault** button that can only
+break what it can fix, and refuses anything not in the file by name. `demo/DEMO.md` is the script.
+
 **Approvals go where the team already watches.** Declare channels under `notifications:`; Slack and
 Discord ship today. If none is declared, whatever has credentials is used. If no channel can be
 reached the request fails loudly rather than reporting a request nobody received.

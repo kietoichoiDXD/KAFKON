@@ -85,6 +85,27 @@ def ops_environments():
         return jsonify({"error": str(e)}), 500
 
 
+@app.get("/api/ops/faults")
+def ops_faults():
+    """Drill scenarios this environment declares. Empty for environments without them."""
+    from . import ops
+    try:
+        return jsonify(ops.faults(request.args.get("environment")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/api/ops/trigger")
+def ops_trigger():
+    """Inject one declared fault. Refuses anything not written in integrations.yaml."""
+    from . import ops
+    body = request.get_json(force=True)
+    try:
+        return jsonify(ops.trigger(body["fault"], body.get("environment")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.get("/api/ops/state")
 def ops_state():
     from . import ops
