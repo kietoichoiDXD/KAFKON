@@ -22,8 +22,8 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_routing_model: str = Field(default="claude-3-5-haiku-20241022", alias="ANTHROPIC_ROUTING_MODEL")
-    anthropic_reasoning_model: str = Field(default="claude-3-7-sonnet-20250219", alias="ANTHROPIC_REASONING_MODEL")
+    anthropic_routing_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_ROUTING_MODEL")
+    anthropic_reasoning_model: str = Field(default="claude-opus-5", alias="ANTHROPIC_REASONING_MODEL")
 
     # ClickUp
     clickup_api_key: Optional[str] = Field(default=None, alias="CLICKUP_API_KEY")
@@ -47,8 +47,8 @@ class Settings(BaseSettings):
 
     # Sponsor Integrations: OpenRouter & Fallback
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
-    openrouter_model: str = Field(default="anthropic/claude-3.7-sonnet", alias="OPENROUTER_MODEL")
-    openrouter_triage_model: str = Field(default="anthropic/claude-3.5-haiku", alias="OPENROUTER_TRIAGE_MODEL")
+    openrouter_model: str = Field(default="anthropic/claude-sonnet-5", alias="OPENROUTER_MODEL")
+    openrouter_triage_model: str = Field(default="anthropic/claude-haiku-4.5", alias="OPENROUTER_TRIAGE_MODEL")
 
     # Sponsor Integrations: Exa Neural Web Search
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")

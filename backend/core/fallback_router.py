@@ -31,31 +31,27 @@ class ModelFallbackRouter:
         [GPT -> LUNA -> SONET -> 5 (GPT-5/o3) -> GPT SOL -> Local Engine]
     """
 
-    # Model catalog per tier mapped to user keywords: [gpt, luna, sonet, 5, gpt sol]
+    # Every id below was checked against GET https://openrouter.ai/api/v1/models on 2026-09-12.
+    # Do not add an id without checking it there first: an unknown id 404s, the cascade eats the
+    # error, and the run silently degrades to the local engine.
     TIER_MODEL_MAP: Dict[FallbackTier, List[Dict[str, str]]] = {
         FallbackTier.LOW: [
-            {"alias": "openrouter_primary", "model": "anthropic/claude-3.5-haiku", "provider": "openrouter"},
-            {"alias": "gpt",                "model": "gpt-4o-mini",                 "provider": "openai"},
-            {"alias": "luna",               "model": "meta-llama/llama-3.2-3b-instruct", "provider": "openrouter"},
-            {"alias": "sonet",              "model": "claude-3-5-haiku-20241022",   "provider": "anthropic"},
-            {"alias": "5",                  "model": "gpt-4o-mini",                 "provider": "openai"},
-            {"alias": "gpt sol",            "model": "upstage/solar-10.7b-instruct","provider": "openrouter"},
+            {"alias": "openrouter_primary", "model": "anthropic/claude-haiku-4.5",  "provider": "openrouter"},
+            {"alias": "luna",               "model": "meta-llama/llama-3.1-8b-instruct", "provider": "openrouter"},
+            {"alias": "sol",                "model": "qwen/qwen-2.5-7b-instruct",   "provider": "openrouter"},
+            {"alias": "anthropic_direct",   "model": "claude-haiku-4-5",            "provider": "anthropic"},
         ],
         FallbackTier.MEDIUM: [
-            {"alias": "openrouter_primary", "model": "anthropic/claude-3.7-sonnet", "provider": "openrouter"},
-            {"alias": "gpt",                "model": "gpt-4o",                      "provider": "openai"},
-            {"alias": "luna",               "model": "meta-llama/llama-3.3-70b-instruct", "provider": "openrouter"},
-            {"alias": "sonet",              "model": "claude-3-7-sonnet-20250219",  "provider": "anthropic"},
-            {"alias": "5",                  "model": "o3-mini",                     "provider": "openai"},
-            {"alias": "gpt sol",            "model": "upstage/solar-pro",           "provider": "openrouter"},
+            {"alias": "openrouter_primary", "model": "anthropic/claude-sonnet-5",   "provider": "openrouter"},
+            {"alias": "luna",               "model": "meta-llama/llama-3.1-70b-instruct", "provider": "openrouter"},
+            {"alias": "sol",                "model": "deepseek/deepseek-chat-v3.1", "provider": "openrouter"},
+            {"alias": "anthropic_direct",   "model": "claude-sonnet-5",             "provider": "anthropic"},
         ],
         FallbackTier.HIGH: [
-            {"alias": "openrouter_primary", "model": "anthropic/claude-3.7-sonnet:thinking", "provider": "openrouter"},
-            {"alias": "gpt",                "model": "gpt-4o",                      "provider": "openai"},
+            {"alias": "openrouter_primary", "model": "anthropic/claude-opus-5",     "provider": "openrouter"},
             {"alias": "luna",               "model": "deepseek/deepseek-r1",        "provider": "openrouter"},
-            {"alias": "sonet",              "model": "claude-3-7-sonnet-20250219",  "provider": "anthropic"},
-            {"alias": "5",                  "model": "o3-mini",                     "provider": "openai"},
-            {"alias": "gpt sol",            "model": "upstage/solar-pro",           "provider": "openrouter"},
+            {"alias": "sol",                "model": "google/gemini-2.5-pro",       "provider": "openrouter"},
+            {"alias": "anthropic_direct",   "model": "claude-opus-5",               "provider": "anthropic"},
         ]
     }
 
