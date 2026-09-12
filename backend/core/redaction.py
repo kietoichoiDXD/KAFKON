@@ -20,7 +20,7 @@ PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("BEARER", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}")),
     ("CARD", re.compile(r"\b(?:\d[ -]?){13,19}\b")),
     ("IP", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
-    ("PHONE", re.compile(r"(?<![\w.])(?:\+\d{1,3}[ .-]?)?0\d{8,9}(?![\w.])|(?<![\w.])\d{3}[ .-]\d{3}[ .-]\d{4}(?![\w.])")),
+    ("PHONE", re.compile(r"(?<![\w.])(?:\+\d{1,3}[ .-]?)?0\d{8,9}(?!\d)|(?<![\w.])\d{3}[ .-]\d{3}[ .-]\d{4}(?!\d)")),
     ("EMAIL_USER", re.compile(r"\b[A-Za-z0-9._%+-]+(?=@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")),
 ]
 
