@@ -1,0 +1,15 @@
+# Core Dependencies
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+pyyaml>=6.0.1
+httpx>=0.27.0
+python-dotenv>=1.0.1
+
+# CLI & Terminal Formatting
+click>=8.1.7
+rich>=13.7.0
+
+# Optional Live Platform Integrations
+slack-bolt>=1.18.0
+slack-sdk>=3.27.0
+discord.py>=2.3.2

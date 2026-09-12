@@ -1,0 +1,31 @@
+name: default
+version: "1.0.0"
+description: "Standard Agile Scrum template for engineering teams"
+team_type: "standard_scrum"
+
+formatting:
+  title_prefix: "[Story]"
+  user_story_format: "As a {user}, I want {action}, So that {benefit}"
+  acceptance_criteria_format: "Given {context}, When {event}, Then {outcome}"
+
+required_fields:
+  - user_story
+  - acceptance_criteria
+  - priority
+  - business_value
+
+invest_thresholds:
+  overall_min_score: 75
+  require_independent: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: true
+  ask_on_blocked: true
+  max_questions_per_round: 1
+
+clickup_mapping:
+  priority: "normal"
+  tags:
+    - "agile"
+    - "scribeba"

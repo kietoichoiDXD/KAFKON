@@ -1,0 +1,32 @@
+name: startup_lean
+version: "1.2.0"
+description: "High-velocity lean startup template emphasizing MVP scope and quick hypothesis testing"
+team_type: "early_stage_startup"
+
+formatting:
+  title_prefix: "[MVP]"
+  user_story_format: "As an {early_adopter}, I need {solution}, In order to {pain_relieved}"
+  acceptance_criteria_format: "Scenario: {event} -> Expected: {outcome}"
+
+required_fields:
+  - user_story
+  - hypothesis
+  - success_metric
+  - acceptance_criteria
+
+invest_thresholds:
+  overall_min_score: 65
+  require_small: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: false  # In startup mode, accept reasonable assumptions with [Assumed] tag
+  ask_on_blocked: true   # Only halt on critical blockers
+  max_questions_per_round: 1
+
+clickup_mapping:
+  priority: "high"
+  tags:
+    - "mvp"
+    - "lean"
+    - "fast-follow"
