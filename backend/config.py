@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Slack
     slack_bot_token: Optional[str] = Field(default=None, alias="SLACK_BOT_TOKEN")
+    slack_user_token: Optional[str] = Field(default=None, alias="SLACK_USER_TOKEN")
     slack_app_token: Optional[str] = Field(default=None, alias="SLACK_APP_TOKEN")
     slack_signing_secret: Optional[str] = Field(default=None, alias="SLACK_SIGNING_SECRET")
 
