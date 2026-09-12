@@ -21,6 +21,7 @@ from .core.models import ThreadContext, ChatMessage, EvidenceLabel
 from .core.analyzer import ScribeBAAnalyzer
 from .core.skills import SkillManager
 from .integrations.clickup_client import ClickUpClient
+from .integrations.exa_client import ExaClient
 from .config import settings
 
 def load_thread_from_file(file_path: str) -> ThreadContext:
@@ -260,8 +261,72 @@ def telegram_cmd(token: Optional[str]):
 
     asyncio.run(adapter.start_polling(analyzer, clickup, sm))
 
+@cli.command("exa-test")
+@click.option("--feature", default="Google Workspace OAuth 2.0 PKCE", help="Feature name or architectural concept to ground.")
+def exa_test_cmd(feature: str):
+    """Execute Exa Neural Search Grounding & AI Test Case Verification."""
+    if HAS_RICH:
+        console.rule("[bold magenta]🔍 Exa Neural Search — AI Test Grounding[/bold magenta]")
+        console.print(f"🎯 Feature Subject: [bold cyan]{feature}[/bold cyan]")
+        console.print("⏳ Querying Exa API with canonical highlights...\n")
+
+    client = ExaClient()
+    spec = asyncio.run(client.ground_ai_test_spec(feature))
+
+    if HAS_RICH:
+        from rich.panel import Panel
+        from rich.table import Table
+
+        table = Table(title="🛡️ Grounded Security & RFC Test Scenarios", show_header=True)
+        table.add_column("#", style="dim", width=4)
+        table.add_column("AI Test Assertion", style="bold green")
+
+        for idx, scenario in enumerate(spec.test_scenarios, 1):
+            table.add_row(str(idx), scenario)
+
+        console.print(table)
+        console.print()
+
+        citations_str = "\n".join([f"• [link={c}]{c}[/link]" for c in spec.citations])
+        console.print(Panel(
+            f"[bold]Standard Applied:[/bold] {spec.rfc_or_standard}\n"
+            f"[bold]Verified Live:[/bold] {'🟢 Yes (Exa API Live)' if spec.verified_live else '🟡 Offline Deterministic Cache'}\n\n"
+            f"[bold]Exa Grounding Citations:[/bold]\n{citations_str}",
+            title="📚 Exa Knowledge Verification Provenance",
+            border_style="magenta"
+        ))
+    else:
+        print(f"Grounded standard: {spec.rfc_or_standard}")
+        for s in spec.test_scenarios:
+            print(f"- {s}")
+
+
+@cli.command("exa-search")
+@click.argument("query")
+@click.option("--limit", default=3, help="Number of results to retrieve (default 3).")
+def exa_search_cmd(query: str, limit: int):
+    """Execute raw canonical Exa semantic search with highlights."""
+    if HAS_RICH:
+        console.rule("[bold magenta]🔍 Exa Semantic Search[/bold magenta]")
+        console.print(f"Query: [bold cyan]{query}[/bold cyan]\n")
+
+    client = ExaClient()
+    results = asyncio.run(client.search(query=query, num_results=limit))
+
+    for idx, r in enumerate(results, 1):
+        if HAS_RICH:
+            hl_str = "\n> ".join(r.highlights[:2])
+            console.print(f"[bold green]#{idx} {r.title}[/bold green]")
+            console.print(f"   [link={r.url}]{r.url}[/link]")
+            if hl_str:
+                console.print(f"   > [italic dim]{hl_str}[/italic dim]\n")
+        else:
+            print(f"#{idx} {r.title} ({r.url})")
+
+
 def main():
     cli()
 
 if __name__ == "__main__":
     main()
+
