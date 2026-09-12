@@ -5,13 +5,14 @@ from .config import settings
 from .core.analyzer import ScribeBAAnalyzer
 from .core.skills import SkillManager
 from .platforms.slack_adapter import SlackAdapter
+from .platforms.telegram_adapter import TelegramAdapter
 from .integrations.clickup_client import ClickUpClient
 
 def run_slack_bot():
     """Start the Slack Bolt application in Socket Mode if tokens are configured."""
     if not settings.slack_bot_token or not settings.slack_app_token:
         print("[ScribeBA] Slack tokens not detected. Running in CLI / Local Orchestrator mode.")
-        print("Tip: Run 'python -m src.cli demo' or 'python -m src.cli analyze --help' to test.")
+        print("Tip: Run 'python -m backend.cli demo' or 'python -m backend.cli analyze --help' to test.")
         return
 
     try:
@@ -57,8 +58,20 @@ def run_slack_bot():
     except ImportError:
         print("[ScribeBA] slack-bolt not installed. Install via 'pip install slack-bolt' for live mode.")
 
+def run_telegram_bot():
+    """Start ScribeBA Telegram Bot runner."""
+    print("[ScribeBA] Starting Telegram Agent Engine...")
+    telegram_adapter = TelegramAdapter()
+    analyzer = ScribeBAAnalyzer()
+    clickup_client = ClickUpClient()
+    skill_manager = SkillManager()
+
+    asyncio.run(telegram_adapter.start_polling(analyzer, clickup_client, skill_manager))
+
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] != "bot":
+    if len(sys.argv) > 1 and sys.argv[1] == "telegram":
+        run_telegram_bot()
+    elif len(sys.argv) > 1 and sys.argv[1] != "bot":
         # Delegate to CLI
         from .cli import cli
         cli()

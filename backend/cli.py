@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 import click
 
 try:
@@ -231,6 +232,22 @@ def demo_cmd():
             border_style="green"
         ))
         console.rule("[bold cyan]Demo Completed[/bold cyan]")
+
+@cli.command("telegram")
+@click.option("--token", default=None, help="Telegram Bot Token (or set TELEGRAM_BOT_TOKEN in .env).")
+def telegram_cmd(token: Optional[str]):
+    """Launch ScribeBA Telegram Bot with long-polling."""
+    from .platforms.telegram_adapter import TelegramAdapter
+    if HAS_RICH:
+        console.rule("[bold cyan]ScribeBA — Telegram Bot Platform[/bold cyan]")
+        console.print("🤖 [bold green]Starting Telegram Adapter for Group & Topic Discussion...[/bold green]\n")
+
+    adapter = TelegramAdapter(bot_token=token)
+    analyzer = ScribeBAAnalyzer()
+    clickup = ClickUpClient()
+    sm = SkillManager()
+
+    asyncio.run(adapter.start_polling(analyzer, clickup, sm))
 
 def main():
     cli()
