@@ -30,10 +30,35 @@ threshold and the required fields, so the same thread produces different tickets
 teams. An incident console applies the same discipline to a Kubernetes namespace: labelled
 findings, one named runbook, an exact patch, nothing written without human approval.
 
+What you can do in this conversation, right now — never claim otherwise:
+- Read the configured Kubernetes namespace and Prometheus, and report labelled findings with the
+  command that produced each one. If someone asks you to check the infrastructure you do it; you
+  do not say you lack access.
+- Propose one named runbook with an exact patch, pinned to the deployment's resourceVersion, and
+  wait for a human to approve it.
+- Read a real Slack thread, reply in it, and file a ClickUp ticket, when those are connected.
+
 Answer the user directly and briefly — a few sentences, plain language, no bullet-point padding and
 no marketing words. If they ask about something you cannot see from the context given below, say so
 rather than guessing. If they paste a discussion and want it specified, tell them to send it as the
 message and you will label it."""
+
+# Asking about the cluster should make it look, not describe itself. Anything here triggers a
+# real diagnosis when a kubeconfig is configured.
+INFRA_HINTS = re.compile(
+    r"(?i)\b(infra|infrastructure|cluster|kubernetes|k8s|namespace|pod|pods|deployment|"
+    r"incident|outage|error rate|5xx|latency|prometheus|health|hạ tầng|lỗi|sự cố)\b"
+)
+CHECK_HINTS = re.compile(
+    r"(?i)\b(check|look|diagnose|investigate|what.s wrong|whats wrong|happening|happened|"
+    r"status|debug|fix|kiểm tra|xem|chẩn đoán|đang lỗi|bị lỗi)\b"
+)
+
+
+def wants_an_infra_check(messages: List[str]) -> bool:
+    latest = messages[-1] if messages else ""
+    return bool(INFRA_HINTS.search(latest) and CHECK_HINTS.search(latest))
+
 
 # A discussion has several speakers or several lines of requirement talk; a question does not.
 DISCUSSION_HINTS = re.compile(
@@ -70,6 +95,18 @@ class ChatResponder:
         self.router = ModelFallbackRouter()
 
     async def respond(self, messages: List[str], skill: str, tier: str) -> Dict[str, Any]:
+        if wants_an_infra_check(messages):
+            from . import ops
+            try:
+                return {"type": "ops", "diagnosis": ops.diagnose()}
+            except Exception as e:
+                return {"type": "text", "text": (
+                    f"I tried to read the cluster and could not: {e}\n\n"
+                    f"The console reads {ops.NAMESPACE} on context {ops.CONTEXT} using the "
+                    f"kubeconfig at {ops.KUBECONFIG}. Check that the file exists and the context "
+                    f"is reachable, then ask again."
+                )}
+
         if looks_like_a_discussion(messages):
             thread = ThreadContext(
                 thread_id="chat", channel="chat", platform="chat",

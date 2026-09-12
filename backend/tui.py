@@ -121,6 +121,10 @@ class Session:
         if out["type"] == "analysis":
             self.last_result = out["result"]
             self.show_result(out["result"])
+        elif out["type"] == "ops":
+            # Asking in a sentence gets the same answer as typing /ops.
+            self.show_diagnosis(out["diagnosis"])
+            console.print("[dim]Run /ops to approve the fix.[/dim]")
         else:
             console.print(Panel(Text(out["text"]), border_style="cyan", padding=(1, 2)))
 
@@ -164,16 +168,7 @@ class Session:
         else:
             console.print("[yellow]Not filed — check CLICKUP_API_KEY and CLICKUP_LIST_ID.[/yellow]")
 
-    async def ops(self) -> None:
-        from . import ops as opsmod
-
-        with console.status("[dim]reading the cluster…[/dim]", spinner="dots"):
-            try:
-                d = opsmod.diagnose()
-            except Exception as e:
-                console.print(f"[red]Could not read the cluster: {e}[/red]")
-                return
-
+    def show_diagnosis(self, d) -> None:
         m = d["state"]["metrics"]
         rate = "—" if m["error_rate"] is None else f"{m['error_rate'] * 100:.2f}%"
         console.print(f"[dim]{d['state']['namespace']} · error rate[/dim] "
@@ -187,6 +182,17 @@ class Session:
             claim.append(f"\n{e['source']}", style="dim")
             table.add_row(Text(e["label"], style=LABEL_STYLE.get(e["label"], "white")), claim)
         console.print(Panel(table, border_style="cyan", title="[dim]evidence[/dim]", padding=(1, 2)))
+
+    async def ops(self) -> None:
+        from . import ops as opsmod
+
+        with console.status("[dim]reading the cluster…[/dim]", spinner="dots"):
+            try:
+                d = opsmod.diagnose()
+            except Exception as e:
+                console.print(f"[red]Could not read the cluster: {e}[/red]")
+                return
+        self.show_diagnosis(d)
 
         p = d["proposal"]
         if not p:

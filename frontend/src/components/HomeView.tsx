@@ -13,6 +13,7 @@ type Turn =
   | { role: 'you'; text: string }
   | { role: 'agent'; result: any; skill: string; tier: string }
   | { role: 'reply'; text: string }
+  | { role: 'ops'; diag: any }
   | { role: 'error'; text: string };
 
 const SUGGESTIONS = [
@@ -119,8 +120,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error ?? 'Request failed');
       // A pasted discussion comes back as a labelled analysis; a question comes back as prose.
-      setTurns(t => [...t, data.type === 'text'
-        ? { role: 'reply', text: data.text }
+      setTurns(t => [...t,
+        data.type === 'text' ? { role: 'reply', text: data.text }
+        : data.type === 'ops' ? { role: 'ops', diag: data }
         : { role: 'agent', result: data, skill, tier }]);
     } catch (e: any) {
       setTurns(t => [...t, {
@@ -223,6 +225,37 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
                 </div>
               ) : t.role === 'agent' ? (
                 <Analysis key={i} result={t.result} skill={t.skill} tier={t.tier} />
+              ) : t.role === 'ops' ? (
+                <div key={i} className="bg-white rounded-2xl border border-gray-200/90 p-5 space-y-3 shadow-sm">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="text-[15.5px] font-semibold text-gray-900 m-0">
+                      {t.diag.state.namespace}
+                    </h3>
+                    <span className={`text-[13px] font-semibold ${(t.diag.state.metrics.error_rate ?? 0) > 0.02 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      error rate {t.diag.state.metrics.error_rate === null ? '—' : `${(t.diag.state.metrics.error_rate * 100).toFixed(2)}%`}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {t.diag.evidence.map((e: any, j: number) => (
+                      <div key={j} className="flex items-start gap-2 text-[12.5px]">
+                        <span className={`px-1.5 py-0.5 rounded border shrink-0 ${LABEL_COLOR[e.label] ?? 'bg-gray-50 border-gray-200'}`}>
+                          {e.label}
+                        </span>
+                        <span className="text-gray-700">
+                          <b>{e.field}</b>: {e.value}
+                          <span className="block text-gray-400 font-mono text-[11px] mt-0.5">{e.source}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {t.diag.proposal && (
+                    <p className="text-[12.5px] text-gray-600 m-0">
+                      Proposed <b>{t.diag.proposal.runbook}</b> on {t.diag.proposal.target} ·{' '}
+                      <span className="font-mono text-[11.5px]">{t.diag.proposal.action_id}</span> —
+                      open <b>Incidents</b> to see the exact patch and approve it.
+                    </p>
+                  )}
+                </div>
               ) : t.role === 'reply' ? (
                 <div key={i} className="bg-white rounded-2xl border border-gray-200/90 px-5 py-4 shadow-sm">
                   <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap m-0">{t.text}</p>
