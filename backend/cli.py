@@ -65,11 +65,21 @@ def load_thread_from_file(file_path: str) -> ThreadContext:
         messages=messages
     )
 
-@click.group()
+@click.group(invoke_without_command=True)
+@click.pass_context
 @click.version_option(version="0.1.0", prog_name="ScribeBA CLI")
-def cli():
+def cli(ctx):
     """ScribeBA — AI Business Analyst Agent with Evidence Labeling & Multi-Platform MCP."""
-    pass
+    if ctx.invoked_subcommand is None:
+        from .interactive_cli import start_interactive_app
+        start_interactive_app()
+
+@cli.command("interactive")
+def interactive_cmd():
+    """Launch full interactive ScribeBA Terminal Application."""
+    from .interactive_cli import start_interactive_app
+    start_interactive_app()
+
 
 @cli.command("analyze")
 @click.option("--file", "-f", default="demo/sample_conversation.md", help="Path to thread transcript markdown file.")
