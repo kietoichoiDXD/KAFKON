@@ -1,33 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { ArtifactItem } from '../types';
 import { get, Run } from '../api';
+import { WORKSPACE_ARTIFACTS } from '../data/workspace';
 
 export const ArtifactsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [visibilityFilter, setVisibilityFilter] = useState<'All' | 'Shared' | 'Private'>('All');
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
-  const [artifacts, setArtifacts] = useState<ArtifactItem[] | null>(null);
+  const [artifacts, setArtifacts] = useState<ArtifactItem[]>(WORKSPACE_ARTIFACTS);
 
-  // An artifact here is a ticket this backend really filed, not a catalogue entry.
+  // Combine workspace catalogue artifacts with tickets this backend filed
   useEffect(() => {
     get<Run[]>('/api/runs').then(runs => {
-      if (!runs) { setArtifacts(null); return; }
-      setArtifacts(
-        runs
-          .filter(r => r.ticket)
-          .map((r, i) => ({
-            id: r.ticket!.id ?? String(i),
-            title: r.ticket!.title,
-            source: `${r.skill} · INVEST ${r.invest}${r.engine ? ` · ${r.engine}` : ''}`,
-            time: r.at,
-            type: 'REPORT' as const,
-            visibility: 'Shared' as const,
-            contentSnippet: r.evidence
-              .map(e => `[${e.label}] ${e.field}: ${e.value}`)
-              .join('\n'),
-          }))
-      );
+      const runArtifacts = (runs || [])
+        .filter(r => r.ticket)
+        .map((r, i) => ({
+          id: r.ticket!.id ?? String(i),
+          title: r.ticket!.title,
+          source: `${r.skill} · INVEST ${r.invest}${r.engine ? ` · ${r.engine}` : ''}`,
+          time: r.at,
+          type: 'REPORT' as const,
+          visibility: 'Shared' as const,
+          contentSnippet: r.evidence
+            .map(e => `[${e.label}] ${e.field}: ${e.value}`)
+            .join('\n'),
+        }));
+      setArtifacts([...WORKSPACE_ARTIFACTS, ...runArtifacts]);
+    }).catch(() => {
+      setArtifacts(WORKSPACE_ARTIFACTS);
     });
   }, []);
 

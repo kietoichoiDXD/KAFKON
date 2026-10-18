@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { get, Health, Run, LABEL_COLOR } from '../api';
+import { API } from '../api';
 
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
@@ -115,7 +116,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       text,
     ].flatMap(m => m.split('\n').filter(l => l.trim()));
     try {
-      const resp = await fetch('http://localhost:8000/api/chat', {
+      const resp = await fetch(`${API}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction }),
@@ -145,7 +146,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   // Incidents console uses. A sentence never authorises the write on its own.
   const applyProposal = async (index: number, actionId: string) => {
     try {
-      const r = await fetch('http://localhost:8000/api/ops/apply', {
+      const r = await fetch(`${API}/api/ops/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action_id: actionId, approver: 'operator' }),
@@ -239,7 +240,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   if (started) {
     return (
       <div className="flex-1 h-screen flex flex-col"
-           style={{ background: 'radial-gradient(900px 380px at 50% -18%, rgba(255,95,158,0.10), transparent 60%), #fdf7fb' }}>
+           style={{ background: 'radial-gradient(900px 380px at 50% -18%, rgba(255,95,158,0.07), transparent 60%), #ffffff' }}>
         <div className="flex-1 overflow-y-auto px-6 pt-8">
           <div className="w-full max-w-3xl mx-auto space-y-4 pb-6">
             {turns.map((t, i) =>
@@ -347,8 +348,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       className="flex-1 h-screen overflow-y-auto flex flex-col items-center justify-start p-6 relative"
       style={{
         background:
-          'radial-gradient(1100px 480px at 50% -12%, rgba(255,95,158,0.16), transparent 62%),' +
-          'radial-gradient(900px 420px at 92% 8%, rgba(123,92,255,0.14), transparent 60%), #fdf7fb',
+          'radial-gradient(1100px 480px at 50% -12%, rgba(255,95,158,0.10), transparent 62%),' +
+          'radial-gradient(900px 420px at 92% 8%, rgba(123,92,255,0.09), transparent 60%), #ffffff',
       }}
     >
       <div className="w-full max-w-3xl pt-12 pb-6 flex flex-col items-center">

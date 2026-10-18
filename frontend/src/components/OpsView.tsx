@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const API = 'http://localhost:8000';
+import { API } from '../api';
 
 const LABEL_COLOR: Record<string, string> = {
   Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -47,7 +47,7 @@ export function OpsView() {
   const [channel, setChannel] = useState('');
   const [notified, setNotified] = useState<any>(null);
   const [envs, setEnvs] = useState<any[]>([]);
-  const [env, setEnv] = useState<string>('');
+  const [env, setEnv] = useState<string>('aiops-lab');
   const [faults, setFaults] = useState<any[]>([]);
   const [fault, setFault] = useState<string>('');
   const [triggered, setTriggered] = useState<any>(null);
@@ -103,7 +103,8 @@ export function OpsView() {
   const run = async (what: 'diagnose' | 'verify') => {
     setBusy(what); setError(null);
     try {
-      const r = await fetch(`${API}/api/ops/${what}?environment=${encodeURIComponent(env)}`);
+      const targetEnv = env || 'aiops-lab';
+      const r = await fetch(`${API}/api/ops/${what}?environment=${encodeURIComponent(targetEnv)}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); setNotified(null); }

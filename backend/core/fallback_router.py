@@ -57,6 +57,7 @@ class ModelFallbackRouter:
     TIER_MODEL_MAP: Dict[FallbackTier, List[Dict[str, str]]] = {
         FallbackTier.LOW: [
             {"alias": "openrouter_primary", "model": "anthropic/claude-haiku-4.5",  "provider": "openrouter"},
+            {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-8b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "qwen/qwen-2.5-7b-instruct",   "provider": "openrouter"},
             {"alias": "nebius",             "model": "",                            "provider": "nebius"},
@@ -64,6 +65,7 @@ class ModelFallbackRouter:
         ],
         FallbackTier.MEDIUM: [
             {"alias": "openrouter_primary", "model": "anthropic/claude-sonnet-5",   "provider": "openrouter"},
+            {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-70b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "deepseek/deepseek-chat-v3.1", "provider": "openrouter"},
             {"alias": "nebius",             "model": "",                            "provider": "nebius"},
@@ -71,6 +73,7 @@ class ModelFallbackRouter:
         ],
         FallbackTier.HIGH: [
             {"alias": "openrouter_primary", "model": "anthropic/claude-opus-5",     "provider": "openrouter"},
+            {"alias": "gemini_pro",         "model": "gemini-2.5-pro",              "provider": "gemini"},
             {"alias": "luna",               "model": "deepseek/deepseek-r1",        "provider": "openrouter"},
             {"alias": "sol",                "model": "google/gemini-2.5-pro",       "provider": "openrouter"},
             {"alias": "nebius",             "model": "",                            "provider": "nebius"},
@@ -110,7 +113,13 @@ class ModelFallbackRouter:
         audit_trail: List[Dict[str, Any]] = []
 
         # If running in explicit local mode without any API keys, skip straight to local
-        has_any_key = bool(settings.openrouter_api_key or settings.openai_api_key or settings.anthropic_api_key)
+        has_any_key = bool(
+            settings.openrouter_api_key
+            or settings.gemini_api_key
+            or settings.openai_api_key
+            or settings.anthropic_api_key
+            or settings.nebius_api_key
+        )
         if settings.scribeba_mode == "local" and not has_any_key:
             audit_trail.append({
                 "step": 1,
@@ -136,6 +145,16 @@ class ModelFallbackRouter:
 
                         result = await self._call_openrouter(client, model_id, system_prompt, user_prompt)
                         audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "success", "provider": "openrouter"})
+                        return result, audit_trail
+
+                    elif provider == "gemini":
+                        if not settings.gemini_api_key:
+                            audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "skipped", "reason": "No GEMINI_API_KEY"})
+                            continue
+
+                        model_id = model_id or settings.gemini_model
+                        result = await self._call_gemini(client, model_id, system_prompt, user_prompt)
+                        audit_trail.append({"step": idx, "alias": alias, "model": model_id, "status": "success", "provider": "gemini_direct"})
                         return result, audit_trail
 
                     elif provider == "openai":
@@ -215,6 +234,11 @@ class ModelFallbackRouter:
                         return await self._text_openai_shape(
                             client, "https://openrouter.ai/api/v1/chat/completions",
                             settings.openrouter_api_key, model, system_prompt, user_prompt)
+                    if provider == "gemini" and settings.gemini_api_key:
+                        return await self._text_openai_shape(
+                            client, f"{settings.gemini_base_url.rstrip('/')}/chat/completions",
+                            settings.gemini_api_key, model or settings.gemini_model,
+                            system_prompt, user_prompt)
                     if provider == "nebius" and settings.nebius_api_key:
                         return await self._text_openai_shape(
                             client, settings.nebius_base_url.rstrip("/") + "/chat/completions",
@@ -261,6 +285,29 @@ class ModelFallbackRouter:
                     {"role": "user", "content": user}
                 ]
             }
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_text = data["choices"][0]["message"]["content"]
+        return parse_model_json(raw_text)
+
+    async def _call_gemini(self, client: httpx.AsyncClient, model: str, system: str, user: str) -> Dict[str, Any]:
+        """Google Gemini via OpenAI-compatible REST endpoint."""
+        url = f"{settings.gemini_base_url.rstrip('/')}/chat/completions"
+        resp = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {settings.gemini_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "temperature": 0.2,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
         )
         resp.raise_for_status()
         data = resp.json()

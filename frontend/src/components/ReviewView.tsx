@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { API } from '../api';
 
 
 const COLORS: Record<string, string> = {
@@ -17,7 +18,7 @@ export const ReviewView: React.FC = () => {
   // Only evidence from runs this backend actually performed. When there are none the screen
   // says so rather than showing sample rows that look like findings.
   useEffect(() => {
-    fetch('http://localhost:8000/api/runs')
+    fetch(`${API}/api/runs`)
       .then(r => r.json())
       .then((runs: any[]) => {
         if (!Array.isArray(runs) || runs.length === 0) return;

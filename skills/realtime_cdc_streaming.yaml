@@ -1,0 +1,35 @@
+name: realtime_cdc_streaming
+version: "2.1.0"
+description: "Real-time CDC streaming architecture using Debezium and Apache Kafka supporting 10K+ msg/min across heterogeneous databases (MongoDB, PostgreSQL, MySQL, Oracle, MSSQL)"
+team_type: "data_platform_sre"
+
+formatting:
+  title_prefix: "[CDC-STREAMING]"
+  user_story_format: "As a {data_engineer}, I want {cdc_connector_pipeline}, In order to {ensure_subsecond_ingestion_with_zero_loss}"
+  acceptance_criteria_format: "Given {source_db_wal_event}, When {debezium_captures_mutation}, Then {replicate_to_kafka_within_sla}"
+
+required_fields:
+  - source_database_engine
+  - capture_mechanism_wal_binlog
+  - throughput_target_msg_per_sec
+  - kafka_topic_partitioning_key
+  - schema_evolution_policy
+  - dlq_handling_strategy
+
+invest_thresholds:
+  overall_min_score: 75
+  require_small: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: true
+  ask_on_blocked: true
+  max_questions_per_round: 2
+
+clickup_mapping:
+  priority: "urgent"
+  tags:
+    - "cdc"
+    - "kafka"
+    - "debezium"
+    - "data-pipeline"

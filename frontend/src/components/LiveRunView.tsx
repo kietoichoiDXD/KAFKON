@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const API = 'http://localhost:8000';
+import { API } from '../api';
 
 type Health = {
   mode: string;
@@ -63,19 +63,73 @@ export function LiveRunView() {
   const [skill, setSkill] = useState('startup_lean');
   const [skills, setSkills] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedStatus, setSeedStatus] = useState<string | null>(null);
+  const [threads, setThreads] = useState<{ ts: string; text: string; reply_count: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
+  const loadThreads = (ch: string) => {
+    if (!ch) return;
+    fetch(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`)
+      .then(r => r.json())
+      .then(t => { if (Array.isArray(t)) setThreads(t); })
+      .catch(() => undefined);
+  };
+
   useEffect(() => {
     fetch(`${API}/api/health`).then(r => r.json()).then(setHealth).catch(() => setError('API is not running. Start it with: python -m backend.cli serve'));
     fetch(`${API}/api/slack/channels`).then(r => r.json()).then(c => {
-      if (Array.isArray(c)) { setChannels(c); setChannel(c[0]?.id ?? ''); }
+      if (Array.isArray(c) && c.length > 0) {
+        setChannels(c);
+        const defaultCh = c.find((x: any) => x.name === 'all-aiops')?.id || c[0].id;
+        setChannel(defaultCh);
+        loadThreads(defaultCh);
+      }
     }).catch(() => undefined);
     fetch(`${API}/api/skills`).then(r => r.json()).then(s => setSkills(s.map((x: any) => x.name))).catch(() => undefined);
   }, []);
 
+  const handleChannelChange = (newCh: string) => {
+    setChannel(newCh);
+    setTs('');
+    setSeedStatus(null);
+    loadThreads(newCh);
+  };
+
+  const seedThread = async () => {
+    if (!channel) return;
+    setSeeding(true); setError(null); setSeedStatus(null);
+    try {
+      const resp = await fetch(`${API}/api/slack/seed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel }),
+      });
+      const text = await resp.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || 'Seed failed with invalid response');
+      }
+      if (!resp.ok) throw new Error(data.error ?? 'Seed failed');
+      setTs(data.ts);
+      setSeedStatus(`✅ Seeded sample thread (${data.messages_count} msgs) in #${channels.find(c => c.id === channel)?.name || channel}! Thread ts: ${data.ts}`);
+      loadThreads(channel);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const run = async () => {
+    if (!ts || !channel) {
+      setError('Please select a channel and thread timestamp (or click Seed Sample Thread)');
+      return;
+    }
     setRunning(true); setError(null); setResult(null);
     try {
       const resp = await fetch(`${API}/api/slack-run`, {
@@ -83,7 +137,13 @@ export function LiveRunView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, ts, skill }),
       });
-      const data = await resp.json();
+      const text = await resp.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || `Server error (${resp.status})`);
+      }
       if (!resp.ok) throw new Error(data.error ?? 'Run failed');
       setResult(data);
     } catch (e: any) {
@@ -100,7 +160,7 @@ export function LiveRunView() {
           <h1 className="text-[22px] font-semibold text-gray-900">Live run</h1>
           <p className="text-[13.5px] text-gray-600 mt-1">
             Reads a real Slack thread, replies in it, and files the ClickUp ticket. Everything on this
-            page is the running backend — nothing here is sample data.
+            page is the running backend — connected to live Slack workspace.
           </p>
         </div>
 
@@ -118,27 +178,67 @@ export function LiveRunView() {
         )}
 
         <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="text-[12.5px] text-gray-600">
               Channel
-              <select value={channel} onChange={e => setChannel(e.target.value)}
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[13px]">
+              <select value={channel} onChange={e => handleChannelChange(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[13px] bg-white">
                 {channels.map(c => <option key={c.id} value={c.id}>#{c.name}</option>)}
               </select>
             </label>
-            <label className="text-[12.5px] text-gray-600">
-              Thread ts
-              <input value={ts} onChange={e => setTs(e.target.value)} placeholder="1789198080.991569"
-                     className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[13px]" />
-            </label>
+            <div className="text-[12.5px] text-gray-600 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <span>Thread ts</span>
+                <button
+                  type="button"
+                  onClick={seedThread}
+                  disabled={seeding || !channel}
+                  className="text-[11px] font-semibold text-[#7b5cff] hover:text-[#5e3ed4] bg-[#7b5cff]/10 hover:bg-[#7b5cff]/20 px-2 py-0.5 rounded transition-all disabled:opacity-40 flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[13px]">add_circle</span>
+                  {seeding ? 'Seeding to Slack...' : 'Seed Sample Thread (1-Click)'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  value={ts}
+                  onChange={e => setTs(e.target.value)}
+                  placeholder="e.g. 1792281644.225409"
+                  className="flex-1 border border-gray-200 rounded-lg px-2.5 py-2 text-[13px] font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Thread Selector Dropdown */}
+          {threads.length > 0 && (
+            <div className="pt-1 flex items-center gap-2 text-[12px] text-gray-500">
+              <span className="shrink-0 font-medium text-gray-600">Recent threads:</span>
+              <select
+                onChange={e => e.target.value && setTs(e.target.value)}
+                value={threads.some(t => t.ts === ts) ? ts : ''}
+                className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px] bg-gray-50 text-gray-700 truncate"
+              >
+                <option value="">-- Or select an existing thread from #{channels.find(c => c.id === channel)?.name || 'channel'} --</option>
+                {threads.map(t => (
+                  <option key={t.ts} value={t.ts}>
+                    {t.ts} ({t.reply_count} replies) — {t.text}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
             <label className="text-[12.5px] text-gray-600">
               Skill
               <select value={skill} onChange={e => setSkill(e.target.value)}
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[13px]">
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[13px] bg-white">
                 {skills.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
           </div>
+
           {/* Starter prompts: each one sets the run up, so nobody has to guess what to type. */}
           <div className="flex flex-wrap gap-1.5 pt-1">
             {PRESETS.map(p => (
@@ -148,7 +248,7 @@ export function LiveRunView() {
                 title={p.prompt}
                 className={`px-2.5 py-1 rounded-full border text-[12px] transition-colors ${
                   skill === p.skill
-                    ? 'border-[#7b5cff]/40 bg-[#7b5cff]/8 text-[#4a35a8]'
+                    ? 'border-[#7b5cff]/40 bg-[#7b5cff]/8 text-[#4a35a8] font-medium'
                     : 'border-gray-200 text-gray-600 hover:border-[#7b5cff]/40'
                 }`}
               >
@@ -158,11 +258,35 @@ export function LiveRunView() {
           </div>
           <p className="text-[12px] text-gray-500 italic">“{active.prompt}”</p>
 
-          <button onClick={run} disabled={running || !channel || !ts}
-                  className="px-4 py-2 rounded-full bg-[#7b5cff] text-white text-[13.5px] font-medium disabled:opacity-40">
-            {running ? 'Running…' : 'Run in thread'}
-          </button>
-          {error && <p className="text-[12.5px] text-rose-600">{error}</p>}
+          {seedStatus && (
+            <div className="text-[12px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+              <span>{seedStatus}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={run}
+              disabled={running || !channel || !ts}
+              className="px-5 py-2 rounded-full bg-[#7b5cff] hover:bg-[#6847ed] text-white text-[13.5px] font-medium disabled:opacity-40 transition-all shadow-sm flex items-center gap-2"
+            >
+              {running && <span className="animate-spin material-symbols-outlined text-[16px]">progress_activity</span>}
+              {running ? 'Analyzing Slack Thread...' : 'Run in thread'}
+            </button>
+            {ts && (
+              <span className="text-[12px] text-gray-500 font-mono">
+                Target: {ts}
+              </span>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-[12.5px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] text-rose-500 shrink-0 mt-0.5">error</span>
+              <div>{error}</div>
+            </div>
+          )}
         </div>
 
         {result && (

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ViewType, ChatItem } from '../types';
+import { ViewType, ChatItem, WorkspaceTab } from '../types';
 import { get, Run } from '../api';
 
 interface SidebarProps {
   currentView: ViewType;
   onSelectView: (view: ViewType) => void;
-  onOpenCustomize: () => void;
+  onOpenCustomize: (tab?: WorkspaceTab) => void;
   onNewChat: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -22,6 +22,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeChatId, setActiveChatId] = useState('0');
   const [runs, setRuns] = useState<Run[] | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [visibleExtras, setVisibleExtras] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('kafkon-sidebar-extras') || '{}'); } catch { return {}; }
+  });
+
+  const toggleExtra = (name: string) => setVisibleExtras(current => {
+    const next = { ...current, [name]: !current[name] };
+    localStorage.setItem('kafkon-sidebar-extras', JSON.stringify(next));
+    return next;
+  });
+
+  const openWorkspace = (tab: WorkspaceTab) => {
+    onOpenCustomize(tab);
+    setMoreOpen(false);
+  };
 
   // The history is the runs this backend performed - not a list of invented conversations.
   useEffect(() => {
@@ -34,12 +50,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`h-screen bg-[#fbfcfb] border-r border-gray-200/80 flex flex-col justify-between transition-all duration-300 z-30 shrink-0 ${
+      className={`h-screen bg-[#f7f8fa] border-r border-slate-200/80 flex flex-col justify-between transition-all duration-300 z-30 shrink-0 ${
         isCollapsed ? 'w-16' : 'w-[260px]'
       }`}
     >
       {/* Top Section */}
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0 overflow-visible">
         {/* Brand & Collapse */}
         <div className="h-14 px-3 flex items-center justify-between border-b border-gray-100">
           {!isCollapsed && (
@@ -84,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation Items */}
-        <nav className="px-2 space-y-0.5">
+        <nav aria-label="Workspace navigation" className="relative px-2 space-y-1">
           <button
             onClick={() => onSelectView('live')}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
@@ -195,15 +211,70 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
+          <div className="relative">
           <button
-            onClick={onOpenCustomize}
-            className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] text-gray-600 hover:bg-gray-100/60 hover:text-gray-900 transition-colors"
+            onClick={() => { setMoreOpen(open => !open); setOpenGroup(null); }}
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[13.5px] transition-all duration-200 ${moreOpen ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-gray-600 hover:bg-white/80 hover:text-gray-900'}`}
           >
             <div className="flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[19px] text-gray-500">tune</span>
-              {!isCollapsed && <span>Customize</span>}
+              <span className="material-symbols-outlined text-[19px] text-gray-500">more_horiz</span>
+              {!isCollapsed && <span>More</span>}
             </div>
+            {!isCollapsed && <span className="material-symbols-outlined text-[16px] text-gray-400">{moreOpen ? 'expand_less' : 'expand_more'}</span>}
           </button>
+
+          {!isCollapsed && moreOpen && (
+            <div role="menu" className="absolute left-full top-0 z-50 w-[242px] rounded-xl border border-slate-200/90 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.12)] p-2.5 space-y-0.5 overflow-visible">
+              <div className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-400">Show in sidebar</div>
+              {[
+                ['Connections', 'link', 'Connections'], ['Skills', 'auto_awesome', 'Skills'],
+                ['Agents', 'group', 'Agents'], ['Knowledge', 'book', 'Knowledge'],
+                ['Credentials', 'key', 'Credentials'], ['Commands', 'command', 'Commands'],
+                ['Approval', 'check_circle', 'Approval'], ['Notifications', 'notifications', 'Notifications'],
+              ].map(([name, icon, label]) => (
+                <button key={name} onClick={() => { toggleExtra(name); openWorkspace(name as WorkspaceTab); }} className="w-full min-h-8 flex items-center gap-2.5 px-2 py-1 rounded-md text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7b5cff]/40 text-left">
+                  <span className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${visibleExtras[name] ? 'bg-[#08b8d4] border-[#08b8d4] text-white' : 'border-[#08b8d4]'}`}>
+                    {visibleExtras[name] && <span className="material-symbols-outlined text-[12px]">check</span>}
+                  </span>
+                  <span className="material-symbols-outlined text-[16px] text-slate-500">{icon}</span><span>{label}</span>
+                </button>
+              ))}
+              <div className="my-2 border-t border-slate-100" />
+              {[
+                ['Optimize', 'optimize', ['Overview', 'Cost Health', 'Cost Explorer', 'Findings', 'Anomalies', 'Reports']],
+                ['Review', 'code', ['Overview', 'Reviews', 'Releases', 'Learnings', 'Insights', 'Pipelines', 'Customizations', 'Settings']],
+                ['Cyber', 'security', ['Overview', 'Security Findings', 'Threats', 'Compliance', 'Reports']],
+                ['Resolve', 'monitor_heart', ['Overview', 'Pulse', 'Investigation', 'Insights', 'Integrations', 'On-call', 'Runbooks', 'Settings']],
+              ].map(([group, icon, children]) => (
+                <div key={group as string} className="relative">
+                  <button
+                    aria-expanded={openGroup === group}
+                    onClick={() => setOpenGroup(openGroup === group ? null : group as string)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7b5cff]/40 ${openGroup === group ? 'bg-slate-50 text-slate-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-slate-500">{icon as string}</span>
+                    <span className="flex-1">{group as string}</span>
+                    <span className="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+                  </button>
+                  {openGroup === group && (
+                    <div className="absolute left-full top-1/2 z-[60] ml-1 w-[190px] max-h-[calc(100vh-24px)] -translate-y-1/2 overflow-y-auto rounded-xl border border-slate-200/90 bg-white p-2 shadow-[0_16px_36px_rgba(15,23,42,0.12)]">
+                      {(children as string[]).map(child => (
+                        <button key={child} onClick={() => { if ((group as string) === 'Review') onSelectView('review'); else if ((group as string) === 'Resolve' && child === 'Investigation') onSelectView('ops'); else if (child === 'Overview') onSelectView('home'); setOpenGroup(null); setMoreOpen(false); }} className="w-full rounded-md px-2.5 py-1.5 text-left text-[12.5px] leading-5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7b5cff]/40">
+                          {child}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => { onOpenCustomize(); setMoreOpen(false); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[12.5px] text-gray-700 hover:bg-gray-50 text-left">
+                <span className="material-symbols-outlined text-[16px] text-gray-500">settings</span>Workspace settings
+              </button>
+            </div>
+          )}
+          </div>
         </nav>
 
         {/* Chat History Section */}
