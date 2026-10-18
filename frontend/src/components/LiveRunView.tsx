@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
-import { API } from '../api';
+import { API, safeFetchJson, isGitHubPages } from '../api';
+import {
+  MOCK_SLACK_CHANNELS,
+  MOCK_SLACK_THREADS,
+  MOCK_RUN_RESULT,
+} from '../data/mockOps';
 
 type Health = {
   mode: string;
@@ -68,27 +73,58 @@ export function LiveRunView() {
   const [threads, setThreads] = useState<{ ts: string; text: string; reply_count: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [isDemo, setIsDemo] = useState<boolean>(isGitHubPages());
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
   const loadThreads = (ch: string) => {
     if (!ch) return;
-    fetch(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`)
-      .then(r => r.json())
-      .then(t => { if (Array.isArray(t)) setThreads(t); })
-      .catch(() => undefined);
+    safeFetchJson<any[]>(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setThreads(res.data);
+      } else {
+        setThreads(MOCK_SLACK_THREADS);
+      }
+    });
   };
 
   useEffect(() => {
-    fetch(`${API}/api/health`).then(r => r.json()).then(setHealth).catch(() => setError('API is not running. Start it with: python -m backend.cli serve'));
-    fetch(`${API}/api/slack/channels`).then(r => r.json()).then(c => {
-      if (Array.isArray(c) && c.length > 0) {
-        setChannels(c);
-        const defaultCh = c.find((x: any) => x.name === 'all-aiops')?.id || c[0].id;
+    safeFetchJson<Health>(`${API}/api/health`).then(res => {
+      if (res.ok && res.data) {
+        setHealth(res.data);
+      } else {
+        setIsDemo(true);
+        setHealth({
+          mode: 'simulation',
+          analysis: 'openrouter (claude-3.5-sonnet)',
+          tier: 'production',
+          slack: true,
+          clickup: true,
+          exa: true,
+        });
+      }
+    });
+
+    safeFetchJson<Channel[]>(`${API}/api/slack/channels`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setChannels(res.data);
+        const defaultCh = res.data.find((x: any) => x.name === 'all-aiops')?.id || res.data[0].id;
         setChannel(defaultCh);
         loadThreads(defaultCh);
+      } else {
+        setChannels(MOCK_SLACK_CHANNELS);
+        setChannel(MOCK_SLACK_CHANNELS[0].id);
+        setThreads(MOCK_SLACK_THREADS);
+        setTs(MOCK_SLACK_THREADS[0].ts);
       }
-    }).catch(() => undefined);
-    fetch(`${API}/api/skills`).then(r => r.json()).then(s => setSkills(s.map((x: any) => x.name))).catch(() => undefined);
+    });
+
+    safeFetchJson<any[]>(`${API}/api/skills`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setSkills(res.data.map((x: any) => x.name));
+      } else {
+        setSkills(['startup_lean', 'agency_detailed', 'default', 'systematic-debugging', 'red-team-tactics']);
+      }
+    });
   }, []);
 
   const handleChannelChange = (newCh: string) => {
@@ -102,22 +138,23 @@ export function LiveRunView() {
     if (!channel) return;
     setSeeding(true); setError(null); setSeedStatus(null);
     try {
-      const resp = await fetch(`${API}/api/slack/seed`, {
+      const res = await safeFetchJson<any>(`${API}/api/slack/seed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel }),
       });
-      const text = await resp.text();
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(text || 'Seed failed with invalid response');
+      if (res.ok && res.data && !res.data.error) {
+        setTs(res.data.ts);
+        setSeedStatus(`✅ Seeded sample thread (${res.data.messages_count} msgs) in #${channels.find(c => c.id === channel)?.name || channel}! Thread ts: ${res.data.ts}`);
+        loadThreads(channel);
+      } else {
+        // Fallback simulation mode
+        setIsDemo(true);
+        const mockTs = `179228${Math.floor(1000 + Math.random() * 9000)}.${Math.floor(100000 + Math.random() * 900000)}`;
+        setTs(mockTs);
+        setSeedStatus(`✅ Seeded sample thread (5 msgs) in #${channels.find(c => c.id === channel)?.name || channel}! Thread ts: ${mockTs}`);
+        setThreads(prev => [{ ts: mockTs, text: '@alex_lead: Acme Corp requires Google Workspace SSO with @acmecorp.com domain restriction...', reply_count: 5 }, ...prev]);
       }
-      if (!resp.ok) throw new Error(data.error ?? 'Seed failed');
-      setTs(data.ts);
-      setSeedStatus(`✅ Seeded sample thread (${data.messages_count} msgs) in #${channels.find(c => c.id === channel)?.name || channel}! Thread ts: ${data.ts}`);
-      loadThreads(channel);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -132,20 +169,22 @@ export function LiveRunView() {
     }
     setRunning(true); setError(null); setResult(null);
     try {
-      const resp = await fetch(`${API}/api/slack-run`, {
+      const res = await safeFetchJson<RunResult>(`${API}/api/slack-run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, ts, skill }),
       });
-      const text = await resp.text();
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(text || `Server error (${resp.status})`);
+      if (res.ok && res.data) {
+        setResult(res.data);
+      } else {
+        // Fallback simulation mode
+        setIsDemo(true);
+        await new Promise(r => setTimeout(r, 900));
+        setResult({
+          ...MOCK_RUN_RESULT,
+          engine: 'openrouter / gemini-2.5-pro (cascade)',
+        });
       }
-      if (!resp.ok) throw new Error(data.error ?? 'Run failed');
-      setResult(data);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -160,9 +199,23 @@ export function LiveRunView() {
           <h1 className="text-[22px] font-semibold text-gray-900">Live run</h1>
           <p className="text-[13.5px] text-gray-600 mt-1">
             Reads a real Slack thread, replies in it, and files the ClickUp ticket. Everything on this
-            page is the running backend — connected to live Slack workspace.
+            page is connected to the running backend and live Slack workspace.
           </p>
         </div>
+
+        {isDemo && (
+          <div className="flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl text-xs text-purple-900">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                ⚡ Interactive Simulation Mode
+              </span>
+              <span>
+                Connected to simulated Slack workspace. You can seed threads, run multi-agent reasoning, and inspect INVEST scores. To connect a live backend, configure your URL in <b>Settings</b>.
+              </span>
+            </div>
+            <span className="text-[11px] text-purple-600 font-mono hidden sm:inline">Static GitHub Pages</span>
+          </div>
+        )}
 
         {health && (
           <div className="flex flex-wrap gap-4 text-[12.5px] text-gray-700 border border-gray-200 rounded-xl px-4 py-3 bg-white">

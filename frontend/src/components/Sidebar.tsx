@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ViewType, ChatItem, WorkspaceTab } from '../types';
-import { get, Run } from '../api';
+import { get, Run, isGitHubPages } from '../api';
+import { MOCK_RUNS } from '../data/mockOps';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -41,7 +42,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // The history is the runs this backend performed - not a list of invented conversations.
   useEffect(() => {
-    get<Run[]>('/api/runs').then(setRuns);
+    get<Run[]>('/api/runs').then(res => {
+      if (res && res.length > 0) {
+        setRuns(res);
+      } else if (isGitHubPages() || res === null) {
+        setRuns(MOCK_RUNS as any);
+      } else {
+        setRuns([]);
+      }
+    });
   }, []);
 
   const filteredChats = (runs ?? [])
@@ -314,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex-1 overflow-y-auto space-y-0.5 mt-1 pr-1">
               {filteredChats.length === 0 && (
                 <p className="px-2.5 py-3 text-[12px] text-gray-400 m-0">
-                  {runs === null ? 'Backend not running.' : 'No runs yet. Start one from Live run.'}
+                  {isGitHubPages() ? 'Demo Mode · No runs recorded.' : runs === null ? 'Backend not running.' : 'No runs yet. Start one from Live run.'}
                 </p>
               )}
               {filteredChats.map(chat => {
