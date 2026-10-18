@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
-import { API } from '../api';
+import { API, safeFetchJson, isGitHubPages } from '../api';
+import {
+  MOCK_ENVIRONMENTS,
+  MOCK_FAULTS,
+  MOCK_DIAGNOSIS_UNHEALTHY,
+  MOCK_DIAGNOSIS_RECOVERED,
+  MOCK_SLACK_CHANNELS,
+} from '../data/mockOps';
 
 const LABEL_COLOR: Record<string, string> = {
   Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -51,91 +58,182 @@ export function OpsView() {
   const [faults, setFaults] = useState<any[]>([]);
   const [fault, setFault] = useState<string>('');
   const [triggered, setTriggered] = useState<any>(null);
+  const [isDemo, setIsDemo] = useState<boolean>(isGitHubPages());
 
   useEffect(() => {
-    fetch(`${API}/api/slack/channels`).then(r => r.json()).then(c => {
-      if (Array.isArray(c)) { setChannels(c); setChannel(c[0]?.id ?? ''); }
-    }).catch(() => undefined);
-    fetch(`${API}/api/ops/environments`).then(r => r.json()).then(e => {
-      if (Array.isArray(e)) { setEnvs(e); setEnv(e[0]?.name ?? ''); }
-    }).catch(() => undefined);
+    safeFetchJson<{ id: string; name: string }[]>(`${API}/api/slack/channels`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setChannels(res.data);
+        setChannel(res.data[0]?.id ?? '');
+      } else {
+        setChannels(MOCK_SLACK_CHANNELS);
+        setChannel(MOCK_SLACK_CHANNELS[0]?.id ?? '');
+      }
+    });
+
+    safeFetchJson<any[]>(`${API}/api/ops/environments`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setEnvs(res.data);
+        setEnv(res.data[0]?.name ?? 'aiops-lab');
+      } else {
+        setEnvs(MOCK_ENVIRONMENTS);
+        setEnv(MOCK_ENVIRONMENTS[0]?.name ?? 'aiops-lab');
+      }
+    });
   }, []);
 
   // Drill scenarios follow the selected environment; most environments declare none.
   useEffect(() => {
     if (!env) return;
-    fetch(`${API}/api/ops/faults?environment=${encodeURIComponent(env)}`)
-      .then(r => r.json())
-      .then(f => { if (Array.isArray(f)) { setFaults(f); setFault(f[0]?.name ?? ''); } })
-      .catch(() => undefined);
+    safeFetchJson<any[]>(`${API}/api/ops/faults?environment=${encodeURIComponent(env)}`).then(res => {
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setFaults(res.data);
+        setFault(res.data[0]?.name ?? '');
+      } else {
+        setFaults(MOCK_FAULTS);
+        setFault(MOCK_FAULTS[0]?.name ?? '');
+      }
+    });
   }, [env]);
 
   const triggerFault = async () => {
     if (!fault) return;
     setBusy('trigger'); setError(null); setTriggered(null);
     try {
-      const r = await fetch(`${API}/api/ops/trigger`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await safeFetchJson<any>(`${API}/api/ops/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fault, environment: env }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setTriggered(d);
-      // Give Kubernetes a moment to roll the change before reading it back.
-      setTimeout(() => run('diagnose'), 6000);
-    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+      if (res.ok && res.data && !res.data.error) {
+        setTriggered(res.data);
+        setTimeout(() => run('diagnose'), 6000);
+      } else {
+        // Interactive simulation mode
+        setIsDemo(true);
+        setApplied(null);
+        setVerified(null);
+        const trig = {
+          triggered: fault,
+          environment: env,
+          at: new Date().toLocaleTimeString(),
+          expect: faults.find(f => f.name === fault)?.expect || 'restore deployment',
+        };
+        setTriggered(trig);
+        setDiag(MOCK_DIAGNOSIS_UNHEALTHY as any);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const requestApproval = async () => {
     if (!diag?.proposal || !channel) return;
     setBusy('notify'); setError(null);
     try {
-      const r = await fetch(`${API}/api/ops/notify`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await safeFetchJson<any>(`${API}/api/ops/notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action_id: diag.proposal.action_id, channel }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setNotified(d);
-    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+      if (res.ok && res.data && !res.data.error) {
+        setNotified(res.data);
+      } else {
+        setIsDemo(true);
+        setNotified({
+          action_id: diag.proposal.action_id,
+          channel,
+          ts: String(Date.now() / 1000),
+          note: 'Approval request posted in Slack (Simulated)',
+        });
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const run = async (what: 'diagnose' | 'verify') => {
     setBusy(what); setError(null);
     try {
       const targetEnv = env || 'aiops-lab';
-      const r = await fetch(`${API}/api/ops/${what}?environment=${encodeURIComponent(targetEnv)}`);
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      if (what === 'diagnose') { setDiag(d); setApplied(null); setVerified(null); setNotified(null); }
-      else {
-        setVerified(d);
-        // Keep the metric cards honest: verify has a fresher error rate than the last diagnose.
-        setDiag(prev => prev && { ...prev, state: { ...prev.state,
-          metrics: { ...prev.state.metrics, error_rate: d.error_rate } } });
+      const res = await safeFetchJson<any>(`${API}/api/ops/${what}?environment=${encodeURIComponent(targetEnv)}`);
+      if (res.ok && res.data && !res.data.error) {
+        const d = res.data;
+        if (what === 'diagnose') {
+          setDiag(d); setApplied(null); setVerified(null); setNotified(null);
+        } else {
+          setVerified(d);
+          setDiag(prev => prev && {
+            ...prev,
+            state: { ...prev.state, metrics: { ...prev.state.metrics, error_rate: d.error_rate } },
+          });
+        }
+      } else {
+        // Fallback simulation mode
+        setIsDemo(true);
+        if (what === 'diagnose') {
+          if (applied) {
+            setDiag(MOCK_DIAGNOSIS_RECOVERED as any);
+          } else {
+            setDiag(MOCK_DIAGNOSIS_UNHEALTHY as any);
+          }
+          setVerified(null);
+        } else {
+          const isRecovered = !!applied;
+          const ver = isRecovered
+            ? { recovered: true, config_restored: true, pods_ready: true, error_rate: 0.001 }
+            : { recovered: false, config_restored: false, pods_ready: false, error_rate: 0.054 };
+          setVerified(ver);
+          setDiag(prev => prev && {
+            ...prev,
+            state: { ...prev.state, metrics: { ...prev.state.metrics, error_rate: ver.error_rate } },
+          });
+        }
       }
     } catch (e: any) {
-      setError(e.message === 'Failed to fetch' ? 'API not running — python -m backend.cli serve' : e.message);
-    } finally { setBusy(null); }
+      setIsDemo(true);
+      setDiag(applied ? (MOCK_DIAGNOSIS_RECOVERED as any) : (MOCK_DIAGNOSIS_UNHEALTHY as any));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const approve = async () => {
     if (!diag?.proposal) return;
     setBusy('apply'); setError(null);
     try {
-      const r = await fetch(`${API}/api/ops/apply`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await safeFetchJson<any>(`${API}/api/ops/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action_id: diag.proposal.action_id, approver: 'operator' }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setApplied(d);
-    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+      if (res.ok && res.data && !res.data.error) {
+        setApplied(res.data);
+      } else {
+        setIsDemo(true);
+        const app = {
+          action_id: diag.proposal.action_id,
+          approver: 'operator (demo simulation)',
+          at: new Date().toLocaleTimeString(),
+          note: 'Applied patch to deployment/cart (VALKEY_ADDR=valkey:6379). Configuration restored.',
+        };
+        setApplied(app);
+        setDiag(MOCK_DIAGNOSIS_RECOVERED as any);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
   };
 
   useEffect(() => { run('diagnose'); }, []);
 
-  const m = diag?.state.metrics;
+  const m = diag?.state?.metrics;
   const bad = (m?.error_rate ?? 0) > 0.02;
 
   return (
@@ -148,6 +246,20 @@ export function OpsView() {
             exact patch. Nothing is written until you approve the action you can see.
           </p>
         </div>
+
+        {isDemo && (
+          <div className="flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl text-xs text-purple-900">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                ⚡ Interactive Simulation Mode
+              </span>
+              <span>
+                Simulating live Kubernetes telemetry & deterministic runbook patch. Click <b>Approve and apply</b> or <b>Trigger fault</b> to test the remediation loop.
+              </span>
+            </div>
+            <span className="text-[11px] text-purple-600 font-mono hidden sm:inline">Static GitHub Pages</span>
+          </div>
+        )}
 
         {error && <p className="text-[13px] text-rose-600 border border-rose-200 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 
@@ -321,7 +433,7 @@ export function OpsView() {
           </div>
         )}
 
-        {diag && (
+        {diag && diag.state && (
           <div className="border border-gray-200 rounded-xl p-4 bg-white">
             <h2 className="text-[14px] font-semibold mb-2">
               {diag.state.namespace} · {diag.state.context}

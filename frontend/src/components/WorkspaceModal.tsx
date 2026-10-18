@@ -20,7 +20,7 @@ import {
   KNOWLEDGE_BASES,
   INITIAL_CREDENTIALS,
 } from '../data/workspace';
-import { get, post } from '../api';
+import { get, post, getApiUrl, setApiUrl, isGitHubPages, safeFetchJson } from '../api';
 import { SkillMarkdownRenderer } from './SkillMarkdownRenderer';
 
 export const CURATED_REPOS_SKILLS = [
@@ -142,6 +142,8 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [byokAwsRegion, setByokAwsRegion] = useState('ap-southeast-1');
   const [byokStatusMessage, setByokStatusMessage] = useState<string | null>(null);
   const [byokTestStatus, setByokTestStatus] = useState<{ [k: string]: string }>({});
+  const [backendUrl, setBackendUrlState] = useState<string>(() => getApiUrl());
+  const [backendTestStatus, setBackendTestStatus] = useState<string | null>(null);
 
   // Commands State
   const [commands, setCommands] = useState<CommandItem[]>(COMMANDS_LIST);
@@ -379,6 +381,42 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
         [provider]: `❌ ${res?.message || 'Connection failed'}`,
       }));
     }
+  };
+
+  const handleTestBackend = async () => {
+    const target = backendUrl.trim().replace(/\/$/, '');
+    if (!target) {
+      setBackendTestStatus('⚠️ Enter a backend URL (e.g. http://localhost:8000 or your HTTPS endpoint)');
+      return;
+    }
+    setBackendTestStatus('Connecting...');
+    try {
+      const res = await safeFetchJson<any>(`${target}/api/health`);
+      if (res.ok && res.data) {
+        setBackendTestStatus(`✅ Connected successfully! Mode: ${res.data.mode || 'live'}, Tier: ${res.data.tier || 'standard'}`);
+      } else {
+        setBackendTestStatus(`❌ Could not connect (${res.error || 'Endpoint did not return JSON'})`);
+      }
+    } catch (e: any) {
+      setBackendTestStatus(`❌ Connection error: ${e.message}`);
+    }
+  };
+
+  const handleSaveBackendUrl = () => {
+    setApiUrl(backendUrl);
+    setBackendTestStatus('✅ Saved! Reloading app to apply new endpoint...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 800);
+  };
+
+  const handleResetBackendUrl = () => {
+    setApiUrl('');
+    setBackendUrlState('');
+    setBackendTestStatus('Reset to default. Reloading...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 800);
   };
 
   // Handle Add Command
@@ -1740,6 +1778,70 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     {byokStatusMessage}
                   </div>
                 )}
+
+                {/* BACKEND API CONNECTION */}
+                <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        API
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">Backend API Endpoint</div>
+                        <div className="text-[11px] text-gray-500">
+                          Configure where this web client connects (Localhost, Cloud Run, EC2, or Ngrok tunnel)
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded border border-indigo-300">
+                      {isGitHubPages() ? 'GitHub Pages Client' : 'Local Client'}
+                    </span>
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                      API Base URL
+                    </label>
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. http://localhost:8000 or https://api.my-domain.com"
+                        value={backendUrl}
+                        onChange={e => setBackendUrlState(e.target.value)}
+                        className="flex-1 min-w-[200px] px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-indigo-500 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestBackend}
+                        className="px-3 py-1 text-xs font-semibold text-indigo-800 bg-indigo-100 hover:bg-indigo-200 rounded-md transition-colors"
+                      >
+                        Test URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveBackendUrl}
+                        className="px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors"
+                      >
+                        Save & Apply
+                      </button>
+                      {backendUrl && (
+                        <button
+                          type="button"
+                          onClick={handleResetBackendUrl}
+                          className="px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {backendTestStatus && (
+                    <div className="text-[11.5px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+                      {backendTestStatus}
+                    </div>
+                  )}
+                </div>
 
                 {/* GOOGLE GEMINI API */}
                 <div className="p-5 border border-teal-200 rounded-xl bg-teal-50/20 space-y-3">
