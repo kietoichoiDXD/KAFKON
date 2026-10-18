@@ -32,7 +32,7 @@ jobs:
 
       - name: Run Python Unit Test Suite (54 Tests)
         env:
-          SCRIBEBA_MODE: local
+          SCRIBEBA_MODE: live
         run: |
           python -m unittest discover tests -v
 
