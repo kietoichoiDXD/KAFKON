@@ -1,5 +1,5 @@
 // One place that knows where the backend is, so no component invents its own URL.
-export const API = 'http://localhost:8000';
+export const API = import.meta.env.VITE_API_URL || '';
 
 export type Health = {
   mode: string;
@@ -46,6 +46,23 @@ export async function get<T>(path: string): Promise<T | null> {
     if (!r.ok) return null;
     const d = await r.json();
     return d && (d as any).error ? null : (d as T);
+  } catch {
+    return null;
+  }
+}
+
+export async function post<T>(path: string, body: any): Promise<T | null> {
+  try {
+    const r = await fetch(`${API}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return err as T;
+    }
+    return await r.json();
   } catch {
     return null;
   }

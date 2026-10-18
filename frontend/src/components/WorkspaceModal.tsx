@@ -6,15 +6,81 @@ import {
   KnowledgeBaseItem,
   CredentialItem,
   SkillItem,
+  ConnectionItem,
+  ArtifactItem,
 } from '../types';
 import {
   CORE_AGENTS,
+  CUSTOM_AGENTS,
+  WORKSPACE_SKILLS,
+  WORKSPACE_CONNECTIONS,
+  WORKSPACE_MEMBERS,
+  WORKSPACE_ARTIFACTS,
   COMMANDS_LIST,
   KNOWLEDGE_BASES,
   INITIAL_CREDENTIALS,
 } from '../data/workspace';
-import { get, Skill } from '../api';
+import { get, post } from '../api';
 import { SkillMarkdownRenderer } from './SkillMarkdownRenderer';
+
+export const CURATED_REPOS_SKILLS = [
+  {
+    name: 'realtime-cdc-kafka',
+    category: 'Data & CDC',
+    repo: 'github.com/debezium/debezium',
+    description: 'Debezium + Kafka 10K+ msg/min CDC streaming across PostgreSQL, MongoDB, MSSQL, Oracle.',
+    connections: [{ prefix: 'kafka', label: 'Kafka' }, { prefix: 'debezium', label: 'Debezium' }],
+  },
+  {
+    name: 'aws-eks-ecs-finops',
+    category: 'Cloud & SRE',
+    repo: 'github.com/aws-samples/amazon-ecs-fargate',
+    description: 'EKS to ECS Fargate FinOps migration with Qdrant vector search (-60% spend, $1,200+/mo saved).',
+    connections: [{ prefix: 'aws', label: 'AWS' }, { prefix: 'cur', label: 'Cost Explorer' }],
+  },
+  {
+    name: 'sbv-banking-olap',
+    category: 'Data & CDC',
+    repo: 'github.com/apache/iceberg',
+    description: 'DBT + Spark + Iceberg regulatory OLAP data pipeline for State Bank of Vietnam compliance.',
+    connections: [{ prefix: 'emr', label: 'EMR Spark' }, { prefix: 'iceberg', label: 'Apache Iceberg' }],
+  },
+  {
+    name: 'systematic-debugging',
+    category: 'Incident RCA',
+    repo: 'github.com/google/debugging-agent',
+    description: 'Hypothesis-driven root cause isolation, minimal reproduction cases, and zero-regression patches.',
+    connections: [{ prefix: 'apm', label: 'APM' }, { prefix: 'git', label: 'Git' }],
+  },
+  {
+    name: 'c4-architecture-modeling',
+    category: 'Architecture & DDD',
+    repo: 'github.com/plantuml-stdlib/C4-PlantUML',
+    description: 'Context, Container, Component, and Code (C4) architecture diagrams using interactive Mermaid.',
+    connections: [{ prefix: 'docs', label: 'ADR Docs' }],
+  },
+  {
+    name: 'red-team-tactics',
+    category: 'Security & Compliance',
+    repo: 'github.com/mitre/cti',
+    description: 'MITRE ATT&CK VPC network perimeter, IAM privilege escalation, and token leakage audit.',
+    connections: [{ prefix: 'aws', label: 'AWS GuardDuty' }],
+  },
+  {
+    name: 'kubernetes-operator-runbook',
+    category: 'Incident RCA',
+    repo: 'github.com/kubernetes/kubernetes',
+    description: 'Deterministic CrashLoopBackOff triage and zero-downtime Pod rolling restoration runbooks.',
+    connections: [{ prefix: 'k8s', label: 'Kubernetes' }, { prefix: 'prometheus', label: 'Prometheus' }],
+  },
+  {
+    name: 'agent-workflow-designer',
+    category: 'Agentic AI',
+    repo: 'github.com/langchain-ai/langgraph',
+    description: 'Multi-agent orchestration with OpenRouter & Google Gemini model cascade routing.',
+    connections: [{ prefix: 'gemini', label: 'Google Gemini' }, { prefix: 'openrouter', label: 'OpenRouter' }],
+  },
+];
 
 interface WorkspaceModalProps {
   isOpen: boolean;
@@ -30,37 +96,52 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
 
   // Agents State
-  const [agents, setAgents] = useState<AgentItem[]>(CORE_AGENTS);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('anna');
+  const [agents, setAgents] = useState<AgentItem[]>([...CUSTOM_AGENTS, ...CORE_AGENTS]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('arena');
   const [agentTab, setAgentTab] = useState<'Identity' | 'Connections'>('Identity');
-  const [connectionSubTab, setConnectionSubTab] = useState<'Builtin' | 'MCP'>('Builtin');
+  const [arenaModelTier, setArenaModelTier] = useState<'light' | 'standard' | 'deep'>('light');
+  const [agentGoal, setAgentGoal] = useState<string>(
+    CUSTOM_AGENTS[0]?.goal ||
+      'Produce answer-key-grade Well-Architected Reviews and incident root cause reports from read-only evidence in an unfamiliar environment: every claim backed by raw logs, metrics, traces or config, root cause named with confidence, remediation proposed not executed.'
+  );
 
   // Skills State
-  const [skills, setSkills] = useState<SkillItem[]>([]);
-
-  // The skill list is whatever the backend loaded from skills/*.yaml.
-  useEffect(() => {
-    if (!isOpen) return;
-    get<Skill[]>('/api/skills').then(list => {
-      if (!list) return;
-      setSkills(list.map(sk => ({
-        id: sk.name,
-        name: sk.name,
-        description: sk.description,
-        enabled: true,
-        availableIn: { chat: true, review: true, incident: false, assessment: false },
-        files: [{
-          name: `${sk.name}.yaml`,
-          path: `skills/${sk.name}.yaml`,
-          content: `# ${sk.name} (v${sk.version})\n\n**Team type**: ${sk.team_type}\n\n${sk.description}\n\n## Required fields\n\n` +
-                   sk.required_fields.map(f => `- \`${f}\``).join('\n'),
-        }],
-      })));
-    });
-  }, [isOpen]);
-  const [selectedSkillId, setSelectedSkillId] = useState<string>('domain-modeling');
+  const [skills, setSkills] = useState<SkillItem[]>(WORKSPACE_SKILLS);
+  const [selectedSkillId, setSelectedSkillId] = useState<string>('api-latency-investigation');
   const [skillSearch, setSkillSearch] = useState('');
+  const [skillCategoryFilter, setSkillCategoryFilter] = useState<string>('All');
   const [selectedFileName, setSelectedFileName] = useState('SKILL.md');
+  const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [isEditSkillOpen, setIsEditSkillOpen] = useState(false);
+  const [addSkillTab, setAddSkillTab] = useState<'catalog' | 'custom'>('catalog');
+  const [customSkillName, setCustomSkillName] = useState('');
+  const [customSkillCategory, setCustomSkillCategory] = useState('Cloud & SRE');
+  const [customSkillDesc, setCustomSkillDesc] = useState('');
+  const [customSkillMarkdown, setCustomSkillMarkdown] = useState('');
+  const [editSkillDesc, setEditSkillDesc] = useState('');
+  const [editSkillMarkdown, setEditSkillMarkdown] = useState('');
+  const [skillActionMessage, setSkillActionMessage] = useState<string | null>(null);
+
+  // Connections State
+  const [connectionType, setConnectionType] = useState<'Builtin' | 'MCP'>('Builtin');
+  const [connectionView, setConnectionView] = useState<'Split' | 'Grid'>('Split');
+  const [connections, setConnections] = useState<ConnectionItem[]>(WORKSPACE_CONNECTIONS);
+  const [selectedConnId, setSelectedConnId] = useState<string>('k8s-demo');
+  const [connSearch, setConnSearch] = useState('');
+  const [connCategoryFilter, setConnCategoryFilter] = useState<'All' | 'CONNECTED' | 'CLOUD' | 'INFRASTRUCTURE'>('All');
+
+  // BYOK State
+  const [byokGeminiKey, setByokGeminiKey] = useState('');
+  const [byokGeminiModel, setByokGeminiModel] = useState('gemini-2.5-flash');
+  const [byokOpenRouterKey, setByokOpenRouterKey] = useState('');
+  const [byokOpenRouterModel, setByokOpenRouterModel] = useState('anthropic/claude-sonnet-5');
+  const [byokAnthropicKey, setByokAnthropicKey] = useState('');
+  const [byokOpenAIKey, setByokOpenAIKey] = useState('');
+  const [byokAwsKeyId, setByokAwsKeyId] = useState('');
+  const [byokAwsSecretKey, setByokAwsSecretKey] = useState('');
+  const [byokAwsRegion, setByokAwsRegion] = useState('ap-southeast-1');
+  const [byokStatusMessage, setByokStatusMessage] = useState<string | null>(null);
+  const [byokTestStatus, setByokTestStatus] = useState<{ [k: string]: string }>({});
 
   // Commands State
   const [commands, setCommands] = useState<CommandItem[]>(COMMANDS_LIST);
@@ -85,11 +166,173 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [credType, setCredType] = useState<CredentialItem['type']>('API Key');
   const [credSecret, setCredSecret] = useState('');
 
+  // Artifacts State
+  const [artifacts] = useState<ArtifactItem[]>(WORKSPACE_ARTIFACTS);
+  const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
+
+  // General Settings State
+  const [workspaceName, setWorkspaceName] = useState("nguyen thanh dat's Workspace");
+  const [workspaceDomain, setWorkspaceDomain] = useState('cloudthinker.io');
+
+  // Fetch BYOK on open
+  useEffect(() => {
+    if (!isOpen) return;
+    get<any>('/api/byok').then(data => {
+      if (!data) return;
+      if (data.gemini_api_key) setByokGeminiKey(data.gemini_api_key);
+      if (data.gemini_model) setByokGeminiModel(data.gemini_model);
+      if (data.openrouter_api_key) setByokOpenRouterKey(data.openrouter_api_key);
+      if (data.openrouter_model) setByokOpenRouterModel(data.openrouter_model);
+      if (data.anthropic_api_key) setByokAnthropicKey(data.anthropic_api_key);
+      if (data.openai_api_key) setByokOpenAIKey(data.openai_api_key);
+      if (data.aws_access_key_id) setByokAwsKeyId(data.aws_access_key_id);
+      if (data.aws_region) setByokAwsRegion(data.aws_region);
+    });
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const currentAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
   const currentSkill = skills.find(s => s.id === selectedSkillId) || skills[0];
   const currentFile = currentSkill.files.find(f => f.name === selectedFileName) || currentSkill.files[0];
+  const currentConn = connections.find(c => c.id === selectedConnId) || connections[0];
+
+  // Skill Handlers
+  const handleDownloadYaml = (skill: SkillItem) => {
+    const yamlContent = `# ScribeBA Skill Definition
+name: ${skill.name}
+version: "1.0.0"
+category: "${skill.category || 'Engineering'}"
+description: "${(skill.description || '').replace(/"/g, '\\"')}"
+
+required_connections:
+${(skill.requiredConnections || []).map(c => `  - prefix: ${c.prefix}\n    label: "${c.label}"`).join('\n')}
+
+config_fields:
+${(skill.configFields || []).map(f => `  - key: ${f.key}\n    label: "${f.label}"\n    required: ${f.required}\n    placeholder: "${f.placeholder}"`).join('\n')}
+
+markdown: |
+${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
+`;
+    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${skill.name}.yaml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setSkillActionMessage(`Downloaded ${skill.name}.yaml`);
+    setTimeout(() => setSkillActionMessage(null), 3000);
+  };
+
+  const handleAddCustomSkill = () => {
+    if (!customSkillName.trim()) return;
+    const cleanId = customSkillName.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const newSkill: SkillItem = {
+      id: cleanId,
+      name: cleanId,
+      category: customSkillCategory,
+      description: customSkillDesc.trim() || 'Custom engineering investigation skill.',
+      enabled: true,
+      availableIn: { chat: true, review: true, incident: true, assessment: true },
+      requiredConnections: [{ prefix: 'env', label: 'Runtime Environment' }],
+      configFields: [{ key: 'target_resource', label: 'Target Resource', required: true, placeholder: 'e.g. cluster/service' }],
+      markdownContent: customSkillMarkdown.trim() || `# ${cleanId}\n\n## Phase 1: Investigation\n1. Check error signatures\n2. Trace request logs`,
+      files: [{ name: 'SKILL.md', path: 'SKILL.md', content: customSkillMarkdown.trim() || `# ${cleanId}` }],
+    };
+    setSkills([newSkill, ...skills]);
+    setSelectedSkillId(cleanId);
+    setSelectedFileName('SKILL.md');
+    setIsAddSkillOpen(false);
+    setCustomSkillName('');
+    setCustomSkillDesc('');
+    setCustomSkillMarkdown('');
+    setSkillActionMessage(`Added custom skill: ${cleanId}`);
+    setTimeout(() => setSkillActionMessage(null), 3000);
+
+    fetch('/api/skills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: cleanId,
+        category: customSkillCategory,
+        description: customSkillDesc.trim() || 'Custom engineering investigation skill.',
+      }),
+    }).catch(() => {});
+  };
+
+  const handleInstallCuratedSkill = (curated: any) => {
+    const existing = skills.find(s => s.name === curated.name);
+    if (existing) {
+      setSkills(skills.map(s => s.name === curated.name ? { ...s, enabled: true } : s));
+      setSelectedSkillId(existing.id);
+      setIsAddSkillOpen(false);
+      setSkillActionMessage(`Enabled skill: ${curated.name}`);
+      setTimeout(() => setSkillActionMessage(null), 3000);
+      return;
+    }
+    const newSkill: SkillItem = {
+      id: curated.name,
+      name: curated.name,
+      category: curated.category,
+      description: curated.description,
+      repoUrl: curated.repo,
+      enabled: true,
+      availableIn: { chat: true, review: true, incident: true, assessment: true },
+      requiredConnections: curated.connections,
+      configFields: [{ key: 'target_system', label: 'Target System', required: true, placeholder: 'e.g. kafka-broker:9092' }],
+      markdownContent: `# ${curated.name}\n\nImported from ${curated.repo}\n\n## Overview\n${curated.description}\n\n## Instructions\n1. Validate connection parameters.\n2. Run automated diagnostic assertions.\n3. Propose verified changes with zero side-effects.`,
+      files: [{ name: 'SKILL.md', path: 'SKILL.md', content: `# ${curated.name}\n\n${curated.description}` }],
+    };
+    setSkills([newSkill, ...skills]);
+    setSelectedSkillId(curated.name);
+    setSelectedFileName('SKILL.md');
+    setIsAddSkillOpen(false);
+    setSkillActionMessage(`Installed skill from ${curated.repo}: ${curated.name}`);
+    setTimeout(() => setSkillActionMessage(null), 3000);
+
+    fetch('/api/skills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: curated.name,
+        category: curated.category,
+        description: curated.description,
+      }),
+    }).catch(() => {});
+  };
+
+  const handleSaveEditSkill = () => {
+    setSkills(
+      skills.map(s =>
+        s.id === currentSkill.id
+          ? {
+              ...s,
+              description: editSkillDesc.trim() || s.description,
+              markdownContent: editSkillMarkdown.trim() || s.markdownContent,
+              files: [{ name: 'SKILL.md', path: 'SKILL.md', content: editSkillMarkdown.trim() || s.markdownContent || '' }],
+            }
+          : s
+      )
+    );
+    setIsEditSkillOpen(false);
+    setSkillActionMessage(`Saved changes to ${currentSkill.name}`);
+    setTimeout(() => setSkillActionMessage(null), 3000);
+  };
+
+  const handleDeleteSkill = (skillId: string) => {
+    if (skills.length <= 1) return;
+    const nextSkills = skills.filter(s => s.id !== skillId);
+    setSkills(nextSkills);
+    if (selectedSkillId === skillId) {
+      setSelectedSkillId(nextSkills[0].id);
+      setSelectedFileName(nextSkills[0].files[0]?.name || 'SKILL.md');
+    }
+    setSkillActionMessage(`Removed skill: ${skillId}`);
+    setTimeout(() => setSkillActionMessage(null), 3000);
+  };
 
   // Commands filtered
   const filteredCommands = commands.filter(cmd => {
@@ -101,6 +344,42 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     }
     return true;
   });
+
+  // Handle Save BYOK
+  const handleSaveByok = async () => {
+    setByokStatusMessage('Saving BYOK settings to environment...');
+    const res = await post<any>('/api/byok', {
+      gemini_api_key: byokGeminiKey,
+      gemini_model: byokGeminiModel,
+      openrouter_api_key: byokOpenRouterKey,
+      openrouter_model: byokOpenRouterModel,
+      anthropic_api_key: byokAnthropicKey,
+      openai_api_key: byokOpenAIKey,
+      aws_access_key_id: byokAwsKeyId,
+      aws_secret_access_key: byokAwsSecretKey || undefined,
+      aws_default_region: byokAwsRegion,
+    });
+    if (res && res.status === 'ok') {
+      setByokStatusMessage('✅ Credentials successfully saved and verified!');
+      setTimeout(() => setByokStatusMessage(null), 4000);
+    } else {
+      setByokStatusMessage('❌ Failed to update credentials.');
+    }
+  };
+
+  // Handle Test BYOK Key
+  const handleTestKey = async (provider: string, keyVal: string) => {
+    setByokTestStatus(prev => ({ ...prev, [provider]: 'Testing...' }));
+    const res = await post<any>('/api/byok/test', { provider, key: keyVal });
+    if (res && res.status === 'ok') {
+      setByokTestStatus(prev => ({ ...prev, [provider]: `✅ ${res.message}` }));
+    } else {
+      setByokTestStatus(prev => ({
+        ...prev,
+        [provider]: `❌ ${res?.message || 'Connection failed'}`,
+      }));
+    }
+  };
 
   // Handle Add Command
   const handleAddCommand = () => {
@@ -152,9 +431,12 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           id: `cred-${Date.now()}`,
           name: credName.trim(),
           type: credType,
-          service: credName.includes('AWS') ? 'AWS' : credName.includes('Stitch') ? 'Stitch MCP' : 'Cloud API',
-          maskedKey: `${credSecret.slice(0, 4)}••••••••${credSecret.slice(-4)}`,
-          addedDate: 'Today',
+          service: credType === 'IAM Role' ? 'AWS' : 'API Service',
+          maskedKey:
+            credSecret.length > 8
+              ? `${credSecret.slice(0, 4)}••••••••${credSecret.slice(-4)}`
+              : '••••••••',
+          addedDate: 'Just now',
           status: 'Active',
         },
       ]);
@@ -165,50 +447,61 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      {/* Modal Container */}
-      <div className="bg-white rounded-2xl w-full max-w-6xl h-[88vh] shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        {/* Modal Top Bar */}
-        <div className="px-6 py-3.5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-white">
-          <h2 className="text-sm font-bold text-gray-800 tracking-tight">
-            {activeTab} - nguyen thanh dat's Workspace
-          </h2>
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-6xl h-[88vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
+        {/* ======================= MODAL HEADER ======================= */}
+        <div className="h-12 border-b border-gray-200 px-5 flex items-center justify-between shrink-0 bg-white">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-gray-900 tracking-tight">
+              {activeTab} - nguyen thanh dat's Workspace
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors"
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span className="material-symbols-outlined text-[19px]">close</span>
           </button>
         </div>
 
-        {/* Modal Body: Left Sidebar + Dynamic Content */}
+        {/* ======================= MODAL BODY ======================= */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Column 1: Settings Navigation Sidebar */}
-          <div className="w-56 border-r border-gray-200 bg-[#fbfcfb] overflow-y-auto p-4 shrink-0 flex flex-col space-y-5 text-xs">
+          {/* ======================= SIDEBAR (LEFT) ======================= */}
+          <div className="w-56 border-r border-gray-200 bg-gray-50/70 p-3 flex flex-col gap-5 shrink-0 overflow-y-auto select-none text-xs">
             {/* WORKSPACE */}
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
                 WORKSPACE
               </div>
               <div className="space-y-0.5">
-                {(['General', 'Members', 'Branding'] as const).map(t => (
+                {(['General', 'Members', 'Branding', 'BYOK'] as const).map(t => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
                       activeTab === t
-                        ? 'bg-gray-200/90 font-semibold text-gray-900'
+                        ? 'bg-gray-200 font-semibold text-gray-900'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="material-symbols-outlined text-[17px] text-gray-400">
-                        {t === 'General' ? 'settings' : t === 'Members' ? 'group' : 'palette'}
+                      <span
+                        className={`material-symbols-outlined text-[17px] ${
+                          activeTab === t ? 'text-[#7b5cff]' : 'text-gray-400'
+                        }`}
+                      >
+                        {t === 'General'
+                          ? 'settings'
+                          : t === 'Members'
+                          ? 'group'
+                          : t === 'Branding'
+                          ? 'auto_awesome'
+                          : 'vpn_key'}
                       </span>
                       <span>{t}</span>
                     </div>
                     {t === 'Branding' && (
-                      <span className="text-[9px] px-1 py-0.2 rounded border border-gray-300 text-gray-400">
+                      <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
                         Scale
                       </span>
                     )}
@@ -243,7 +536,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         : t === 'Skills'
                         ? 'extension'
                         : t === 'Agents'
-                        ? 'smart_toy'
+                        ? 'person'
                         : t === 'Knowledge'
                         ? 'menu_book'
                         : 'key'}
@@ -260,7 +553,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 WORKFLOW
               </div>
               <div className="space-y-0.5">
-                {(['Commands', 'Approval'] as const).map(t => (
+                {(['Artifacts', 'Commands', 'Approval'] as const).map(t => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
@@ -275,7 +568,11 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         activeTab === t ? 'text-[#7b5cff]' : 'text-gray-400'
                       }`}
                     >
-                      {t === 'Commands' ? 'terminal' : 'check_circle'}
+                      {t === 'Artifacts'
+                        ? 'layers'
+                        : t === 'Commands'
+                        ? 'terminal'
+                        : 'check_circle'}
                     </span>
                     <span>{t}</span>
                   </button>
@@ -306,403 +603,206 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             </div>
           </div>
 
-          {/* ======================= TAB: AGENTS ======================= */}
-          {activeTab === 'Agents' && (
-            <div className="flex-1 flex overflow-hidden">
-              {/* Middle: Core Team list */}
-              <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0">
-                <div className="px-3 py-2.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between border-b border-gray-100">
-                  <span>CORE TEAM</span>
-                  <span className="material-symbols-outlined text-[14px]">expand_less</span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
-                  {agents.map(agent => {
-                    const isSelected = agent.id === selectedAgentId;
-                    return (
-                      <button
-                        key={agent.id}
-                        onClick={() => setSelectedAgentId(agent.id)}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all ${
-                          isSelected ? 'bg-gray-100 shadow-sm' : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-teal-50 border border-teal-100 flex items-center justify-center text-base shrink-0">
-                            {agent.avatar}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-gray-900 truncate">
-                              {agent.name}
-                            </div>
-                            <div className="text-[10px] text-gray-400 truncate">{agent.role}</div>
-                          </div>
-                        </div>
-
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            agent.status === 'active' ? 'bg-emerald-500' : 'bg-gray-300'
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Custom Agents Section */}
-                <div className="p-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                  <div className="flex items-center gap-1 font-bold text-[11px] text-gray-400 uppercase">
-                    <span>CUSTOM</span>
-                    <span className="material-symbols-outlined text-[13px]">expand_less</span>
+          {/* ========================================================================= */}
+          {/* TAB: SKILLS (MATCHES SCREENSHOT 1 EXACTLY + CATEGORY FILTERS & CATALOG)    */}
+          {/* ========================================================================= */}
+          {activeTab === 'Skills' && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {skillActionMessage && (
+                <div className="mx-6 mt-3 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg text-teal-800 text-xs flex items-center justify-between shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-teal-600">check_circle</span>
+                    <span className="font-medium">{skillActionMessage}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-gray-400">0/5</span>
+                  <button onClick={() => setSkillActionMessage(null)} className="text-teal-600 hover:text-teal-900">
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              )}
+
+              <div className="flex-1 flex overflow-hidden">
+                {/* Middle: Skills Selection List */}
+                <div className="w-72 border-r border-gray-200 bg-white flex flex-col shrink-0">
+                  <div className="p-3 border-b border-gray-100 flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="material-symbols-outlined absolute left-2.5 top-2 text-gray-400 text-[16px]">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Search skills or keywords..."
+                        value={skillSearch}
+                        onChange={e => setSkillSearch(e.target.value)}
+                        className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                      />
+                    </div>
                     <button
-                      onClick={() => alert('Add Custom Agent feature')}
-                      className="p-1 hover:text-gray-700"
+                      title="Add Custom Skill or Import from Catalog"
+                      onClick={() => setIsAddSkillOpen(true)}
+                      className="w-7 h-7 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 flex items-center justify-center shrink-0 shadow-xs"
                     >
-                      <span className="material-symbols-outlined text-[15px]">add</span>
+                      <span className="material-symbols-outlined text-[17px]">add</span>
                     </button>
                   </div>
-                </div>
-              </div>
 
-              {/* Right: Agent Detail Pane */}
-              <div className="flex-1 overflow-y-auto bg-white p-6">
-                {/* Agent Header */}
-                <div className="flex items-start justify-between pb-4 border-b border-gray-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-purple-100 via-teal-50 to-emerald-100 border border-teal-200/80 flex items-center justify-center text-3xl shadow-sm">
-                      {currentAgent.avatar}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">{currentAgent.name}</h3>
-                      <div className="text-xs text-gray-500 font-medium">{currentAgent.role}</div>
-                      <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full w-fit">
-                        <span className="material-symbols-outlined text-[13px] text-teal-600">
-                          hub
-                        </span>
-                        <span>{currentAgent.builtinConnections.length} connections</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabs: Identity | Connections */}
-                <div className="flex items-center gap-2 mt-4 mb-6">
-                  <button
-                    onClick={() => setAgentTab('Identity')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      agentTab === 'Identity'
-                        ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Identity
-                  </button>
-                  <button
-                    onClick={() => setAgentTab('Connections')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      agentTab === 'Connections'
-                        ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Connections
-                  </button>
-                </div>
-
-                {/* TAB CONTENT: IDENTITY */}
-                {agentTab === 'Identity' && (
-                  <div className="space-y-4 max-w-2xl text-xs">
-                    <div>
-                      <input
-                        type="text"
-                        value={currentAgent.name}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
-                        <span>@mention</span>
-                        <span className="text-[10px] text-gray-400 font-normal">
-                          Set once, can't be changed later
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        value={currentAgent.mention}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed font-mono"
-                      />
-                      <div className="text-[11px] text-gray-400 mt-1">
-                        Type <code className="text-[#7b5cff] font-semibold">{currentAgent.mention}</code> in any chat to summon this agent.
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
-                        <span>Role *</span>
-                        <span className="text-[10px] text-gray-400 font-normal">
-                          Set by KAFKON, can’t be changed
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        value={currentAgent.role}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
-                        <span>Goal *</span>
-                        <span className="text-[10px] text-gray-400 font-normal">
-                          Set by KAFKON, can’t be changed
-                        </span>
-                      </div>
-                      <textarea
-                        rows={3}
-                        value={currentAgent.goal}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed leading-relaxed resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
-                        <span>Instructions (System Architecture Persona)</span>
-                        <span className="text-[10px] text-gray-400 font-normal">
-                          Set by KAFKON, can’t be changed
-                        </span>
-                      </div>
-                      <textarea
-                        rows={6}
-                        value={currentAgent.instructions}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-mono text-[11px] leading-relaxed cursor-not-allowed resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-gray-700 font-semibold block mb-1">Language</label>
-                      <div className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg bg-white cursor-pointer hover:border-gray-300">
-                        <div className="flex items-center gap-1.5 text-gray-700">
-                          <span className="material-symbols-outlined text-[16px] text-teal-600">
-                            auto_awesome
-                          </span>
-                          <span>Match the user</span>
-                        </div>
-                        <span className="material-symbols-outlined text-[16px] text-gray-400">
-                          unfold_more
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Bottom Actions */}
-                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                  {/* Category Pills Filter */}
+                  <div className="px-2.5 py-1.5 border-b border-gray-100 flex gap-1 overflow-x-auto no-scrollbar bg-gray-50/50">
+                    {['All', 'Incident RCA', 'Data & CDC', 'Cloud & SRE', 'Security & Compliance', 'Architecture & DDD', 'Agentic AI'].map(cat => (
                       <button
-                        type="button"
-                        className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => alert('Saved agent configuration.')}
-                        className="px-5 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg shadow-sm"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB CONTENT: CONNECTIONS */}
-                {agentTab === 'Connections' && (
-                  <div className="space-y-6 max-w-2xl text-xs">
-                    {/* Sub-pills: Builtin | MCP */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConnectionSubTab('Builtin')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-                          connectionSubTab === 'Builtin'
-                            ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
-                            : 'text-gray-600 hover:bg-gray-100'
+                        key={cat}
+                        onClick={() => setSkillCategoryFilter(cat)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap transition-all ${
+                          skillCategoryFilter === cat
+                            ? 'bg-teal-600 text-white shadow-xs'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
                         }`}
                       >
-                        <span>Builtin</span>
-                        <span className="bg-[#7b5cff] text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                          {currentAgent.builtinConnections.length}
-                        </span>
+                        {cat}
                       </button>
-
-                      <button
-                        onClick={() => setConnectionSubTab('MCP')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-                          connectionSubTab === 'MCP'
-                            ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300'
-                            : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <span>MCP</span>
-                        <span className="bg-gray-200 text-gray-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                          {currentAgent.mcpConnections.length}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* CONNECTED LIST */}
-                    <div>
-                      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        CONNECTED ({connectionSubTab === 'Builtin' ? currentAgent.builtinConnections.length : currentAgent.mcpConnections.length})
-                      </div>
-                      <div className="space-y-2">
-                        {(connectionSubTab === 'Builtin'
-                          ? currentAgent.builtinConnections
-                          : currentAgent.mcpConnections
-                        ).map((conn, idx) => (
-                          <div
-                            key={idx}
-                            className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between shadow-sm"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="material-symbols-outlined text-[20px] text-teal-700">
-                                {conn.toLowerCase().includes('kubernetes') ? 'dns' : 'cloud'}
-                              </span>
-                              <span className="font-semibold text-gray-800">{conn}</span>
-                            </div>
-                            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              Active
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* AVAILABLE LIST */}
-                    <div>
-                      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                        AVAILABLE (0)
-                      </div>
-                      <p className="text-gray-400 mb-1">All connections are assigned.</p>
-                      <p className="text-gray-400 text-[11px] flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[13px]">lock</span>
-                        <span>Connections for this agent are managed by KAFKON.</span>
-                      </p>
-                    </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* ======================= TAB: SKILLS ======================= */}
-          {activeTab === 'Skills' && (
-            <div className="flex-1 flex overflow-hidden">
-              {/* Column 2: Skills Selection List */}
-              <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0">
-                <div className="p-3 border-b border-gray-100 flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="material-symbols-outlined absolute left-2 top-2 text-gray-400 text-[16px]">
-                      search
+                  {/* Skills Count */}
+                  <div className="px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>
+                      {skillCategoryFilter === 'All' ? 'ALL SKILLS' : skillCategoryFilter.toUpperCase()} (
+                      {
+                        skills.filter(s => {
+                          const matchesCat = skillCategoryFilter === 'All' || s.category === skillCategoryFilter;
+                          const matchesQ =
+                            s.name.toLowerCase().includes(skillSearch.toLowerCase()) ||
+                            (s.description && s.description.toLowerCase().includes(skillSearch.toLowerCase()));
+                          return matchesCat && matchesQ;
+                        }).length
+                      }
+                      )
                     </span>
-                    <input
-                      type="text"
-                      placeholder="Search skills"
-                      value={skillSearch}
-                      onChange={e => setSkillSearch(e.target.value)}
-                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
-                    />
+                    <span className="text-[10px] font-mono text-emerald-600">
+                      {skills.filter(s => s.enabled).length} ON
+                    </span>
                   </div>
-                  <button
-                    onClick={() => alert('Add custom skill')}
-                    className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center shrink-0"
-                  >
-                    <span className="material-symbols-outlined text-[17px]">add</span>
-                  </button>
-                </div>
 
-                <div className="px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>ENABLED ({skills.filter(s => s.enabled).length})</span>
-                  <span className="material-symbols-outlined text-[14px]">expand_less</span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
-                  {skills
-                    .filter(s => s.name.toLowerCase().includes(skillSearch.toLowerCase()))
-                    .map(skill => {
-                      const isSelected = skill.id === selectedSkillId;
-                      return (
-                        <button
-                          key={skill.id}
-                          onClick={() => {
-                            setSelectedSkillId(skill.id);
-                            setSelectedFileName(skill.files[0]?.name || 'SKILL.md');
-                          }}
-                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs font-mono transition-colors ${
-                            isSelected
-                              ? 'bg-gray-200/90 text-gray-900 font-semibold'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className="truncate">{skill.name}</span>
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                              skill.enabled ? 'bg-emerald-500' : 'bg-gray-300'
+                  {/* Skills List Items */}
+                  <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
+                    {skills
+                      .filter(s => {
+                        const matchesCat = skillCategoryFilter === 'All' || s.category === skillCategoryFilter;
+                        const matchesQ =
+                          s.name.toLowerCase().includes(skillSearch.toLowerCase()) ||
+                          (s.description && s.description.toLowerCase().includes(skillSearch.toLowerCase()));
+                        return matchesCat && matchesQ;
+                      })
+                      .map(skill => {
+                        const isSelected = skill.id === selectedSkillId;
+                        return (
+                          <button
+                            key={skill.id}
+                            onClick={() => {
+                              setSelectedSkillId(skill.id);
+                              setSelectedFileName(skill.files[0]?.name || 'SKILL.md');
+                            }}
+                            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
+                              isSelected
+                                ? 'bg-teal-50 border border-teal-200 text-teal-900 font-semibold'
+                                : 'text-gray-700 hover:bg-gray-50 border border-transparent'
                             }`}
-                          />
-                        </button>
-                      );
-                    })}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="truncate font-mono">{skill.name}</div>
+                              {skill.category && (
+                                <div className="text-[10px] text-gray-400 font-sans truncate">{skill.category}</div>
+                              )}
+                            </div>
+                            <span
+                              title={skill.enabled ? 'Enabled in workspace' : 'Disabled'}
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                skill.enabled ? 'bg-emerald-500' : 'bg-gray-300'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Column 3: Skill Detail View & File Viewer */}
-              <div className="flex-1 overflow-y-auto bg-white flex flex-col">
-                <div className="p-6 border-b border-gray-100">
-                  <div className="flex items-start justify-between gap-4">
+                {/* Right: Skill Detail View */}
+                <div className="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
+                  {/* Header matching Screenshot 1 */}
+                  <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-100">
                     <div className="flex-1">
-                      <h3 className="text-base font-bold font-mono text-gray-900">
-                        {currentSkill.name}
-                      </h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-sm font-bold font-mono text-gray-900">
+                          {currentSkill.name}
+                        </h3>
+                        {currentSkill.category && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-semibold border border-teal-200">
+                            {currentSkill.category}
+                          </span>
+                        )}
+                        {currentSkill.repoUrl && (
+                          <a
+                            href={currentSkill.repoUrl.startsWith('http') ? currentSkill.repoUrl : `https://${currentSkill.repoUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-teal-600 hover:underline font-mono flex items-center gap-0.5"
+                          >
+                            <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                            {currentSkill.repoUrl}
+                          </a>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-600 mt-1 leading-relaxed">
                         {currentSkill.description}
                       </p>
                     </div>
 
-                    <button
-                      onClick={() =>
-                        setSkills(
-                          skills.map(s =>
-                            s.id === currentSkill.id ? { ...s, enabled: !s.enabled } : s
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        title={currentSkill.enabled ? 'Skill active in workspace' : 'Skill disabled'}
+                        onClick={() =>
+                          setSkills(
+                            skills.map(s =>
+                              s.id === currentSkill.id ? { ...s, enabled: !s.enabled } : s
+                            )
                           )
-                        )
-                      }
-                      className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
-                        currentSkill.enabled ? 'bg-[#7b5cff]' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`block w-4 h-4 rounded-full bg-white transition-transform shadow-sm absolute top-1 ${
-                          currentSkill.enabled ? 'left-6' : 'left-1'
+                        }
+                        className={`w-10 h-5 rounded-full transition-colors relative ${
+                          currentSkill.enabled ? 'bg-teal-600' : 'bg-gray-300'
                         }`}
-                      />
-                    </button>
+                      >
+                        <span
+                          className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform shadow-sm absolute top-0.75 ${
+                            currentSkill.enabled ? 'left-5.5' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-xs">
+                  {/* Available In and action buttons */}
+                  <div className="flex items-center justify-between py-2.5 border-b border-gray-100 text-xs">
                     <div className="flex items-center gap-4">
-                      <span className="text-gray-400 font-medium">Available In</span>
+                      <span className="text-gray-400 font-medium">Available in</span>
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={currentSkill.availableIn.chat}
-                          onChange={() => {}}
-                          className="rounded text-[#7b5cff]"
+                          onChange={() => {
+                            setSkills(
+                              skills.map(s =>
+                                s.id === currentSkill.id
+                                  ? {
+                                      ...s,
+                                      availableIn: {
+                                        ...s.availableIn,
+                                        chat: !s.availableIn.chat,
+                                      },
+                                    }
+                                  : s
+                              )
+                            );
+                          }}
+                          className="rounded text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-gray-700">Chat</span>
                       </label>
@@ -710,8 +810,22 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         <input
                           type="checkbox"
                           checked={currentSkill.availableIn.review}
-                          onChange={() => {}}
-                          className="rounded text-[#7b5cff]"
+                          onChange={() => {
+                            setSkills(
+                              skills.map(s =>
+                                s.id === currentSkill.id
+                                  ? {
+                                      ...s,
+                                      availableIn: {
+                                        ...s.availableIn,
+                                        review: !s.availableIn.review,
+                                      },
+                                    }
+                                  : s
+                              )
+                            );
+                          }}
+                          className="rounded text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-gray-700">Review</span>
                       </label>
@@ -719,8 +833,22 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         <input
                           type="checkbox"
                           checked={currentSkill.availableIn.incident}
-                          onChange={() => {}}
-                          className="rounded text-[#7b5cff]"
+                          onChange={() => {
+                            setSkills(
+                              skills.map(s =>
+                                s.id === currentSkill.id
+                                  ? {
+                                      ...s,
+                                      availableIn: {
+                                        ...s.availableIn,
+                                        incident: !s.availableIn.incident,
+                                      },
+                                    }
+                                  : s
+                              )
+                            );
+                          }}
+                          className="rounded text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-gray-700">Incident</span>
                       </label>
@@ -728,8 +856,22 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         <input
                           type="checkbox"
                           checked={currentSkill.availableIn.assessment}
-                          onChange={() => {}}
-                          className="rounded text-[#7b5cff]"
+                          onChange={() => {
+                            setSkills(
+                              skills.map(s =>
+                                s.id === currentSkill.id
+                                  ? {
+                                      ...s,
+                                      availableIn: {
+                                        ...s.availableIn,
+                                        assessment: !s.availableIn.assessment,
+                                      },
+                                    }
+                                  : s
+                              )
+                            );
+                          }}
+                          className="rounded text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-gray-700">Assessment</span>
                       </label>
@@ -737,110 +879,1264 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
                     <div className="flex items-center gap-1 text-gray-400">
                       <button
-                        onClick={() => alert(`Exported ${currentSkill.name}`)}
-                        className="p-1.5 hover:text-gray-700 rounded hover:bg-gray-100"
+                        title="Download skill YAML specification"
+                        onClick={() => handleDownloadYaml(currentSkill)}
+                        className="p-1 hover:text-teal-700 rounded hover:bg-teal-50"
                       >
                         <span className="material-symbols-outlined text-[17px]">download</span>
                       </button>
                       <button
-                        onClick={() => alert(`Editing ${currentSkill.name}`)}
-                        className="p-1.5 hover:text-gray-700 rounded hover:bg-gray-100"
+                        title="Edit skill description and instructions"
+                        onClick={() => {
+                          setEditSkillDesc(currentSkill.description);
+                          setEditSkillMarkdown(currentSkill.markdownContent || '');
+                          setIsEditSkillOpen(true);
+                        }}
+                        className="p-1 hover:text-teal-700 rounded hover:bg-teal-50"
                       >
                         <span className="material-symbols-outlined text-[17px]">edit</span>
                       </button>
                       <button
-                        onClick={() => alert(`Delete ${currentSkill.name}`)}
-                        className="p-1.5 hover:text-red-600 rounded hover:bg-gray-100"
+                        title="Delete skill"
+                        onClick={() => handleDeleteSkill(currentSkill.id)}
+                        className="p-1 hover:text-red-600 rounded hover:bg-red-50"
                       >
                         <span className="material-symbols-outlined text-[17px]">delete</span>
                       </button>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex-1 flex overflow-hidden">
-                  {/* File Tree Explorer matching Screenshot */}
-                  <div className="w-56 border-r border-gray-200 p-3 bg-white overflow-y-auto text-xs shrink-0 font-mono">
-                    <div className="space-y-1">
-                      {/* references folder */}
-                      {currentSkill.files.some(f => f.path.startsWith('references/')) && (
-                        <div>
-                          <div className="flex items-center gap-1.5 text-gray-700 py-1 px-1 font-medium cursor-pointer">
-                            <span className="material-symbols-outlined text-[15px] text-gray-500">expand_more</span>
-                            <span className="material-symbols-outlined text-[16px] text-amber-500">folder</span>
-                            <span>references</span>
+                  {/* Multi-file tabs if skill contains multiple references */}
+                  {currentSkill.files && currentSkill.files.length > 1 && (
+                    <div className="flex items-center gap-2 border-b border-gray-200 mt-2 mb-1">
+                      {currentSkill.files.map(file => (
+                        <button
+                          key={file.name}
+                          onClick={() => setSelectedFileName(file.name)}
+                          className={`px-3 py-1.5 text-xs font-mono border-b-2 transition-colors ${
+                            selectedFileName === file.name
+                              ? 'border-teal-600 text-teal-700 font-bold'
+                              : 'border-transparent text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          {file.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Formatted YAML/Metadata Block (Matches Screenshot 1) */}
+                  <div className="my-4 p-4 bg-gray-50/70 border border-gray-100 rounded-xl font-mono text-[11px] text-gray-700 space-y-3 leading-relaxed">
+                    <div className="flex items-start gap-4">
+                      <span className="text-gray-500 w-40 shrink-0">required connections</span>
+                      <div className="space-y-1">
+                        {(currentSkill.requiredConnections || [
+                          { prefix: 'apm', label: 'APM / Tracing Platform' },
+                          { prefix: 'monitoring', label: 'Monitoring Platform' },
+                        ]).map((c, i) => (
+                          <div key={i} className="text-gray-800">
+                            - prefix: {c.prefix}
+                            <div className="pl-4 text-gray-500">label: {c.label}</div>
                           </div>
+                        ))}
+                      </div>
+                    </div>
 
-                          <div className="pl-6 space-y-0.5 mt-0.5">
-                            {currentSkill.files
-                              .filter(f => f.path.startsWith('references/'))
-                              .map(f => {
-                                const isSelected = selectedFileName === f.name;
-                                return (
-                                  <button
-                                    key={f.name}
-                                    onClick={() => setSelectedFileName(f.name)}
-                                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
-                                      isSelected
-                                        ? 'bg-gray-200 text-gray-900 font-semibold'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    <span className="w-4 h-4 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold flex items-center justify-center font-mono shrink-0">
-                                      MD
-                                    </span>
-                                    <span className="truncate">{f.name}</span>
-                                  </button>
-                                );
-                              })}
+                    <div className="flex items-start gap-4 pt-2 border-t border-gray-200/50">
+                      <span className="text-gray-500 w-40 shrink-0">config_fields</span>
+                      <div className="space-y-2">
+                        {(currentSkill.configFields || [
+                          {
+                            key: 'api_endpoint',
+                            label: 'Affected API Endpoint(s)',
+                            required: true,
+                            placeholder: 'e.g., GET /api/v1/orders, POST /api/v1/checkout',
+                          },
+                          {
+                            key: 'current_latency',
+                            label: 'Current P95 Latency',
+                            required: true,
+                            placeholder: 'e.g., 2500ms',
+                          },
+                          {
+                            key: 'target_latency',
+                            label: 'Target P95 Latency',
+                            required: false,
+                            placeholder: 'e.g., 500ms',
+                          },
+                        ]).map((f, i) => (
+                          <div key={i} className="text-gray-800">
+                            - key: {f.key}
+                            <div className="pl-4 text-gray-600">label: {f.label}</div>
+                            <div className="pl-4 text-gray-600">required: {f.required ? 'true' : 'false'}</div>
+                            <div className="pl-4 text-gray-400">placeholder: {f.placeholder}</div>
                           </div>
-                        </div>
-                      )}
-
-                      {/* SKILL.md and other root files */}
-                      {currentSkill.files
-                        .filter(f => !f.path.startsWith('references/'))
-                        .map(f => {
-                          const isSelected = selectedFileName === f.name;
-                          return (
-                            <button
-                              key={f.name}
-                              onClick={() => setSelectedFileName(f.name)}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
-                                isSelected
-                                  ? 'bg-gray-200 text-gray-900 font-semibold'
-                                  : 'text-gray-600 hover:bg-gray-50'
-                              }`}
-                            >
-                              <span className="w-4 h-4 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold flex items-center justify-center font-mono shrink-0">
-                                MD
-                              </span>
-                              <span className="truncate">{f.name}</span>
-                            </button>
-                          );
-                        })}
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Rendered Markdown Preview Matching Screenshots */}
-                  <div className="flex-1 p-8 overflow-y-auto bg-white">
-                    {selectedFileName === 'SKILL.md' ? (
-                      <SkillMarkdownRenderer content={currentFile?.content || ''} />
-                    ) : (
-                      <div className="max-w-2xl text-xs text-gray-700 leading-relaxed font-sans">
-                        <h2 className="text-base font-bold text-gray-900 mb-3">{currentFile.name}</h2>
-                        <pre className="p-4 bg-gray-50 border border-gray-200 rounded-lg font-mono text-[11px] whitespace-pre-wrap leading-normal text-gray-800">
-                          {currentFile?.content || 'No content found.'}
-                        </pre>
-                      </div>
-                    )}
+                  {/* Markdown investigation checklist (Matches Screenshot 1) */}
+                  <div className="flex-1 overflow-y-auto pt-2">
+                    <SkillMarkdownRenderer
+                      content={
+                        (currentSkill.files && currentSkill.files.find(f => f.name === selectedFileName)?.content) ||
+                        currentSkill.markdownContent ||
+                        `# ${currentSkill.name}\n\n## Overview\n${currentSkill.description}`
+                      }
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ======================= TAB: COMMANDS ======================= */}
+          {/* ========================================================================= */}
+          {/* TAB: CONNECTIONS (MATCHES SCREENSHOT 2 EXACTLY)                           */}
+          {/* ========================================================================= */}
+          {activeTab === 'Connections' && (
+            <div className="flex-1 flex flex-col overflow-hidden bg-white">
+              {/* Top Sub-Bar: Builtin vs MCP and Split vs Grid */}
+              <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setConnectionType('Builtin')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      connectionType === 'Builtin'
+                        ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                        : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">link</span>
+                    <span>Builtin Connections</span>
+                  </button>
+                  <button
+                    onClick={() => setConnectionType('MCP')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      connectionType === 'MCP'
+                        ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                        : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">hub</span>
+                    <span>MCP Connections</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center border border-gray-200 rounded-lg p-0.5 bg-gray-50">
+                  <button
+                    onClick={() => setConnectionView('Split')}
+                    className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-all ${
+                      connectionView === 'Split'
+                        ? 'bg-white shadow-sm text-teal-800 font-semibold'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">vertical_split</span>
+                    <span>Split</span>
+                  </button>
+                  <button
+                    onClick={() => setConnectionView('Grid')}
+                    className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-all ${
+                      connectionView === 'Grid'
+                        ? 'bg-white shadow-sm text-teal-800 font-semibold'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">grid_view</span>
+                    <span>Grid</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Main Split/Grid Container */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Column 2: Connections Category Sidebar (Matches Screenshot 2) */}
+                <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0">
+                  <div className="p-3 border-b border-gray-100 space-y-2">
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-2.5 top-2 text-gray-400 text-[16px]">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Search connections"
+                        value={connSearch}
+                        onChange={e => setConnSearch(e.target.value)}
+                        className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                      />
+                    </div>
+                    <select
+                      value={connCategoryFilter}
+                      onChange={e => setConnCategoryFilter(e.target.value as any)}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none"
+                    >
+                      <option value="All">All categories</option>
+                      <option value="CONNECTED">Connected</option>
+                      <option value="CLOUD">Cloud</option>
+                      <option value="INFRASTRUCTURE">Infrastructure</option>
+                    </select>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4 text-xs">
+                    {/* CONNECTED CATEGORY */}
+                    {(connCategoryFilter === 'All' || connCategoryFilter === 'CONNECTED') && (
+                      <div>
+                        <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                          <span>CONNECTED</span>
+                          <span className="material-symbols-outlined text-[13px]">expand_less</span>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {connections
+                            .filter(
+                              c =>
+                                c.category === 'CONNECTED' &&
+                                c.name.toLowerCase().includes(connSearch.toLowerCase())
+                            )
+                            .map(c => {
+                              const isSelected = c.id === selectedConnId;
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={() => setSelectedConnId(c.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
+                                    isSelected
+                                      ? 'bg-gray-200 text-gray-900 font-semibold'
+                                      : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="material-symbols-outlined text-[17px] text-blue-600">
+                                      {c.icon}
+                                    </span>
+                                    <span className="truncate">{c.name}</span>
+                                  </div>
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CLOUD CATEGORY */}
+                    {(connCategoryFilter === 'All' || connCategoryFilter === 'CLOUD') && (
+                      <div>
+                        <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                          <span>CLOUD</span>
+                          <span className="material-symbols-outlined text-[13px]">expand_less</span>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {connections
+                            .filter(
+                              c =>
+                                c.category === 'CLOUD' &&
+                                c.name.toLowerCase().includes(connSearch.toLowerCase())
+                            )
+                            .map(c => {
+                              const isSelected = c.id === selectedConnId;
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={() => setSelectedConnId(c.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                                    isSelected
+                                      ? 'bg-gray-200 text-gray-900 font-semibold'
+                                      : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="material-symbols-outlined text-[17px] text-gray-500">
+                                      {c.icon}
+                                    </span>
+                                    <span className="truncate">{c.name}</span>
+                                  </div>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* INFRASTRUCTURE CATEGORY */}
+                    {(connCategoryFilter === 'All' || connCategoryFilter === 'INFRASTRUCTURE') && (
+                      <div>
+                        <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                          <span>INFRASTRUCTURE</span>
+                          <span className="material-symbols-outlined text-[13px]">expand_less</span>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {connections
+                            .filter(
+                              c =>
+                                c.category === 'INFRASTRUCTURE' &&
+                                c.name.toLowerCase().includes(connSearch.toLowerCase())
+                            )
+                            .map(c => {
+                              const isSelected = c.id === selectedConnId;
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={() => setSelectedConnId(c.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                                    isSelected
+                                      ? 'bg-gray-200 text-gray-900 font-semibold'
+                                      : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="material-symbols-outlined text-[17px] text-gray-500">
+                                      {c.icon}
+                                    </span>
+                                    <span className="truncate">{c.name}</span>
+                                  </div>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: Kubernetes / Selected Connection Detail View */}
+                <div className="flex-1 overflow-y-auto bg-white p-6">
+                  {/* Connection Header */}
+                  <div className="flex items-start justify-between pb-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                        <span className="material-symbols-outlined text-[24px]">
+                          {currentConn.icon}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-gray-900">
+                            {currentConn.name}
+                          </h3>
+                          {currentConn.badge && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white flex items-center gap-0.5 shadow-xs">
+                              <span className="material-symbols-outlined text-[12px]">bolt</span>
+                              <span>{currentConn.badge}</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                          {currentConn.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        alert(
+                          currentConn.status === 'demo'
+                            ? 'Disconnecting demo cluster...'
+                            : `Connecting to ${currentConn.name}...`
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                        currentConn.status === 'demo' || currentConn.status === 'connected'
+                          ? 'bg-red-600 text-white hover:bg-red-700'
+                          : 'bg-teal-700 text-white hover:bg-teal-800'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">
+                        {currentConn.status === 'demo' || currentConn.status === 'connected'
+                          ? 'link_off'
+                          : 'add_link'}
+                      </span>
+                      <span>
+                        {currentConn.status === 'demo' || currentConn.status === 'connected'
+                          ? 'Disconnect'
+                          : 'Connect'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Section 1: Discovery (Matches Screenshot 2) */}
+                  <div className="mt-5 pb-5 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-3 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                        <span className="material-symbols-outlined text-[17px] text-gray-500">
+                          search
+                        </span>
+                        <span>Discovery</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-400 text-[11px]">
+                        <span>Sep 18</span>
+                        <button className="hover:text-gray-700">
+                          <span className="material-symbols-outlined text-[15px]">terminal</span>
+                        </button>
+                        <button className="hover:text-gray-700">
+                          <span className="material-symbols-outlined text-[15px]">refresh</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                      <button className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs text-gray-800 font-medium hover:bg-gray-50 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[15px] text-gray-400">
+                            expand_more
+                          </span>
+                          <span>Cluster health and observability</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                          1
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Settings & Tool Permissions (Matches Screenshot 2) */}
+                  <div className="mt-5 pb-5 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-3 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                        <span className="material-symbols-outlined text-[17px] text-gray-500">
+                          settings
+                        </span>
+                        <span>Settings</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-gray-600 font-semibold px-1">
+                        <span>Tool permissions</span>
+                        <span className="text-gray-400 text-[11px]">2 tools</span>
+                      </div>
+
+                      <div className="border border-gray-200 rounded-xl overflow-hidden bg-white space-y-px">
+                        <div className="px-3.5 py-2.5 flex items-center justify-between text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[15px] text-gray-400">
+                              expand_more
+                            </span>
+                            <span>Read-only tools</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                            1
+                          </span>
+                        </div>
+                        <div className="px-3.5 py-2.5 flex items-center justify-between text-xs text-gray-700 hover:bg-gray-50 cursor-pointer border-t border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[15px] text-gray-400">
+                              expand_more
+                            </span>
+                            <span>Write/delete tools</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                            1
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Agents Assigned (Matches Screenshot 2) */}
+                  <div className="mt-5 text-xs">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                        <span className="material-symbols-outlined text-[17px] text-gray-500">
+                          group
+                        </span>
+                        <span>Agents</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <button className="hover:text-gray-700">
+                          <span className="material-symbols-outlined text-[16px]">settings</span>
+                        </button>
+                        <button className="hover:text-gray-700">
+                          <span className="material-symbols-outlined text-[16px]">add</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1.5 bg-gray-100 text-gray-800 font-semibold rounded-lg text-xs border border-gray-200">
+                        CloudThinker
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: AGENTS (MATCHES SCREENSHOT 3 EXACTLY)                                 */}
+          {/* ========================================================================= */}
+          {activeTab === 'Agents' && (
+            <div className="flex-1 flex overflow-hidden">
+              {/* Middle: Custom & Core Agents List */}
+              <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0">
+                {/* CUSTOM AGENTS HEADER (Matches Screenshot 3) */}
+                <div className="p-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                  <div className="flex items-center gap-1 font-bold text-[11px] text-gray-400 uppercase tracking-wider">
+                    <span>CUSTOM</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[13px] text-gray-400">
+                      expand_less
+                    </span>
+                    <span className="text-[11px] text-gray-400 font-mono">1/1</span>
+                    <button
+                      onClick={() => alert('Create New Custom Agent')}
+                      className="p-0.5 hover:text-gray-800 text-gray-400"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">add</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2 space-y-1">
+                  {/* Arena Agent Item */}
+                  <button
+                    onClick={() => setSelectedAgentId('arena')}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all ${
+                      selectedAgentId === 'arena'
+                        ? 'bg-gray-100 shadow-xs'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
+                        AR
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-gray-900 truncate">Arena</div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          Prove It Arena lead in...
+                        </div>
+                      </div>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  </button>
+                </div>
+
+                {/* Core Team Agents Section */}
+                <div className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-t border-gray-100 mt-2">
+                  <span>CORE TEAM ({CORE_AGENTS.length})</span>
+                </div>
+                <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
+                  {CORE_AGENTS.map(ag => {
+                    const isSelected = ag.id === selectedAgentId;
+                    return (
+                      <button
+                        key={ag.id}
+                        onClick={() => setSelectedAgentId(ag.id)}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all ${
+                          isSelected ? 'bg-gray-100 shadow-xs' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base">{ag.avatar}</span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-gray-900 truncate">{ag.name}</div>
+                            <div className="text-[10px] text-gray-400 truncate">{ag.role}</div>
+                          </div>
+                        </div>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Agent Detail Pane (Matches Screenshot 3) */}
+              <div className="flex-1 overflow-y-auto bg-white p-6 flex flex-col justify-between">
+                <div>
+                  {/* Agent Header */}
+                  <div className="flex items-start justify-between pb-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-lg shadow-sm">
+                        {currentAgent.avatar}
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900">{currentAgent.name}</h3>
+                        <div className="text-xs text-gray-500 font-medium">{currentAgent.role}</div>
+                        <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
+                          <span className="material-symbols-outlined text-[13px]">link</span>
+                          <span>
+                            {currentAgent.builtinConnections.length > 0
+                              ? `${currentAgent.builtinConnections.length} connections`
+                              : 'No connections'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => alert(`Opening test conversation with ${currentAgent.name}...`)}
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">chat</span>
+                        <span>Chat</span>
+                      </button>
+                      <button
+                        className="w-10 h-5 rounded-full bg-teal-600 transition-colors relative"
+                        onClick={() => {}}
+                      >
+                        <span className="block w-3.5 h-3.5 rounded-full bg-white transition-transform shadow-xs absolute top-0.75 left-5.5" />
+                      </button>
+                      <button
+                        onClick={() => alert('Cannot delete default Arena investigator.')}
+                        className="text-gray-400 hover:text-red-600 p-1 rounded"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">delete</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tabs: Identity | Connections */}
+                  <div className="flex items-center gap-2 mt-4 mb-6">
+                    <button
+                      onClick={() => setAgentTab('Identity')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        agentTab === 'Identity'
+                          ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Identity
+                    </button>
+                    <button
+                      onClick={() => setAgentTab('Connections')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        agentTab === 'Connections'
+                          ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Connections
+                    </button>
+                  </div>
+
+                  {/* Identity Tab Fields (Matches Screenshot 3) */}
+                  {agentTab === 'Identity' && (
+                    <div className="space-y-4 max-w-2xl text-xs">
+                      {/* Avatar */}
+                      <div>
+                        <label className="text-gray-700 font-semibold block mb-2">Avatar</label>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                            {currentAgent.avatar}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-800">No avatar set</div>
+                            <button
+                              onClick={() => alert('Upload avatar icon')}
+                              className="text-[11px] text-gray-400 hover:text-gray-600 hover:underline"
+                            >
+                              Click to change
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Name * */}
+                      <div>
+                        <label className="text-gray-700 font-semibold block mb-1">
+                          Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={currentAgent.name}
+                          disabled={currentAgent.id !== 'arena'}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-800 font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      {/* @mention */}
+                      <div>
+                        <div className="flex items-center justify-between text-gray-700 font-semibold mb-1">
+                          <span>@mention</span>
+                          <span className="text-[11px] text-gray-400 font-normal flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">lock</span>
+                            <span>Set once, can't be changed later</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(currentAgent.mention);
+                                alert(`Copied ${currentAgent.mention}`);
+                              }}
+                              className="hover:text-gray-700 ml-1"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">content_copy</span>
+                            </button>
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={currentAgent.mention}
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-mono cursor-not-allowed"
+                        />
+                        <div className="text-[11px] text-gray-400 mt-1">
+                          Type <code className="text-teal-700 font-semibold font-mono">{currentAgent.mention}</code> in any chat to summon this agent.
+                        </div>
+                      </div>
+
+                      {/* Role * */}
+                      <div>
+                        <label className="text-gray-700 font-semibold block mb-1">
+                          Role <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={currentAgent.role}
+                          disabled={currentAgent.id !== 'arena'}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-800 font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      {/* Goal * */}
+                      <div>
+                        <label className="text-gray-700 font-semibold block mb-1">
+                          Goal <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={selectedAgentId === 'arena' ? agentGoal : currentAgent.goal}
+                          onChange={e => setAgentGoal(e.target.value)}
+                          disabled={currentAgent.id !== 'arena'}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-800 font-medium focus:outline-none focus:border-teal-500 leading-relaxed text-xs"
+                        />
+                      </div>
+
+                      {/* Model Tier (Matches Screenshot 3) */}
+                      <div>
+                        <label className="text-gray-700 font-semibold block mb-2">Model Tier</label>
+                        <div className="space-y-2">
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="modelTier"
+                              value="light"
+                              checked={arenaModelTier === 'light'}
+                              onChange={() => setArenaModelTier('light')}
+                              className="mt-0.5 text-teal-600 focus:ring-teal-500"
+                            />
+                            <div>
+                              <div className="flex items-center gap-1 font-semibold text-gray-800">
+                                <span className="material-symbols-outlined text-[14px] text-teal-600">bolt</span>
+                                <span>Light</span>
+                              </div>
+                              <div className="text-[11px] text-gray-400">Fast and economical · 0.3x</div>
+                            </div>
+                          </label>
+
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="modelTier"
+                              value="standard"
+                              checked={arenaModelTier === 'standard'}
+                              onChange={() => setArenaModelTier('standard')}
+                              className="mt-0.5 text-teal-600 focus:ring-teal-500"
+                            />
+                            <div>
+                              <div className="font-semibold text-gray-800">Standard</div>
+                              <div className="text-[11px] text-gray-400">Balanced reasoning and latency · 1x</div>
+                            </div>
+                          </label>
+
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="modelTier"
+                              value="deep"
+                              checked={arenaModelTier === 'deep'}
+                              onChange={() => setArenaModelTier('deep')}
+                              className="mt-0.5 text-teal-600 focus:ring-teal-500"
+                            />
+                            <div>
+                              <div className="font-semibold text-gray-800">Deep</div>
+                              <div className="text-[11px] text-gray-400">Complex multi-hop root-cause analysis · 3x</div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Connections Tab for Agent */}
+                  {agentTab === 'Connections' && (
+                    <div className="space-y-4 max-w-2xl text-xs">
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                        <div className="font-bold text-gray-800 mb-1">Attached Connectors</div>
+                        <p className="text-gray-500 mb-4">
+                          Agent has read-only access to cluster state, traces, and metrics.
+                        </p>
+                        <div className="space-y-2">
+                          <div className="p-3 bg-white border border-gray-200 rounded-lg flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <span className="material-symbols-outlined text-blue-600">dns</span>
+                              <span className="font-semibold text-gray-800">Kubernetes (Demo)</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Read-Only
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white border border-gray-200 rounded-lg flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <span className="material-symbols-outlined text-amber-600">cloud</span>
+                              <span className="font-semibold text-gray-800">AWS CloudWatch Logs</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Active
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Action Bar (Matches Screenshot 3) */}
+                <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-2 text-xs">
+                  <button
+                    onClick={() => {
+                      setArenaModelTier('light');
+                      setAgentGoal(CUSTOM_AGENTS[0]?.goal || '');
+                    }}
+                    className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={() => {
+                      alert('Agent settings saved successfully!');
+                    }}
+                    className="px-5 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-sm transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: BYOK (BRING YOUR OWN KEY: GOOGLE GEMINI & OPENROUTER & AWS)          */}
+          {/* ========================================================================= */}
+          {activeTab === 'BYOK' && (
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-3xl space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Bring Your Own Key (BYOK)
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Configure your LLM providers and cloud credentials. Google Gemini is wired as
+                    an automatic fallback whenever OpenRouter runs out of credit (402) or is rate limited (429).
+                  </p>
+                </div>
+
+                {byokStatusMessage && (
+                  <div className="p-3 bg-teal-50 border border-teal-200 text-teal-900 rounded-xl text-xs font-medium">
+                    {byokStatusMessage}
+                  </div>
+                )}
+
+                {/* GOOGLE GEMINI API */}
+                <div className="p-5 border border-teal-200 rounded-xl bg-teal-50/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        G
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">Google Gemini API</div>
+                        <div className="text-[11px] text-gray-500">
+                          Direct fallback model provider (gemini-2.5-flash / gemini-2.5-pro)
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded border border-teal-300">
+                      Primary Fallback
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                    <div className="md:col-span-2">
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        Gemini API Key
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="AIzaSy..."
+                        value={byokGeminiKey}
+                        onChange={e => setByokGeminiKey(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-teal-500 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        Default Model
+                      </label>
+                      <select
+                        value={byokGeminiModel}
+                        onChange={e => setByokGeminiModel(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none"
+                      >
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Deep Reasoning)</option>
+                        <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-gray-500">
+                      {byokTestStatus['gemini'] || 'Key is tested via Google Generative Language endpoint.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTestKey('gemini', byokGeminiKey)}
+                      className="px-3 py-1 text-xs font-semibold text-teal-800 bg-teal-100 hover:bg-teal-200 rounded-md transition-colors"
+                    >
+                      Test Gemini Key
+                    </button>
+                  </div>
+                </div>
+
+                {/* OPENROUTER API */}
+                <div className="p-5 border border-gray-200 rounded-xl bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        OR
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">OpenRouter API</div>
+                        <div className="text-[11px] text-gray-500">
+                          Multi-model gateway (Claude Sonnet 5, LLaMA 3.3, DeepSeek R1)
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-300">
+                      Active Key
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                    <div className="md:col-span-2">
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        OpenRouter API Key
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="sk-or-v1-..."
+                        value={byokOpenRouterKey}
+                        onChange={e => setByokOpenRouterKey(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        Primary Model
+                      </label>
+                      <select
+                        value={byokOpenRouterModel}
+                        onChange={e => setByokOpenRouterModel(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none"
+                      >
+                        <option value="anthropic/claude-sonnet-5">claude-sonnet-5</option>
+                        <option value="anthropic/claude-haiku-4.5">claude-haiku-4.5</option>
+                        <option value="deepseek/deepseek-r1">deepseek-r1</option>
+                        <option value="meta-llama/llama-3.1-70b-instruct">llama-3.1-70b</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-gray-500">
+                      {byokTestStatus['openrouter'] || 'Verified live against openrouter.ai/api/v1/auth/key'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTestKey('openrouter', byokOpenRouterKey)}
+                      className="px-3 py-1 text-xs font-semibold text-purple-800 bg-purple-100 hover:bg-purple-200 rounded-md transition-colors"
+                    >
+                      Test OpenRouter Key
+                    </button>
+                  </div>
+                </div>
+
+                {/* AWS CREDENTIALS */}
+                <div className="p-5 border border-gray-200 rounded-xl bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        AWS
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">Amazon Web Services</div>
+                        <div className="text-[11px] text-gray-500">
+                          CloudWatch, Bedrock, S3, RDS, and EKS IAM credentials
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                      Verified Connected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        AWS Access Key ID
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="AKIA..."
+                        value={byokAwsKeyId}
+                        onChange={e => setByokAwsKeyId(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        AWS Secret Access Key
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Leave blank to keep current"
+                        value={byokAwsSecretKey}
+                        onChange={e => setByokAwsSecretKey(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        Default Region
+                      </label>
+                      <input
+                        type="text"
+                        value={byokAwsRegion}
+                        onChange={e => setByokAwsRegion(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SAVE BUTTON */}
+                <div className="flex justify-end pt-3">
+                  <button
+                    onClick={handleSaveByok}
+                    className="px-6 py-2.5 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 shadow-sm transition-colors"
+                  >
+                    Save All BYOK Credentials
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: GENERAL                                                              */}
+          {/* ========================================================================= */}
+          {activeTab === 'General' && (
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-xl space-y-5 text-xs">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">General Workspace Settings</h3>
+                  <p className="text-gray-500 mt-1">Configure your team workspace metadata and defaults.</p>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Workspace Name</label>
+                  <input
+                    type="text"
+                    value={workspaceName}
+                    onChange={e => setWorkspaceName(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Workspace Slug</label>
+                  <input
+                    type="text"
+                    value="nguyen-thanh-dat"
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Workspace ID</label>
+                  <input
+                    type="text"
+                    value="ws-cloudthinker-88219"
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Default Role for New Members</label>
+                  <select className="w-full px-3 py-2 border rounded-lg bg-white">
+                    <option>Member</option>
+                    <option>Admin</option>
+                    <option>Viewer</option>
+                  </select>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    onClick={() => alert('General settings updated!')}
+                    className="px-5 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: MEMBERS                                                              */}
+          {/* ========================================================================= */}
+          {activeTab === 'Members' && (
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-2xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Workspace Members</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Collaborating on KAFKON & Xbrain Phase 1 tasks (Team 13HZ).
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => alert('Invite member modal')}
+                    className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold hover:bg-teal-700"
+                  >
+                    + Invite Member
+                  </button>
+                </div>
+
+                <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
+                  {WORKSPACE_MEMBERS.map((m, i) => (
+                    <div key={i} className="p-3.5 flex items-center justify-between hover:bg-gray-50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                          {m.avatar}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-900">{m.name}</div>
+                          <div className="text-[11px] text-gray-400">{m.email}</div>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                        {m.role}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: BRANDING                                                             */}
+          {/* ========================================================================= */}
+          {activeTab === 'Branding' && (
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-xl space-y-5 text-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Branding & White-label</h3>
+                    <p className="text-gray-500 mt-1">Customize themes, logos, and custom domains.</p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300">
+                    Scale Tier Active
+                  </span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Custom Domain</label>
+                  <input
+                    type="text"
+                    value={workspaceDomain}
+                    onChange={e => setWorkspaceDomain(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">Brand Primary Color</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      defaultValue="#007363"
+                      className="w-10 h-10 rounded-lg cursor-pointer border border-gray-300"
+                    />
+                    <span className="font-mono text-gray-700">#007363 (CloudThinker Teal)</span>
+                  </div>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    onClick={() => alert('Branding updated!')}
+                    className="px-5 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700"
+                  >
+                    Save Branding
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: ARTIFACTS                                                            */}
+          {/* ========================================================================= */}
+          {activeTab === 'Artifacts' && (
+            <div className="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Workspace Artifacts</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Generated architecture scorecards, investigation checklists, and C4 diagrams.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {artifacts.map(art => (
+                  <div
+                    key={art.id}
+                    onClick={() => setSelectedArtifact(art)}
+                    className="p-4 rounded-xl border border-gray-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between bg-white"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                          {art.type}
+                        </span>
+                        <span className="text-[11px] text-gray-400">{art.time}</span>
+                      </div>
+                      <h4 className="text-xs font-bold text-gray-900 mb-1">{art.title}</h4>
+                      <p className="text-xs text-gray-500 line-clamp-2">{art.contentSnippet}</p>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+                      <span>Source: {art.source}</span>
+                      <span className="text-teal-600 font-semibold hover:underline">View File →</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: COMMANDS                                                             */}
+          {/* ========================================================================= */}
           {activeTab === 'Commands' && (
             <div className="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
               {/* Header & Filter Bar */}
@@ -852,7 +2148,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       onClick={() => setCommandFilter(tab)}
                       className={`px-3 py-1 rounded-md transition-all ${
                         commandFilter === tab
-                          ? 'bg-white text-gray-900 font-semibold shadow-sm'
+                          ? 'bg-white text-gray-900 font-semibold shadow-xs'
                           : 'text-gray-500 hover:text-gray-800'
                       }`}
                     >
@@ -870,30 +2166,14 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     placeholder="Search commands..."
                     value={commandSearch}
                     onChange={e => setCommandSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-teal-500"
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => alert('Exporting commands list JSON...')}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">file_download</span>
-                    <span>Export File</span>
-                  </button>
-
-                  <button
-                    onClick={() => alert('Upload commands file...')}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">file_upload</span>
-                    <span>Upload File</span>
-                  </button>
-
-                  <button
                     onClick={() => setIsNewCommandOpen(true)}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors flex items-center gap-1 shadow-xs"
                   >
                     <span className="material-symbols-outlined text-[16px]">add</span>
                     <span>New Command</span>
@@ -901,7 +2181,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 </div>
               </div>
 
-              {/* Grid of 6 System Design Commands */}
+              {/* Grid of System Design Commands */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
                 {filteredCommands.map(cmd => (
                   <div
@@ -930,17 +2210,58 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
 
-              {/* Footer */}
-              <div className="mt-8 flex items-center">
-                <span className="text-xs text-[#7b5cff] font-semibold bg-teal-50 border border-teal-200 px-3 py-1 rounded-md">
-                  1-{filteredCommands.length} of {commands.length} commands
-                </span>
+          {/* ========================================================================= */}
+          {/* TAB: APPROVAL                                                             */}
+          {/* ========================================================================= */}
+          {activeTab === 'Approval' && (
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-2xl space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Incident Remediation Approval Queue</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Guardrail enforcement: Agents can only propose changes. Human approval is strictly required before any Kubernetes mutation is executed.
+                  </p>
+                </div>
+
+                <div className="p-4 border border-teal-200 rounded-xl bg-teal-50/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-900">
+                      K8s Patch: Fix Nginx Probes & Resource Limits
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                      Pending Review
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Action ID: <code className="font-mono text-teal-800">patch-nginx-probes-k8s-demo</code>
+                    <br />
+                    Target: deployment.apps/nginx in default namespace. Adds livenessProbe HTTP /healthz and adjusts memory limit to 256Mi.
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => alert('Proposal rejected.')}
+                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => alert('Remediation approved and safely applied to cluster!')}
+                      className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs"
+                    >
+                      Approve & Apply
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* ======================= TAB: KNOWLEDGE ======================= */}
+          {/* ========================================================================= */}
+          {/* TAB: KNOWLEDGE                                                            */}
+          {/* ========================================================================= */}
           {activeTab === 'Knowledge' && (
             <div className="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
               <div className="flex items-center justify-between gap-4 pb-4 border-b border-gray-100">
@@ -953,20 +2274,19 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     placeholder="Search knowledge bases..."
                     value={kbSearch}
                     onChange={e => setKbSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-teal-500"
                   />
                 </div>
 
                 <button
                   onClick={() => setIsCreateKbOpen(true)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] transition-colors flex items-center gap-1 shadow-sm"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors flex items-center gap-1 shadow-xs"
                 >
                   <span className="material-symbols-outlined text-[16px]">add</span>
                   <span>Create KB</span>
                 </button>
               </div>
 
-              {/* Table / Empty State */}
               <div className="mt-6 border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs text-gray-600">
                   <thead className="bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
@@ -980,178 +2300,119 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {knowledgeBases.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-16 text-gray-400 text-xs">
-                          No data available
+                    {knowledgeBases.map(kb => (
+                      <tr key={kb.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{kb.title}</td>
+                        <td className="px-4 py-3">{kb.documentsCount} docs</td>
+                        <td className="px-4 py-3">{kb.size}</td>
+                        <td className="px-4 py-3">
+                          {kb.tags.map((t, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded text-[10px] font-semibold mr-1"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </td>
+                        <td className="px-4 py-3">{kb.created}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button className="text-red-500 hover:underline">Delete</button>
                         </td>
                       </tr>
-                    ) : (
-                      knowledgeBases.map(kb => (
-                        <tr key={kb.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-3 font-semibold text-gray-900">{kb.title}</td>
-                          <td className="px-4 py-3">{kb.documentsCount} docs</td>
-                          <td className="px-4 py-3">{kb.size}</td>
-                          <td className="px-4 py-3">
-                            {kb.tags.map((t, i) => (
-                              <span
-                                key={i}
-                                className="px-2 py-0.5 bg-teal-50 text-[#7b5cff] rounded text-[10px] font-semibold"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                          </td>
-                          <td className="px-4 py-3">{kb.created}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button className="text-red-500 hover:underline">Delete</button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* ======================= TAB: CREDENTIALS ======================= */}
+          {/* ========================================================================= */}
+          {/* TAB: CREDENTIALS                                                          */}
+          {/* ========================================================================= */}
           {activeTab === 'Credentials' && (
-            <div className="flex-1 overflow-y-auto bg-white p-8 flex flex-col items-center justify-center">
-              {credentials.length === 0 ? (
-                <div className="flex flex-col items-center text-center max-w-sm">
-                  <div className="w-14 h-14 rounded-full bg-teal-50 text-[#7b5cff] flex items-center justify-center mb-4">
-                    <span className="material-symbols-outlined text-[28px]">key</span>
+            <div className="flex-1 overflow-y-auto bg-white p-8">
+              <div className="max-w-3xl space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800">
+                      Stored Credentials & Secrets ({credentials.length})
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Encrypted with AWS KMS envelope encryption for safe agent tool dispatch.
+                    </p>
                   </div>
-                  <h3 className="text-base font-bold text-gray-900 mb-1">No credentials yet</h3>
-                  <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-                    Store secrets like API keys and tokens that your agents can use.
-                  </p>
                   <button
                     onClick={() => setIsAddCredOpen(true)}
-                    className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition-colors flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700"
                   >
-                    <span className="material-symbols-outlined text-[16px]">add</span>
-                    <span>Add Credential</span>
+                    + Add Credential
                   </button>
                 </div>
-              ) : (
-                <div className="w-full max-w-3xl space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-gray-800">Stored Credentials ({credentials.length})</h3>
-                    <button
-                      onClick={() => setIsAddCredOpen(true)}
-                      className="px-3 py-1.5 bg-[#7b5cff] text-white text-xs font-semibold rounded-lg"
-                    >
-                      + Add Credential
-                    </button>
-                  </div>
-                  {credentials.map(cred => (
-                    <div
-                      key={cred.id}
-                      className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm flex items-center justify-between"
-                    >
-                      <div>
-                        <div className="font-semibold text-sm text-gray-900">{cred.name}</div>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {cred.type} • Key: <code className="font-mono text-gray-700">{cred.maskedKey}</code>
-                        </div>
+                {credentials.map(cred => (
+                  <div
+                    key={cred.id}
+                    className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{cred.name}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {cred.type} • Key:{' '}
+                        <code className="font-mono text-gray-700">{cred.maskedKey}</code>
                       </div>
-                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">
-                        {cred.status}
-                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <span className="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                      {cred.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* ======================= OTHER WORKSPACE TABS ======================= */}
-          {(activeTab === 'General' ||
-            activeTab === 'Members' ||
-            activeTab === 'Branding' ||
-            activeTab === 'Connections' ||
-            activeTab === 'Approval' ||
-            activeTab === 'Notifications') && (
+          {/* ========================================================================= */}
+          {/* TAB: NOTIFICATIONS                                                        */}
+          {/* ========================================================================= */}
+          {activeTab === 'Notifications' && (
             <div className="flex-1 overflow-y-auto bg-white p-8">
-              <h3 className="text-base font-bold text-gray-900 mb-2">{activeTab} Settings</h3>
-              <p className="text-xs text-gray-500 mb-6">
-                Manage your enterprise workspace {activeTab.toLowerCase()} preferences and system design guardrails.
-              </p>
+              <div className="max-w-xl space-y-4 text-xs">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Notification Channels</h3>
+                  <p className="text-gray-500 mt-1">Configure where incident proposals and sprint tickets are sent.</p>
+                </div>
 
-              {activeTab === 'Connections' && (
-                <div className="space-y-3 max-w-xl">
-                  <div className="p-4 border rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-teal-600">cloud</span>
-                      <div>
-                        <div className="text-xs font-bold text-gray-800">Stitch MCP Server</div>
-                        <div className="text-[11px] text-gray-400">https://stitch.googleapis.com/mcp</div>
-                      </div>
-                    </div>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-bold">
-                      Connected (200 OK)
-                    </span>
-                  </div>
-
-                  <div className="p-4 border rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-amber-600">dns</span>
-                      <div>
-                        <div className="text-xs font-bold text-gray-800">Amazon Web Services</div>
-                        <div className="text-[11px] text-gray-400">ap-southeast-1 (Singapore)</div>
-                      </div>
-                    </div>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-bold">
+                <div className="p-4 border rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-800">Slack Bolt App</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
                       Connected
                     </span>
                   </div>
+                  <p className="text-gray-500">Channel notifications and thread approvals.</p>
                 </div>
-              )}
 
-              {activeTab === 'Members' && (
-                <div className="max-w-xl space-y-2">
-                  <div className="p-3 border rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold">
-                        KQ
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-gray-800">Kiet Tran Quoc</div>
-                        <div className="text-[11px] text-gray-400">kiet.tran@cloudthinker.io</div>
-                      </div>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600 font-semibold">Owner</span>
+                <div className="p-4 border rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-800">ClickUp Sprint Task Integration</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                      Connected
+                    </span>
                   </div>
-                  <div className="p-3 border rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gray-800 text-white flex items-center justify-center text-xs font-bold">
-                        ND
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-gray-800">Nguyen Thanh Dat</div>
-                        <div className="text-[11px] text-gray-400">dat.nguyen@cloudthinker.io</div>
-                      </div>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600 font-semibold">Admin</span>
-                  </div>
+                  <p className="text-gray-500">Automatically creates audited tasks on list 901807029788.</p>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* MODAL: New Command */}
+      {/* ======================= MODAL: NEW COMMAND ======================= */}
       {isNewCommandOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 text-xs">
             <h3 className="text-sm font-bold text-gray-900 mb-1">Create System Design Command</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Add a reusable architectural playbook or prompt automation.
-            </p>
-            <div className="space-y-3 mb-5 text-xs">
+            <p className="text-gray-500 mb-4">Add a reusable architectural playbook or prompt automation.</p>
+            <div className="space-y-3 mb-5">
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">Command Slug</label>
                 <input
@@ -1159,15 +2420,15 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="/c4-container-audit"
                   value={newCmdName}
                   onChange={e => setNewCmdName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] font-mono"
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-teal-500 font-mono"
                 />
               </div>
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">Category</label>
                 <select
                   value={newCmdCategory}
-                  onChange={e => setNewCmdCategory(e.target.value as CommandItem['category'])}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] bg-white"
+                  onChange={e => setNewCmdCategory(e.target.value as any)}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
                 >
                   <option>Cost Optimization</option>
                   <option>Security</option>
@@ -1179,14 +2440,14 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <label className="font-semibold text-gray-700 block mb-1">Description</label>
                 <textarea
                   rows={3}
-                  placeholder="Explain what architectural task this command executes..."
                   value={newCmdDesc}
                   onChange={e => setNewCmdDesc(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                  placeholder="Explain what architectural task this command executes..."
+                  className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2 text-xs">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setIsNewCommandOpen(false)}
                 className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -1195,7 +2456,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddCommand}
-                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg"
               >
                 Create Command
               </button>
@@ -1204,15 +2465,13 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         </div>
       )}
 
-      {/* MODAL: Create KB */}
+      {/* ======================= MODAL: CREATE KB ======================= */}
       {isCreateKbOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 text-xs">
             <h3 className="text-sm font-bold text-gray-900 mb-1">Create Knowledge Base</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Index architectural specifications, C4 diagrams, or runbooks for agent retrieval.
-            </p>
-            <div className="space-y-3 mb-5 text-xs">
+            <p className="text-gray-500 mb-4">Index architectural specifications or runbooks.</p>
+            <div className="space-y-3 mb-5">
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">KB Title</label>
                 <input
@@ -1220,7 +2479,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="e.g. Distributed System Architecture ADRs"
                   value={newKbTitle}
                   onChange={e => setNewKbTitle(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                  className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
               <div>
@@ -1230,11 +2489,11 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   placeholder="e.g. Architecture"
                   value={newKbTag}
                   onChange={e => setNewKbTag(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                  className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2 text-xs">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setIsCreateKbOpen(false)}
                 className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -1243,7 +2502,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddKb}
-                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg"
               >
                 Create KB
               </button>
@@ -1252,31 +2511,29 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         </div>
       )}
 
-      {/* MODAL: Add Credential */}
+      {/* ======================= MODAL: ADD CREDENTIAL ======================= */}
       {isAddCredOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 text-xs">
             <h3 className="text-sm font-bold text-gray-900 mb-1">Add Secret Credential</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Securely store API keys or tokens with KMS envelope encryption.
-            </p>
-            <div className="space-y-3 mb-5 text-xs">
+            <p className="text-gray-500 mb-4">Securely store API keys or tokens with KMS encryption.</p>
+            <div className="space-y-3 mb-5">
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">Credential Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. Stitch MCP API Key"
+                  placeholder="e.g. Google Gemini API Key"
                   value={credName}
                   onChange={e => setCredName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff]"
+                  className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">Type</label>
                 <select
                   value={credType}
-                  onChange={e => setCredType(e.target.value as CredentialItem['type'])}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] bg-white"
+                  onChange={e => setCredType(e.target.value as any)}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
                 >
                   <option>API Key</option>
                   <option>OAuth Token</option>
@@ -1288,14 +2545,14 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <label className="font-semibold text-gray-700 block mb-1">Secret Value</label>
                 <input
                   type="password"
-                  placeholder="Enter secret or API key (e.g. AQ.Ab8RN6...)"
+                  placeholder="Enter secret or API key..."
                   value={credSecret}
                   onChange={e => setCredSecret(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7b5cff] font-mono"
+                  className="w-full px-3 py-2 border rounded-lg font-mono"
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2 text-xs">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setIsAddCredOpen(false)}
                 className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -1304,9 +2561,247 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               </button>
               <button
                 onClick={handleAddCredential}
-                className="px-4 py-2 font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg"
+                className="px-4 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg"
               >
                 Save Credential
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: VIEW ARTIFACT ======================= */}
+      {selectedArtifact && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded">
+                  {selectedArtifact.type}
+                </span>
+                <h3 className="text-sm font-bold text-gray-900 mt-1">{selectedArtifact.title}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedArtifact(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <p className="text-gray-700 leading-relaxed font-sans mb-4">{selectedArtifact.contentSnippet}</p>
+            <div className="p-3 bg-gray-50 rounded-lg font-mono text-[11px] text-gray-600">
+              Source Skill: {selectedArtifact.source} • Visibility: {selectedArtifact.visibility}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: ADD / IMPORT SKILL ======================= */}
+      {isAddSkillOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 text-xs flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Add or Import Investigation Skill</h3>
+                <p className="text-gray-500 text-[11px] mt-0.5">
+                  Select from curated community open-source repositories or create your custom skill.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAddSkillOpen(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Tab switch */}
+            <div className="flex gap-2 border-b border-gray-200 pt-3 pb-2">
+              <button
+                onClick={() => setAddSkillTab('catalog')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                  addSkillTab === 'catalog'
+                    ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                    : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">menu_book</span>
+                <span>Curated Repos Catalog ({CURATED_REPOS_SKILLS.length})</span>
+              </button>
+              <button
+                onClick={() => setAddSkillTab('custom')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                  addSkillTab === 'custom'
+                    ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                    : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">edit_note</span>
+                <span>Custom / GitHub Import</span>
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-3">
+              {addSkillTab === 'catalog' && (
+                <div className="space-y-2.5">
+                  {CURATED_REPOS_SKILLS.map((curated, idx) => {
+                    const alreadyInstalled = skills.some(s => s.name === curated.name);
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 border border-gray-200 rounded-xl hover:border-teal-300 transition-all bg-gray-50/50 flex items-start justify-between gap-4"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold font-mono text-gray-900 text-xs">{curated.name}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                              {curated.category}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 text-[11px] mt-1 leading-relaxed">{curated.description}</p>
+                          <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400 font-mono">
+                            <span>Repo: {curated.repo}</span>
+                            <span>•</span>
+                            <span>Connections: {curated.connections.map(c => c.label).join(', ')}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleInstallCuratedSkill(curated)}
+                          className={`px-3 py-1.5 rounded-lg font-semibold text-xs shrink-0 transition-all ${
+                            alreadyInstalled
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-teal-600 text-white hover:bg-teal-700 shadow-xs'
+                          }`}
+                        >
+                          {alreadyInstalled ? 'Active' : 'Install Skill'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {addSkillTab === 'custom' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1">Skill Identifier / Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. debezium-kafka-cdc-pipeline"
+                      value={customSkillName}
+                      onChange={e => setCustomSkillName(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1">Category</label>
+                    <select
+                      value={customSkillCategory}
+                      onChange={e => setCustomSkillCategory(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg bg-white"
+                    >
+                      <option>Incident RCA</option>
+                      <option>Data & CDC</option>
+                      <option>Cloud & SRE</option>
+                      <option>Security & Compliance</option>
+                      <option>Architecture & DDD</option>
+                      <option>Agentic AI</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1">Description</label>
+                    <input
+                      type="text"
+                      placeholder="Brief summary of when and how the agent uses this skill"
+                      value={customSkillDesc}
+                      onChange={e => setCustomSkillDesc(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1">Markdown Investigation Runbook / Rules</label>
+                    <textarea
+                      rows={7}
+                      placeholder="# Phase 1: Symptom Isolation&#10;1. Inspect broker lag&#10;2. Check CDC offset table..."
+                      value={customSkillMarkdown}
+                      onChange={e => setCustomSkillMarkdown(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => setIsAddSkillOpen(false)}
+                      className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddCustomSkill}
+                      className="px-4 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs"
+                    >
+                      Create Custom Skill
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: EDIT SKILL ======================= */}
+      {isEditSkillOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 text-xs flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Edit Skill: {currentSkill.name}</h3>
+                <p className="text-gray-500 text-[11px] mt-0.5">
+                  Update documentation, prompts, and runbook checklists for this skill.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsEditSkillOpen(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-3">
+              <div>
+                <label className="font-semibold text-gray-700 block mb-1">Skill Description</label>
+                <input
+                  type="text"
+                  value={editSkillDesc}
+                  onChange={e => setEditSkillDesc(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-gray-700 block mb-1">SKILL.md Markdown Content</label>
+                <textarea
+                  rows={12}
+                  value={editSkillMarkdown}
+                  onChange={e => setEditSkillMarkdown(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <button
+                onClick={() => setIsEditSkillOpen(false)}
+                className="px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEditSkill}
+                className="px-4 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs"
+              >
+                Save Changes
               </button>
             </div>
           </div>

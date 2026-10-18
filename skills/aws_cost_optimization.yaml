@@ -1,0 +1,34 @@
+name: aws_cost_optimization
+version: "1.5.0"
+description: "Cloud FinOps framework evaluating AWS infrastructure spend, EKS-to-ECS migration ROI (-60% spend), and automated idle resource shutdown"
+team_type: "finops_cloud_platform"
+
+formatting:
+  title_prefix: "[FINOPS]"
+  user_story_format: "As a {cloud_architect}, I want {cost_optimization_pattern}, In order to {reduce_monthly_bill_by_percentage}"
+  acceptance_criteria_format: "Scenario: {resource_evaluation} -> Expected: {monthly_savings_and_zero_service_impact}"
+
+required_fields:
+  - current_monthly_spend
+  - compute_workload_characteristics
+  - rightsizing_recommendation
+  - migration_or_shutdown_plan
+  - projected_roi_percentage
+
+invest_thresholds:
+  overall_min_score: 70
+  require_small: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: false
+  ask_on_blocked: true
+  max_questions_per_round: 1
+
+clickup_mapping:
+  priority: "normal"
+  tags:
+    - "aws"
+    - "finops"
+    - "ecs"
+    - "cost-saving"

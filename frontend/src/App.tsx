@@ -34,7 +34,7 @@ export function App() {
       <Sidebar
         currentView={currentView}
         onSelectView={setCurrentView}
-        onOpenCustomize={() => handleOpenModal('Agents')}
+        onOpenCustomize={(tab) => handleOpenModal(tab ?? 'Agents')}
         onNewChat={() => { setCurrentView('home'); setChatResetKey(k => k + 1); }}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}

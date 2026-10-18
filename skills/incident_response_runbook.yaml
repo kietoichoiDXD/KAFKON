@@ -1,0 +1,34 @@
+name: incident_response_runbook
+version: "2.3.0"
+description: "AIOps deterministic incident triage and remediation runbooks on Kubernetes with audited human-in-the-loop approvals"
+team_type: "sre_incident_management"
+
+formatting:
+  title_prefix: "[INCIDENT-REMEDIATION]"
+  user_story_format: "As an {oncall_engineer}, I need {automated_diagnostics_and_runbook}, In order to {resolve_outage_with_zero_guesswork}"
+  acceptance_criteria_format: "Given {cluster_fault_symptom}, When {diagnostic_runbook_proposes_patch}, Then {apply_with_verified_evidence}"
+
+required_fields:
+  - incident_severity_p1_p2
+  - failing_service_or_pod
+  - observed_vs_expected_state
+  - deterministic_patch_manifest
+  - post_apply_verification_metric
+
+invest_thresholds:
+  overall_min_score: 85
+  require_small: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: true
+  ask_on_blocked: true
+  max_questions_per_round: 1
+
+clickup_mapping:
+  priority: "urgent"
+  tags:
+    - "incident"
+    - "runbook"
+    - "kubernetes"
+    - "aiops"

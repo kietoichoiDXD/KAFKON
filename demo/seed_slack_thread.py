@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.config import settings  # noqa: E402
 
 TOKEN = settings.slack_user_token or settings.slack_bot_token
-CHANNEL = sys.argv[1]
+CHANNEL = sys.argv[1] if len(sys.argv) > 1 else ""
 SOURCE = Path(__file__).parent / "sample_conversation.md"
 
 
@@ -52,4 +52,8 @@ async def main():
         print(ts)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    if not CHANNEL:
+        print("Usage: python demo/seed_slack_thread.py <CHANNEL_ID>")
+        sys.exit(1)
+    asyncio.run(main())

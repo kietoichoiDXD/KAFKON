@@ -67,8 +67,9 @@ class Registry:
                 f"No environments are configured. Add one to {self.path.name} — see the "
                 f"integrations.yaml in the repository root for the shape."
             )
-        if name is None:
+        if not name or not str(name).strip():
             return next(iter(self._providers.values()))
+        name = str(name).strip()
         if name not in self._providers:
             raise ProviderError(
                 f"No environment named {name!r}. Configured: {', '.join(self._providers)}."

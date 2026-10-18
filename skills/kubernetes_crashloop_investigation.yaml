@@ -1,0 +1,11 @@
+clickup_mapping:
+  category: Cloud & SRE
+description: Triage Kubernetes CrashLoopBackOff and OOMKilled pods
+formatting:
+  title_prefix: '[KUBERNETES_CRASHLOOP_INVESTIGATION]'
+name: kubernetes_crashloop_investigation
+required_fields:
+- affected_service
+- root_cause
+team_type: engineering
+version: 1.0.0

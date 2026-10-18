@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     nebius_base_url: str = Field(default="https://api.studio.nebius.ai/v1/", alias="NEBIUS_BASE_URL")
     nebius_model: str = Field(default="Qwen/Qwen3-30B-A3B-Instruct-2507", alias="NEBIUS_MODEL")
 
+    # Google Gemini API (Direct & Fallback)
+    gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    gemini_base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta/openai", alias="GEMINI_BASE_URL")
+
     # Sponsor Integrations: Exa Neural Web Search
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
 
@@ -65,8 +70,14 @@ class Settings(BaseSettings):
     # Multi-Tier Fallback Mode: 'low', 'medium', 'high'
     fallback_tier: str = Field(default="medium", alias="FALLBACK_TIER")
 
+    # AWS Integration
+    aws_access_key_id: Optional[str] = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: Optional[str] = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
+    aws_default_region: str = Field(default="ap-southeast-1", alias="AWS_DEFAULT_REGION")
+
     # Skills
     default_skill: str = Field(default="startup_lean", alias="DEFAULT_SKILL")
     skills_dir: Path = Field(default_factory=lambda: BASE_DIR / "skills")
 
 settings = Settings()
+

@@ -1,0 +1,34 @@
+name: api_latency_investigation
+version: "2.0.0"
+description: "Systematic investigation framework for diagnosing and resolving API latency spikes, P95 tail latency, and database query bottlenecks"
+team_type: "core_infrastructure"
+
+formatting:
+  title_prefix: "[PERF-RCA]"
+  user_story_format: "As an {sre_engineer}, I need {latency_investigation}, In order to {restore_p95_under_sla}"
+  acceptance_criteria_format: "Given {affected_endpoint}, When {traffic_analyzed_across_percentiles}, Then {identify_bottleneck_with_evidence}"
+
+required_fields:
+  - affected_endpoints
+  - p95_latency_baseline_vs_current
+  - request_path_spans
+  - db_query_profile
+  - remediation_action
+
+invest_thresholds:
+  overall_min_score: 80
+  require_small: true
+  require_testable: true
+
+clarification_policy:
+  ask_on_assumed: true
+  ask_on_blocked: true
+  max_questions_per_round: 1
+
+clickup_mapping:
+  priority: "high"
+  tags:
+    - "latency"
+    - "p95"
+    - "apm"
+    - "rca"

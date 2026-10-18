@@ -197,7 +197,7 @@ def create_ticket_cmd(file: str, skill: str):
 def serve_cmd(port: int):
     """Run the HTTP API the Web Studio talks to."""
     from .api import app as api_app
-    api_app.run(host="127.0.0.1", port=port)
+    api_app.run(host="0.0.0.0", port=port)
 
 @cli.command("slack-run")
 @click.option("--channel", "-c", required=True, help="Slack channel ID, e.g. C0BFQCXHM2T.")
