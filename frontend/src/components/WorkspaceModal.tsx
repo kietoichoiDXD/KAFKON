@@ -809,7 +809,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                         }`}
                       >
                         <span
-                          className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform shadow-sm absolute top-0.75 ${
+                          className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 ${
                             currentSkill.enabled ? 'left-5.5' : 'left-1'
                           }`}
                         />
@@ -1066,7 +1066,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     onClick={() => setConnectionView('Split')}
                     className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-all ${
                       connectionView === 'Split'
-                        ? 'bg-white shadow-sm text-teal-800 font-semibold'
+                        ? 'bg-white text-teal-800 font-semibold'
                         : 'text-gray-500 hover:text-gray-800'
                     }`}
                   >
@@ -1077,7 +1077,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     onClick={() => setConnectionView('Grid')}
                     className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-all ${
                       connectionView === 'Grid'
-                        ? 'bg-white shadow-sm text-teal-800 font-semibold'
+                        ? 'bg-white text-teal-800 font-semibold'
                         : 'text-gray-500 hover:text-gray-800'
                     }`}
                   >
@@ -1489,7 +1489,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                   {/* Agent Header */}
                   <div className="flex items-start justify-between pb-4 border-b border-gray-100">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-lg shadow-sm">
+                      <div className="w-12 h-12 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-lg">
                         {currentAgent.avatar}
                       </div>
                       <div>
@@ -1748,7 +1748,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     onClick={() => {
                       alert('Agent settings saved successfully!');
                     }}
-                    className="px-5 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-sm transition-colors"
+                    className="px-5 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
                   >
                     Save
                   </button>
@@ -2030,7 +2030,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                 <div className="flex justify-end pt-3">
                   <button
                     onClick={handleSaveByok}
-                    className="px-6 py-2.5 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 shadow-sm transition-colors"
+                    className="px-6 py-2.5 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors"
                   >
                     Save All BYOK Credentials
                   </button>

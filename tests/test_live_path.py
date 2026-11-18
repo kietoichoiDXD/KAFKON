@@ -87,6 +87,11 @@ class TestLiveAnalysisPath(unittest.TestCase):
         self.assertEqual(result.story.title, "[MVP] Google Workspace SSO")
         self.assertEqual(len(result.acceptance_criteria), 1)
         self.assertEqual([e.label.value for e in result.evidence_items], ["Verified", "Assumed"])
+        matched_source = result.evidence_items[0].source_message
+        self.assertIsNotNone(matched_source)
+        self.assertEqual(matched_source.match_status, "matched")
+        self.assertEqual(matched_source.author, "@oliver_sec")
+        self.assertEqual(result.evidence_items[1].source_message.match_status, "unmatched")
         self.assertGreater(result.invest_score.overall, 0)
         self.assertIn("8 or 24 hours", result.clarifying_question)
 

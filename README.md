@@ -99,6 +99,24 @@ A new kind is one class implementing `InfraProvider` (`state`, `diagnose`, `veri
 `apply` if it can remediate) plus a line in the registry. The console, the chat, the terminal and
 the Slack approval loop all work against the interface, so they gain the new environment for free.
 
+## Evidence provenance and task-to-code review
+
+When an analysis becomes a ClickUp task, each claim carries its source message when the quote can be
+matched unambiguously: author, timestamp, excerpt and the source thread. Ambiguous or missing matches
+are marked unresolved instead of being assigned to a nearby message. The ClickUp description keeps
+this provenance alongside its thread link.
+
+The **Task ↔ Code** view loads tasks from the configured ClickUp list and compares their description
+with the current repository. Its graph connects task statements to code locations. A potential
+conflict requires an explicit, inspectable contradiction such as a different timeout value; shared
+words alone are shown as related code. The current scanner skips tests, fixtures, generated state
+and mock data so examples do not masquerade as production configuration.
+
+Run the local app with `python -m backend.cli web` (API on port 8000, Vite on port 3000). For a
+GitHub Pages deployment, set the repository Actions variable `SCRIBEBA_API_URL` to a publicly
+reachable backend URL; the Pages site is static and cannot run the Flask API itself. The backend
+also supports a local endpoint override in Workspace settings.
+
 ---
 
 ## ✅ What is live, and what is simulated

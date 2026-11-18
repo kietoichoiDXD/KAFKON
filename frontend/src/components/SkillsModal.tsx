@@ -354,7 +354,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                   }`}
                 >
                   <span
-                    className={`block w-4 h-4 rounded-full bg-white transition-transform shadow-sm absolute top-1 ${
+                    className={`block w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
                       currentSkill.enabled ? 'left-6' : 'left-1'
                     }`}
                   />

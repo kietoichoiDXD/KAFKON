@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 class EvidenceLabel(str, Enum):
@@ -8,12 +8,22 @@ class EvidenceLabel(str, Enum):
     ASSUMED = "Assumed"
     BLOCKED = "Blocked"
 
+class SourceMessageEvidence(BaseModel):
+    """A message-level anchor, or an explicit unresolved match."""
+    message_id: str = ""
+    author: str = ""
+    timestamp: str = ""
+    excerpt: str = ""
+    thread_url: Optional[str] = None
+    match_status: Literal["matched", "unmatched"] = "unmatched"
+
 class EvidenceItem(BaseModel):
     field: str
     value: str
     label: EvidenceLabel
     quote_source: Optional[str] = None
     rationale: Optional[str] = None
+    source_message: Optional[SourceMessageEvidence] = None
 
 class AcceptanceCriterion(BaseModel):
     id: str
@@ -44,6 +54,7 @@ class ChatMessage(BaseModel):
     author: str
     timestamp: str
     text: str
+    message_id: Optional[str] = None
 
 class ThreadContext(BaseModel):
     thread_id: str

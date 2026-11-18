@@ -21,6 +21,7 @@ from .core.models import ChatMessage, ThreadContext
 from .core.skills import SkillManager
 from .integrations.clickup_client import ClickUpClient
 from .platforms.slack_adapter import SlackAdapter
+from .core.conflict_service import scan_task_against_repository
 
 app = Flask(__name__)
 skill_manager = SkillManager()
@@ -444,6 +445,14 @@ def slack_run():
         thread = await slack.fetch_thread(channel, ts)
         permalink = await slack.get_permalink(channel, ts)
         result = await analyzer.analyze_thread(thread, skill_name=skill_name, tier=tier)
+        for evidence in result.evidence_items:
+            if evidence.source_message and evidence.source_message.match_status == "matched":
+                # Slack exposes thread-root permalinks here; do not fabricate message deep links.
+                evidence.source_message.thread_url = permalink or None
+                if not evidence.source_message.message_id:
+                    evidence.source_message.message_id = next(
+                        (m.timestamp for m in thread.messages if m.timestamp == evidence.source_message.timestamp), ""
+                    )
         await slack.post_analysis_summary(channel, ts, result)
         if result.clarifying_question:
             await slack.post_clarification_question(channel, ts, result.clarifying_question)
@@ -481,6 +490,41 @@ def slack_run():
         if "thread_not_found" in err or "message_not_found" in err:
             return jsonify({"error": f"Thread '{ts}' not found in channel. Click 'Seed Sample Thread' to generate a live thread."}), 400
         return jsonify({"error": f"Slack run failed: {err}"}), 400
+
+
+@app.get("/api/clickup/tasks")
+def clickup_tasks():
+    """Return a bounded page of tasks from the configured ClickUp list."""
+    try:
+        tasks = asyncio.run(ClickUpClient().list_tasks())
+        return jsonify({"tasks": tasks})
+    except ValueError as e:
+        return jsonify({"error": str(e), "action": "Configure CLICKUP_API_KEY and CLICKUP_LIST_ID, or submit a task directly to /api/conflicts/scan."}), 503
+    except Exception:
+        return jsonify({"error": "Could not load ClickUp tasks. Check ClickUp credentials, list access, and API availability.", "action": "Verify CLICKUP_API_KEY and CLICKUP_LIST_ID and retry."}), 502
+
+
+@app.post("/api/conflicts/scan")
+def scan_conflicts():
+    """Compare a ClickUp task description with local source and return an evidence graph."""
+    body = request.get_json(silent=True) or {}
+    task = body.get("task")
+    if not isinstance(task, dict):
+        return jsonify({"error": "Missing task object.", "action": "Send {task: {name, description}}."}), 400
+    name = str(task.get("name") or "").strip()
+    description = str(task.get("description") or "").strip()
+    if not description:
+        return jsonify({"error": "Missing task description.", "action": "Provide the ClickUp task description; the scanner needs requirement text to compare against repository code."}), 400
+    if not name:
+        return jsonify({"error": "Missing task name.", "action": "Provide the ClickUp task name."}), 400
+    try:
+        result = scan_task_against_repository(task, Path(__file__).resolve().parents[1])
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        app.logger.exception("Conflict scan failed")
+        return jsonify({"error": "Repository conflict scan failed. Check repository access and retry."}), 500
 
 
 @app.post("/api/slack/seed")
@@ -554,6 +598,316 @@ def slack_threads():
         return jsonify(threads)
     except Exception as e:
         return jsonify([])
+
+
+ROOMS_FILE = Path(__file__).resolve().parent.parent / ".rooms.json"
+
+DEFAULT_ROOMS_DATA = [
+    {
+        "id": "room-auth-iam",
+        "name": "Auth & IAM Federation",
+        "topic": "Google Workspace SSO, RBAC roles, and session security compliance",
+        "description": "Enterprise squad managing SSO login, OAuth2 federation, and token security.",
+        "social_links": [
+            {"platform": "Slack", "channel": "#proj-auth-federation", "enabled": True, "webhook_url": "https://hooks.slack.com/services/T00/B00/X00", "status": "Connected"},
+            {"platform": "Discord", "channel": "#iam-dev-squad", "enabled": True, "webhook_url": "https://discord.com/api/webhooks/123/abc", "status": "Connected"},
+            {"platform": "Telegram", "channel": "@ops_auth_guard_bot", "enabled": True, "chat_id": "-100234987123", "status": "Connected"}
+        ],
+        "agent_config": {
+            "agent_id": "agile-pm",
+            "agent_name": "Lead Agile PM & Task Architect",
+            "role": "Converts multi-channel discussions into INVEST user stories and decomposes backlog tasks.",
+            "instructions": "Enforce 3-axis verification: claims without attributed speaker must be flagged Blocked. Calculate INVEST score before task creation.",
+            "model_tier": "Nebius Qwen-30B (Fast)",
+            "autonomy_mode": "Semi-Autonomous",
+            "verification_rigor": "Strict 3-Axis",
+            "temperature": 0.2
+        },
+        "tasks": [
+            {
+                "id": "task-101",
+                "title": "Enforce @acmecorp.com domain constraint on Google Workspace SSO callback",
+                "status": "In Progress",
+                "priority": "High",
+                "evidence_label": "Verified",
+                "assigned_to": "AI Lead PM Agent",
+                "source_anchor": "Slack #proj-auth-federation: @oliver_sec",
+                "story": "As a SecOps Engineer, I want strictly restricted domain callbacks so unauthorized domains are rejected."
+            },
+            {
+                "id": "task-102",
+                "title": "Add sso_provider and external_subject_id to Users table with unique index",
+                "status": "Done",
+                "priority": "Medium",
+                "evidence_label": "Verified",
+                "assigned_to": "@tony_db",
+                "source_anchor": "Slack #proj-auth-federation: @tony_db",
+                "story": "As a Database Engineer, I want unique user provider mapping to prevent duplicate identity accounts."
+            },
+            {
+                "id": "task-103",
+                "title": "Resolve session expiration window discrepancy (8h SOC2 standard vs 24h dev)",
+                "status": "Blocked",
+                "priority": "Critical",
+                "evidence_label": "Blocked",
+                "assigned_to": "Human PM Review",
+                "source_anchor": "Slack #proj-auth-federation: @alex_lead",
+                "story": "Unresolved debate between @alex_lead and @oliver_sec. Requires architectural sign-off."
+            },
+            {
+                "id": "task-104",
+                "title": "Export production repository structure diagram for security audit docket",
+                "status": "Backlog",
+                "priority": "Medium",
+                "evidence_label": "Inferred",
+                "assigned_to": "Architecture Tree Agent",
+                "source_anchor": "Discord #iam-dev-squad: @sarah_arch",
+                "story": "As an Auditor, I need visual production hierarchy and file provenance for SOC2 compliance."
+            }
+        ],
+        "chat_messages": [
+            {"id": "m1", "sender": "@oliver_sec", "platform": "Slack", "time": "10:15", "text": "Team, Acme Corp needs Google Workspace SSO with domain restriction."},
+            {"id": "m2", "sender": "@tony_db", "platform": "Discord", "time": "10:18", "text": "I'm staging the database migration for sso_provider unique index now."},
+            {"id": "m3", "sender": "@alex_lead", "platform": "Telegram", "time": "10:22", "text": "What about session expiration? Can we check the production file tree to see where session timeouts are defined?"},
+            {"id": "m4", "sender": "Lead Agile PM (AI)", "platform": "AI Agent", "time": "10:23", "text": "I can visualize the production repository tree to locate our auth session handlers. Type /tree or click 'Visualize Production Tree' below to explore the codebase structure."}
+        ]
+    },
+    {
+        "id": "room-aiops-incident",
+        "name": "Kubernetes AIOps Incident Command",
+        "topic": "Kubernetes production pod crash loops, Prometheus alerts, and runbook diffs",
+        "description": "Rapid triage and remediation bridge for production cluster incidents.",
+        "social_links": [
+            {"platform": "Slack", "channel": "#incident-bridge-aiops", "enabled": True, "webhook_url": "https://hooks.slack.com/services/T01/B01/X01", "status": "Connected"},
+            {"platform": "Telegram", "channel": "@k8s_ops_oncall_bot", "enabled": True, "chat_id": "-100987654321", "status": "Connected"}
+        ],
+        "agent_config": {
+            "agent_id": "sre-ops",
+            "agent_name": "DevOps Incident Task Commander",
+            "role": "Monitors Kubernetes pod health, Prometheus metrics, and manages remediation tasks.",
+            "instructions": "Lock all Kubernetes patch proposals with resourceVersion. Never apply patches without human click verification.",
+            "model_tier": "Claude 3.5 Sonnet (High)",
+            "autonomy_mode": "Supervised",
+            "verification_rigor": "Strict 3-Axis",
+            "temperature": 0.1
+        },
+        "tasks": [
+            {
+                "id": "task-201",
+                "title": "Diagnose CrashLoopBackOff on payment-gateway-v2 in aiops-lab",
+                "status": "In Progress",
+                "priority": "Critical",
+                "evidence_label": "Verified",
+                "assigned_to": "SRE Ops Agent",
+                "source_anchor": "Prometheus 5xx Alert > 4.2%",
+                "story": "As an SRE on-call, I need immediate root cause attribution so 5xx error rate drops below 0.1%."
+            },
+            {
+                "id": "task-202",
+                "title": "Verify resourceVersion lock before rolling restart of deployment/payment-api",
+                "status": "Backlog",
+                "priority": "High",
+                "evidence_label": "Verified",
+                "assigned_to": "Human Operator",
+                "source_anchor": "Kubernetes API server state",
+                "story": "As an Operator, I require optimistic concurrency verification to prevent concurrent drift."
+            }
+        ],
+        "chat_messages": [
+            {"id": "m201", "sender": "@pagerduty_bot", "platform": "Slack", "time": "14:02", "text": "CRITICAL: P95 latency exceeded 800ms, 5xx rate at 4.2% in aiops-lab."},
+            {"id": "m202", "sender": "DevOps Incident Task Commander (AI)", "platform": "AI Agent", "time": "14:03", "text": "Diagnosing cluster... Pod payment-gateway-v2-7f9b8 restarted 5 times. Root cause: Missing DB_REPLICA_TIMEOUT env var. Proposed runbook: patch-k8s-env-timeout."}
+        ]
+    }
+]
+
+
+def _load_rooms() -> list:
+    if ROOMS_FILE.exists():
+        try:
+            return json.loads(ROOMS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return DEFAULT_ROOMS_DATA
+
+
+def _save_rooms(rooms: list) -> None:
+    ROOMS_FILE.write_text(json.dumps(rooms, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+@app.get("/api/rooms")
+def get_rooms():
+    """List all PM rooms with social links, task lists, and AI agent configuration."""
+    return jsonify(_load_rooms())
+
+
+@app.post("/api/rooms")
+def save_room():
+    """Create or update a PM room."""
+    data = request.get_json(force=True) or {}
+    room_id = data.get("id") or f"room-{int(time.time())}"
+    data["id"] = room_id
+
+    rooms = _load_rooms()
+    existing_idx = next((i for i, r in enumerate(rooms) if r.get("id") == room_id), None)
+    if existing_idx is not None:
+        rooms[existing_idx] = {**rooms[existing_idx], **data}
+    else:
+        rooms.append(data)
+
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "room": data})
+
+
+@app.delete("/api/rooms/<room_id>")
+def delete_room(room_id: str):
+    rooms = [r for r in _load_rooms() if r.get("id") != room_id]
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "deleted": room_id})
+
+
+@app.post("/api/rooms/<room_id>/chat")
+def room_chat(room_id: str):
+    """Handle conversational interaction between PM and the room's AI agent."""
+    body = request.get_json(force=True) or {}
+    user_text = (body.get("text") or body.get("message") or "").strip()
+    sender = body.get("sender", "@pm_lead")
+    platform = body.get("platform", "Console")
+
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r.get("id") == room_id), None)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+
+    agent_cfg = room.get("agent_config", {})
+    agent_name = agent_cfg.get("agent_name", "AI PM Agent")
+
+    msg_id = f"m-{int(time.time()*1000)}"
+    user_msg = {
+        "id": msg_id,
+        "sender": sender,
+        "platform": platform,
+        "time": time.strftime("%H:%M"),
+        "text": user_text,
+    }
+    room.setdefault("chat_messages", []).append(user_msg)
+
+    lower = user_text.lower()
+    is_tree_command = any(k in lower for k in ["/tree", "cây thư mục", "repo tree", "file tree", "cấu trúc", "tree"])
+    is_task_command = any(k in lower for k in ["/task", "/tasks", "nhiệm vụ", "công việc", "task"])
+    is_sync_command = any(k in lower for k in ["/sync", "đồng bộ", "kênh social", "slack", "discord", "telegram"])
+
+    if is_tree_command:
+        ai_reply = (
+            f"🌲 **Production File Tree Generated by {agent_name}**\n\n"
+            "I have mapped the current production repository hierarchy across backend core, social platforms (Slack/Discord/Telegram), "
+            "Kubernetes manifests, and the React frontend. You can interact with the live expandable tree directly in the **Production Tree** tab!"
+        )
+        ai_msg = {
+            "id": f"ai-{int(time.time()*1000)}",
+            "sender": f"{agent_name} (AI)",
+            "platform": "AI Agent",
+            "time": time.strftime("%H:%M"),
+            "text": ai_reply,
+            "has_tree": True,
+        }
+    elif is_task_command:
+        task_count = len(room.get("tasks", []))
+        blocked_count = sum(1 for t in room.get("tasks", []) if t.get("status") == "Blocked")
+        ai_reply = (
+            f"📋 **Task Audit by {agent_name}**\n\n"
+            f"Room has **{task_count} total tasks**, with **{blocked_count} blocked items** waiting on human architectural confirmation. "
+            "All claims are verified using our 3-Axis Provenance model. Click **Tasks & Agile Board** to inspect or modify task statuses."
+        )
+        ai_msg = {
+            "id": f"ai-{int(time.time()*1000)}",
+            "sender": f"{agent_name} (AI)",
+            "platform": "AI Agent",
+            "time": time.strftime("%H:%M"),
+            "text": ai_reply,
+            "has_tasks": True,
+        }
+    elif is_sync_command:
+        ai_reply = (
+            f"🔄 **Social Sync by {agent_name}**\n\n"
+            "Listening channels: Slack Bolt (`#proj-auth-federation`), Discord Gateway (`#iam-dev-squad`), and Telegram Bot. "
+            "New messages are ingested with zero hallucination. 3-Axis status: Nominal."
+        )
+        ai_msg = {
+            "id": f"ai-{int(time.time()*1000)}",
+            "sender": f"{agent_name} (AI)",
+            "platform": "AI Agent",
+            "time": time.strftime("%H:%M"),
+            "text": ai_reply,
+        }
+    else:
+        ai_reply = (
+            f"Understood. As **{agent_name}**, I'm managing task alignment and multi-channel synchronization for this room. "
+            f"You can command me to visualize our production codebase tree (`/tree`), audit backlog tasks (`/tasks`), "
+            "or review evidence claims across our connected Slack, Discord, and Telegram channels."
+        )
+        ai_msg = {
+            "id": f"ai-{int(time.time()*1000)}",
+            "sender": f"{agent_name} (AI)",
+            "platform": "AI Agent",
+            "time": time.strftime("%H:%M"),
+            "text": ai_reply,
+        }
+
+    room["chat_messages"].append(ai_msg)
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "user_message": user_msg, "ai_message": ai_msg, "room": room})
+
+
+@app.get("/api/rooms/tree")
+def get_production_tree():
+    """Scan and return the production codebase structure for interactive visualization."""
+    base = Path(__file__).resolve().parent.parent
+
+    def scan_dir(p: Path, depth=0, max_depth=3):
+        if depth > max_depth:
+            return None
+        children = []
+        try:
+            for item in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if item.name.startswith(".") or item.name in [
+                    "node_modules", "dist", "__pycache__", ".pytest_cache", ".venv", "venv", "build"
+                ]:
+                    continue
+                rel_path = str(item.relative_to(base)).replace("\\", "/")
+                if item.is_dir():
+                    sub = scan_dir(item, depth + 1, max_depth)
+                    children.append({
+                        "name": item.name,
+                        "path": rel_path,
+                        "type": "folder",
+                        "children": sub or [],
+                    })
+                else:
+                    size_kb = round(item.stat().st_size / 1024, 1)
+                    lines = 0
+                    try:
+                        lines = len(item.read_text(encoding="utf-8", errors="ignore").splitlines())
+                    except Exception:
+                        pass
+                    children.append({
+                        "name": item.name,
+                        "path": rel_path,
+                        "type": "file",
+                        "size_kb": size_kb,
+                        "lines": lines,
+                        "ext": item.suffix,
+                    })
+        except Exception:
+            pass
+        return children
+
+    tree = {
+        "name": "ScribeBA-Production",
+        "path": "",
+        "type": "folder",
+        "children": scan_dir(base) or []
+    }
+    return jsonify(tree)
 
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"

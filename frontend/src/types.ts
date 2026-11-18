@@ -1,4 +1,4 @@
-export type ViewType = 'home' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review';
+export type ViewType = 'home' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review' | 'conflicts';
 
 export type WorkspaceTab =
   | 'General'
@@ -136,4 +136,66 @@ export interface CommandItem {
   tags: string[];
   category: 'Cost Optimization' | 'Security' | 'Operational Excellence' | 'Agents';
   source: 'KAFKON' | 'Custom';
+}
+
+export interface RoomSocialLink {
+  platform: 'Slack' | 'Discord' | 'Telegram';
+  channel: string;
+  enabled: boolean;
+  webhook_url?: string;
+  chat_id?: string;
+  status: 'Connected' | 'Disconnected' | 'Listening';
+}
+
+export interface RoomAgentConfig {
+  agent_id: string;
+  agent_name: string;
+  role: string;
+  instructions: string;
+  model_tier: string;
+  autonomy_mode: 'Supervised' | 'Semi-Autonomous' | 'Autonomous';
+  verification_rigor: 'Strict 3-Axis' | 'Balanced';
+  temperature: number;
+}
+
+export interface RoomTask {
+  id: string;
+  title: string;
+  status: 'Backlog' | 'In Progress' | 'Blocked' | 'Done';
+  priority: 'Critical' | 'High' | 'Medium' | 'Low';
+  evidence_label: 'Verified' | 'Inferred' | 'Assumed' | 'Blocked';
+  assigned_to: string;
+  source_anchor: string;
+  story?: string;
+}
+
+export interface RoomChatMessage {
+  id: string;
+  sender: string;
+  platform: 'Slack' | 'Discord' | 'Telegram' | 'AI Agent' | 'Console';
+  time: string;
+  text: string;
+  has_tree?: boolean;
+  has_tasks?: boolean;
+}
+
+export interface RoomItem {
+  id: string;
+  name: string;
+  topic: string;
+  description: string;
+  social_links: RoomSocialLink[];
+  agent_config: RoomAgentConfig;
+  tasks: RoomTask[];
+  chat_messages: RoomChatMessage[];
+}
+
+export interface TreeNode {
+  name: string;
+  path: string;
+  type: 'folder' | 'file';
+  size_kb?: number;
+  lines?: number;
+  ext?: string;
+  children?: TreeNode[];
 }
