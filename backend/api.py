@@ -68,7 +68,9 @@ def health():
     """What is actually wired up right now. The studio renders this instead of claiming features."""
     primary_analysis = "openrouter" if settings.openrouter_api_key else (
         "gemini" if settings.gemini_api_key else (
-            "anthropic" if settings.anthropic_api_key else "local-deterministic"
+            "anthropic" if settings.anthropic_api_key else (
+                "nebius" if settings.nebius_api_key else "local-deterministic"
+            )
         )
     )
     return jsonify({
@@ -82,6 +84,8 @@ def health():
         "anthropic": bool(settings.anthropic_api_key),
         "openai": bool(settings.openai_api_key),
         "nebius": bool(settings.nebius_api_key),
+        "nebius_model": settings.nebius_model,
+        "nebius_base_url": settings.nebius_base_url,
         "slack": SlackAdapter().is_live,
         "clickup": bool(settings.clickup_api_key and settings.clickup_list_id),
         "exa": bool(settings.exa_api_key),
@@ -113,6 +117,8 @@ def get_byok():
         "has_openai": bool(settings.openai_api_key),
         "nebius_api_key": _mask_key(settings.nebius_api_key),
         "has_nebius": bool(settings.nebius_api_key),
+        "nebius_base_url": settings.nebius_base_url,
+        "nebius_model": settings.nebius_model,
         "aws_access_key_id": _mask_key(settings.aws_access_key_id),
         "has_aws": bool(settings.aws_access_key_id),
         "aws_region": settings.aws_default_region,
@@ -133,6 +139,9 @@ def save_byok():
         "openrouter_model": ("OPENROUTER_MODEL", "openrouter_model"),
         "anthropic_api_key": ("ANTHROPIC_API_KEY", "anthropic_api_key"),
         "openai_api_key": ("OPENAI_API_KEY", "openai_api_key"),
+        "nebius_api_key": ("NEBIUS_API_KEY", "nebius_api_key"),
+        "nebius_base_url": ("NEBIUS_BASE_URL", "nebius_base_url"),
+        "nebius_model": ("NEBIUS_MODEL", "nebius_model"),
         "aws_access_key_id": ("AWS_ACCESS_KEY_ID", "aws_access_key_id"),
         "aws_secret_access_key": ("AWS_SECRET_ACCESS_KEY", "aws_secret_access_key"),
         "aws_default_region": ("AWS_DEFAULT_REGION", "aws_default_region"),
@@ -144,6 +153,16 @@ def save_byok():
             val = str(body[req_key]).strip()
             if "••••" in val:
                 continue
+            if attr == "nebius_base_url":
+                import httpx
+                try:
+                    parsed_url = httpx.URL(val)
+                    if parsed_url.scheme != "https" or not parsed_url.host or parsed_url.query or parsed_url.fragment:
+                        return jsonify({"status": "error", "message": "Nebius base URL must be an HTTPS API base URL without query or fragment."}), 400
+                except Exception:
+                    return jsonify({"status": "error", "message": "Nebius base URL is invalid."}), 400
+            if attr == "nebius_model" and not val:
+                return jsonify({"status": "error", "message": "Nebius model ID cannot be empty."}), 400
             setattr(settings, attr, val)
             os.environ[env_var] = val
             updated_any = True
@@ -200,6 +219,32 @@ def test_byok():
             return jsonify({"status": "error", "message": f"OpenRouter returned {r.status_code}: {r.text[:200]}"}), 400
         except Exception as e:
             return jsonify({"status": "error", "message": f"Connection failed: {e}"}), 400
+
+    elif provider == "nebius":
+        test_key = key if key and "••••" not in key else settings.nebius_api_key
+        base_url = str(body.get("base_url") or settings.nebius_base_url).strip().rstrip("/")
+        try:
+            target = httpx.URL(base_url)
+            if target.scheme != "https" or not target.host or target.query or target.fragment:
+                return jsonify({"status": "error", "message": "Nebius base URL must be an HTTPS API base URL without query or fragment."}), 400
+        except Exception:
+            return jsonify({"status": "error", "message": "Nebius base URL is invalid."}), 400
+        if not test_key:
+            return jsonify({"status": "error", "message": "No Nebius API key provided."}), 400
+        try:
+            response = httpx.get(
+                f"{base_url}/models",
+                headers={"Authorization": f"Bearer {test_key}", "Accept": "application/json"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                model_ids = [m.get("id", "") for m in response.json().get("data", []) if isinstance(m, dict)]
+                configured_model = str(body.get("model") or settings.nebius_model)
+                model_note = " Configured model is listed." if configured_model in model_ids else " API key is valid; configured model was not confirmed in the model list."
+                return jsonify({"status": "ok", "message": f"Connected to Nebius AI Studio.{model_note}"})
+            return jsonify({"status": "error", "message": f"Nebius returned HTTP {response.status_code}. Check the API key and base URL."}), 400
+        except Exception:
+            return jsonify({"status": "error", "message": "Could not reach Nebius. Check network access and the base URL."}), 400
 
     return jsonify({"status": "ok", "message": f"Provider {provider} format verified."})
 

@@ -34,6 +34,8 @@ export const RoomsView: React.FC = () => {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>('room-auth-iam');
   const [activeTab, setActiveTab] = useState<RoomTab>('chat');
   const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dropTargetStatus, setDropTargetStatus] = useState<RoomTask['status'] | null>(null);
 
   // Filter state for all rooms overview
   const [filterQuery, setFilterQuery] = useState('');
@@ -827,6 +829,9 @@ export const RoomsView: React.FC = () => {
                       <p className="text-xs text-slate-500 mt-0.5">
                         Enforces INVEST criteria and 3-axis verification. Managed by {currentRoom.agent_config.agent_name}.
                       </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Drag cards between columns, or use each card’s status menu with a keyboard.
+                      </p>
                     </div>
 
                     <button
@@ -845,7 +850,30 @@ export const RoomsView: React.FC = () => {
                       return (
                         <div
                           key={colStatus}
-                          className="bg-slate-100/70 p-3 rounded-xl border border-slate-200 flex flex-col min-h-[420px]"
+                          onDragOver={event => {
+                            if (!draggedTaskId) return;
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'move';
+                            setDropTargetStatus(colStatus);
+                          }}
+                          onDragLeave={event => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                              setDropTargetStatus(current => current === colStatus ? null : current);
+                            }
+                          }}
+                          onDrop={event => {
+                            event.preventDefault();
+                            const taskId = event.dataTransfer.getData('text/plain');
+                            if (taskId) handleMoveTaskStatus(taskId, colStatus);
+                            setDraggedTaskId(null);
+                            setDropTargetStatus(null);
+                          }}
+                          aria-label={`${colStatus} tasks drop area`}
+                          className={`bg-slate-100/70 p-3 rounded-xl border flex flex-col min-h-[420px] transition-colors ${
+                            dropTargetStatus === colStatus
+                              ? 'border-teal-500 bg-teal-50/70'
+                              : 'border-slate-200'
+                          }`}
                         >
                           <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
                             <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
@@ -871,7 +899,22 @@ export const RoomsView: React.FC = () => {
                             {colTasks.map(task => (
                               <div
                                 key={task.id}
-                                className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between"
+                                draggable
+                                onDragStart={event => {
+                                  event.dataTransfer.setData('text/plain', task.id);
+                                  event.dataTransfer.effectAllowed = 'move';
+                                  setDraggedTaskId(task.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedTaskId(null);
+                                  setDropTargetStatus(null);
+                                }}
+                                title="Drag to move this task to another column"
+                                className={`bg-white p-3 rounded-lg border shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between ${
+                                  draggedTaskId === task.id
+                                    ? 'border-teal-500 opacity-50'
+                                    : 'border-slate-200'
+                                }`}
                               >
                                 <div>
                                   <div className="flex items-center justify-between mb-1.5">
@@ -925,6 +968,7 @@ export const RoomsView: React.FC = () => {
                                   <select
                                     value={task.status}
                                     onChange={e => handleMoveTaskStatus(task.id, e.target.value as any)}
+                                    aria-label={`Move ${task.title} to a different status`}
                                     className="text-[10px] font-semibold border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 text-slate-700 cursor-pointer"
                                   >
                                     <option value="Backlog">Backlog</option>
