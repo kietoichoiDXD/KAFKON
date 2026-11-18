@@ -177,7 +177,7 @@ export const SkillMarkdownRenderer: React.FC<SkillMarkdownRendererProps> = ({ co
       elements.push(
         <blockquote
           key={`quote-${i}`}
-          className="border-l-2 border-teal-500 bg-teal-50/50 px-3 py-1.5 my-2 text-xs text-gray-700 rounded-r"
+          className="border border-slate-200 bg-slate-50/80 px-3.5 py-2 my-2 text-xs text-slate-700 rounded-lg italic"
         >
           {renderInline(trimmed.slice(2))}
         </blockquote>

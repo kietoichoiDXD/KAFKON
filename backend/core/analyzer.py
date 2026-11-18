@@ -1,5 +1,6 @@
 import json
-from typing import Optional
+import re
+from typing import Optional, Any
 import httpx
 from .models import (
     ThreadContext,
@@ -8,6 +9,7 @@ from .models import (
     AcceptanceCriterion,
     EvidenceItem,
     EvidenceLabel,
+    SourceMessageEvidence,
     SkillConfig,
 )
 from .skills import SkillManager
@@ -37,18 +39,77 @@ class ScribeBAAnalyzer:
 
         # Step 1: Detect (Relevance check)
         if not self._is_decision_relevant(transcript):
-            return self._empty_result(thread, skill, "Thread contains routine chatter without architectural decisions.")
+            result = self._empty_result(thread, skill, "Thread contains routine chatter without architectural decisions.")
+            self._attach_source_messages(result, thread)
+            return result
 
         # Step 2: Analyze (Multi-tier model fallback or local simulation)
         has_keys = bool(settings.openrouter_api_key or settings.openai_api_key or settings.anthropic_api_key)
         use_live = force_live or (settings.scribeba_mode == "live" and has_keys)
         if use_live:
             try:
-                return await self._analyze_live(thread, skill, transcript, tier=active_tier)
+                result = await self._analyze_live(thread, skill, transcript, tier=active_tier)
+                self._attach_source_messages(result, thread)
+                return result
             except Exception as e:
                 print(f"[Warning] Live API cascade exhausted ({e}), executing local fallback.")
 
-        return self._analyze_local(thread, skill, transcript)
+        result = self._analyze_local(thread, skill, transcript)
+        self._attach_source_messages(result, thread)
+        return result
+
+    @staticmethod
+    def _attach_source_messages(result: AnalysisResult, thread: ThreadContext) -> None:
+        """Resolve model quote evidence to actual messages; ambiguous/weak matches stay unresolved."""
+        stop = {"the", "and", "for", "with", "from", "that", "this", "must", "should", "will", "would", "can", "could", "is", "are", "was", "were", "our", "their", "they", "them", "you", "your", "need", "needs", "please", "quote", "source"}
+
+        def tokens(value: str) -> list[str]:
+            return [t for t in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(t) > 2 and t not in stop]
+
+        for evidence in result.evidence_items:
+            quote = (evidence.quote_source or "").strip()
+            quoted = re.findall(r'[“"]([^”"]{4,})[”"]', quote)
+            if quoted:
+                query = max(quoted, key=len)
+            else:
+                query = re.sub(r"^\s*@?[^:]{1,64}:\s*", "", quote).strip(" '\"“”")
+            query_tokens = tokens(query)
+            candidates: list[tuple[float, int, Any]] = []
+            for index, message in enumerate(thread.messages):
+                message_tokens = set(tokens(message.text))
+                if not query_tokens or not message_tokens:
+                    continue
+                overlap = sum(1 for token in set(query_tokens) if token in message_tokens)
+                coverage = overlap / max(1, len(set(query_tokens)))
+                if coverage >= 0.78 and overlap >= min(2, len(set(query_tokens))):
+                    candidates.append((coverage, index, message))
+
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            best = candidates[0] if candidates else None
+            ambiguous = bool(best and len(candidates) > 1 and abs(candidates[1][0] - best[0]) < 0.001)
+            if best and not ambiguous:
+                _, index, message = best
+                body = message.text.strip()
+                excerpt = body
+                if len(excerpt) > 360:
+                    raw_match = query.strip()
+                    start = body.lower().find(raw_match.lower()) if raw_match else -1
+                    if start >= 0:
+                        left = max(0, start - 100)
+                        excerpt = ("…" if left else "") + body[left:start + min(len(raw_match) + 160, 360)]
+                    else:
+                        excerpt = body[:357].rstrip() + "…"
+                evidence.source_message = SourceMessageEvidence(
+                    # Use a platform ID only when supplied; never manufacture a deep-link identifier.
+                    message_id=message.message_id or (message.timestamp if message.timestamp and message.timestamp.lower() != "now" else ""),
+                    author=message.author,
+                    timestamp=message.timestamp,
+                    excerpt=excerpt,
+                    thread_url=None,
+                    match_status="matched",
+                )
+            else:
+                evidence.source_message = SourceMessageEvidence(match_status="unmatched")
 
     def _is_decision_relevant(self, transcript: str) -> bool:
         """Two-tier quick filter (Haiku level) for decision intent."""

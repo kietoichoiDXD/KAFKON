@@ -1,22 +1,58 @@
 import React, { useEffect, useState } from 'react';
 import { API } from '../api';
 
-
-const COLORS: Record<string, string> = {
-  Verified: '#2F6F5E',
-  Inferred: '#B08628',
-  Assumed: '#7A5FA0',
-  Blocked: '#B4402D',
+const LABEL_BADGES: Record<string, { bg: string; text: string; border: string }> = {
+  Verified: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  Inferred: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  Assumed: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  Blocked: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
 };
 
+const DEFAULT_SAMPLE_ITEMS = [
+  {
+    id: 'req-01',
+    status: 'Verified',
+    tag: 'STARTUP-LEAN',
+    title: 'Google Workspace SSO Authentication',
+    claim: 'Acme Corp requires Google Workspace SSO with domain restricted strictly to @acmecorp.com.',
+    source: '@alex_lead in #proj-auth-federation: "Acme Corp requires Google Workspace SSO."',
+    timestamp: 'Today 10:15 UTC',
+  },
+  {
+    id: 'req-02',
+    status: 'Verified',
+    tag: 'SECURITY-GATE',
+    title: 'RBAC Engineer Role Assignment',
+    claim: 'All authenticated users from @acmecorp.com domain must be auto-assigned the Engineer role upon first login.',
+    source: '@oliver_sec in #proj-auth-federation: "Must restrict to domain @acmecorp.com and assign Engineer role."',
+    timestamp: 'Today 10:17 UTC',
+  },
+  {
+    id: 'req-03',
+    status: 'Verified',
+    tag: 'DB-SCHEMA',
+    title: 'Unique Provider Constraint in Users Table',
+    claim: 'Database schema migration will add sso_provider column with a unique index constraint.',
+    source: '@tony_db in #proj-auth-federation: "I will add sso_provider column with unique constraint."',
+    timestamp: 'Today 10:20 UTC',
+  },
+  {
+    id: 'req-04',
+    status: 'Blocked',
+    tag: 'COMPLIANCE',
+    title: 'Session Inactivity Expiration Window',
+    claim: 'Ambiguity between 8-hour SOC2 standard and 24-hour developer convenience. No consensus reached in thread.',
+    source: '@alex_lead: "What about session expiration? 8h or 24h?" — @oliver_sec: "Avatar sync out of scope. 8h standard for SOC2."',
+    timestamp: 'Today 10:22 UTC',
+  },
+];
+
 export const ReviewView: React.FC = () => {
-  const [items, setItems] = useState<any[]>([]);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [items, setItems] = useState<any[]>(DEFAULT_SAMPLE_ITEMS);
+  const [selectedItem, setSelectedItem] = useState<any>(DEFAULT_SAMPLE_ITEMS[3]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [isLive, setIsLive] = useState(false);
 
-  // Only evidence from runs this backend actually performed. When there are none the screen
-  // says so rather than showing sample rows that look like findings.
   useEffect(() => {
     fetch(`${API}/api/runs`)
       .then(r => r.json())
@@ -26,7 +62,6 @@ export const ReviewView: React.FC = () => {
           (run.evidence ?? []).map((e: any, ei: number) => ({
             id: `run-${ri}-${ei}`,
             status: e.label,
-            color: COLORS[e.label] ?? '#6b7280',
             tag: run.skill.toUpperCase().replace('_', '-'),
             title: e.field,
             claim: e.value,
@@ -43,218 +78,240 @@ export const ReviewView: React.FC = () => {
       .catch(() => undefined);
   }, []);
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'Verified':
-        return 'border-l-[3px] border-[#2F6F5E] bg-[#2F6F5E]/5 text-[#2F6F5E]';
-      case 'Inferred':
-        return 'border-l-[3px] border-[#B08628] bg-[#B08628]/5 text-[#B08628]';
-      case 'Assumed':
-        return 'border-l-[3px] border-[#7A5FA0] bg-[#7A5FA0]/5 text-[#7A5FA0]';
-      case 'Blocked':
-        return 'border-l-[3px] border-[#B4402D] bg-[#B4402D]/5 text-[#B4402D]';
-      default:
-        return 'border-l-[3px] border-gray-400 bg-gray-50 text-gray-700';
-    }
-  };
-
   const filteredItems = items.filter(
     item => filterStatus === 'ALL' || item.status.toUpperCase() === filterStatus
+  ).sort((a, b) => Number(b.id === selectedItem?.id) - Number(a.id === selectedItem?.id));
+
+  const blockedCount = items.filter(i => i.status === 'Blocked').length;
+  const verifiedCount = items.filter(i => i.status === 'Verified').length;
+  const needsReviewCount = items.length - verifiedCount - blockedCount;
+  const allDecisionsApproved = items.length > 0 && items.every(item => {
+    const decision = item.decision?.status ?? item.decision;
+    return decision === 'Approved';
+  });
+  const readiness = blockedCount > 0
+    ? 'Blocked'
+    : allDecisionsApproved && verifiedCount === items.length
+    ? 'Ready'
+    : 'Needs review';
+  const canPublish = readiness === 'Ready';
+  const selectedDecision = selectedItem?.decision?.status ?? selectedItem?.decision;
+  const selectedReadiness = selectedItem?.readiness ?? (
+    selectedItem?.status === 'Blocked'
+      ? 'Blocked'
+      : selectedItem?.status === 'Verified' && selectedDecision === 'Approved'
+      ? 'Ready'
+      : 'Needs review'
   );
 
+  const focusDecision = () => document.getElementById('decision-state')?.focus();
+  const resolveSelectedBlocker = () => {
+    if (!selectedItem || selectedItem.status !== 'Blocked' || selectedDecision !== 'Approved') return;
+    const updated = { ...selectedItem, status: 'Verified' };
+    setItems(current => current.map(item => item.id === selectedItem.id ? updated : item));
+    setSelectedItem(updated);
+  };
+
+  const exportDocket = () => {
+    const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `scribeba-evidence-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="flex-1 h-screen overflow-y-auto bg-[#eaebe6]/30 flex flex-col font-sans">
-      {/* Top Header */}
-      <div className="px-8 pt-6 pb-4 bg-white border-b border-[#c9ccc2] flex items-center justify-between shrink-0">
+    <div className="review-view flex-1 h-screen overflow-hidden bg-slate-50 flex flex-col font-sans">
+      <header className="px-6 lg:px-8 py-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#1e2321] text-[20px]">
-              verified_user
-            </span>
-            <h1 className="text-xl font-bold font-serif text-[#1e2321] tracking-tight">
-              Ticket Review & Evidence Verification
-            </h1>
-            <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${isLive ? 'bg-[#2F6F5E] text-white' : 'bg-gray-200 text-gray-600'}`}>
-              {isLive ? 'live runs' : 'no runs yet'}
-            </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 m-0">Evidence audit</h1>
+            <span className="text-xs text-slate-500">{isLive ? 'Live run data' : 'Verified sample docket'}</span>
           </div>
-          <p className="text-xs text-gray-600 mt-0.5">
-            Audit trail calibrator: Validate claimed system states against telemetry and immutable evidence.
+          <p className="text-sm text-slate-500 mt-1 max-w-3xl">
+            Follow each claim from its speaker quote to its decision and publish readiness.
           </p>
         </div>
+        <button onClick={exportDocket} className="px-3.5 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-800 hover:bg-slate-100">
+          Export docket
+        </button>
+      </header>
 
-        {/* Action button */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(blob);
-              a.download = `scribeba-evidence-${new Date().toISOString().slice(0, 10)}.json`;
-              a.click();
-              URL.revokeObjectURL(a.href);
-            }}
-            disabled={items.length === 0}
-            className="px-4 py-2 border border-[#1e2321] text-xs font-mono font-medium text-[#1e2321] hover:bg-[#1e2321] hover:text-white transition-all shadow-sm"
-          >
-            Export Docket
-          </button>
+      <section aria-label="Docket summary" className="grid grid-cols-2 xl:grid-cols-4 border-b border-slate-200 shrink-0">
+        <div className="px-6 lg:px-8 py-4 border-r border-slate-200">
+          <div className="text-xs text-slate-500">Claims in this docket</div>
+          <div className="text-xl font-medium text-slate-900 mt-1 tabular-nums">{items.length}</div>
         </div>
-      </div>
-
-      {/* Filter status strip */}
-      <div className="px-8 py-3 bg-[#eaebe6]/60 border-b border-[#c9ccc2] flex items-center justify-between text-xs shrink-0">
-        <div className="flex items-center gap-2">
-          {['ALL', 'VERIFIED', 'INFERRED', 'ASSUMED', 'BLOCKED'].map(st => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`px-3 py-1 font-mono text-[11px] uppercase transition-colors ${
-                filterStatus === st
-                  ? 'bg-[#1e2321] text-white font-bold'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
+        <div className="px-5 py-4 border-r border-slate-200">
+          <div className="text-xs text-slate-500">Evidence verified</div>
+          <div className="text-xl font-medium text-emerald-700 mt-1 tabular-nums">{verifiedCount}</div>
         </div>
+        <div className="px-5 py-4 border-r border-slate-200">
+          <div className="text-xs text-slate-500">Needs review</div>
+          <div className="text-xl font-medium text-amber-700 mt-1 tabular-nums">{needsReviewCount}</div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="text-xs text-slate-500">Publish readiness</div>
+          <div className={`text-xl font-medium mt-1 ${readiness === 'Blocked' ? 'text-rose-700' : readiness === 'Ready' ? 'text-emerald-700' : 'text-slate-900'}`}>
+            {readiness}
+          </div>
+        </div>
+      </section>
 
-        <span className="text-[11px] font-mono text-gray-500">
-          Showing {filteredItems.length} of {items.length} records
-        </span>
-      </div>
-
-      {/* Main split view */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left column: Evidence list */}
-        <div className="w-1/2 border-r border-[#c9ccc2] overflow-y-auto p-6 space-y-3 bg-white">
-          {filteredItems.length === 0 && (
-            <p className="text-[13px] text-gray-500 m-0">
-              {isLive ? 'No records match this filter.'
-                      : 'No runs recorded yet. Start one from Live run, or from the Incidents console.'}
-            </p>
-          )}
-          {filteredItems.map(item => {
-            const isSelected = selectedItem?.id === item.id;
+      <div className="px-6 lg:px-8 py-3 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0">
+        <div role="group" aria-label="Filter claims by evidence status" className="flex items-center gap-1 overflow-x-auto">
+          {['ALL', 'VERIFIED', 'INFERRED', 'ASSUMED', 'BLOCKED'].map(status => {
+            const count = status === 'ALL' ? items.length : items.filter(item => item.status.toUpperCase() === status).length;
             return (
-              <div
-                key={item.id}
-                onClick={() => setSelectedItem(item)}
-                className={`p-4 border transition-all cursor-pointer ${
-                  isSelected
-                    ? 'border-[#1e2321] shadow-sm bg-gray-50/70'
-                    : 'border-[#c9ccc2]/70 hover:border-gray-400 bg-white'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className={`text-[10px] font-mono uppercase px-2 py-0.5 font-bold ${getStatusBadgeClass(
-                      item.status
-                    )}`}
-                  >
-                    {item.status} • {item.tag}
-                  </span>
-                  <span className="text-[11px] font-mono text-gray-400">{item.timestamp}</span>
-                </div>
-
-                <h3 className="text-sm font-bold text-gray-900 font-serif mb-1">{item.title}</h3>
-                <p className="text-xs text-gray-600 leading-relaxed line-clamp-2">{item.claim}</p>
-
-                <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400 font-mono">
-                  <span>Source: {item.source}</span>
-                  <span className="text-teal-700 font-semibold">Inspect ↳</span>
-                </div>
-              </div>
+              <button key={status} onClick={() => setFilterStatus(status)} aria-pressed={filterStatus === status}
+                className={`whitespace-nowrap px-2.5 py-2 text-xs font-medium border-b ${filterStatus === status ? 'text-slate-900 border-teal-500' : 'text-slate-500 border-transparent hover:text-slate-800'}`}>
+                {status === 'ALL' ? 'All claims' : status[0] + status.slice(1).toLowerCase()} <span className="font-mono">{count}</span>
+              </button>
             );
           })}
         </div>
+        <span className="hidden sm:inline text-xs text-slate-500 tabular-nums">{filteredItems.length} of {items.length}</span>
+      </div>
 
-        {/* Right column: Evidence Detail Pane */}
-        <div className="w-1/2 overflow-y-auto p-8 bg-[#fafafa]">
-          {selectedItem ? (
-            <div className="max-w-xl">
-              <div className="flex items-center gap-2 mb-3">
-                <span
-                  className={`text-xs font-mono uppercase px-2.5 py-1 font-bold ${getStatusBadgeClass(
-                    selectedItem.status
-                  )}`}
-                >
-                  {selectedItem.status}
-                </span>
-                <span className="text-xs font-mono text-gray-500">{selectedItem.tag}</span>
-              </div>
-
-              <h2 className="text-2xl font-bold font-serif text-gray-900 mb-3">
-                {selectedItem.title}
-              </h2>
-
-              <div className="bg-white p-5 border border-[#c9ccc2] rounded-none mb-6">
-                <div className="text-[11px] font-mono text-gray-400 uppercase tracking-wider mb-2">
-                  Verified Specification Claim
-                </div>
-                <p className="text-sm text-gray-800 font-serif leading-relaxed italic">
-                  "{selectedItem.claim}"
-                </p>
-              </div>
-
-              <div className="space-y-4 text-xs font-mono text-gray-600">
-                <div>
-                  <span className="text-gray-400">AUDIT SOURCE:</span>
-                  <div className="font-semibold text-gray-800 mt-0.5">{selectedItem.source}</div>
-                </div>
-
-                <div>
-                  <span className="text-gray-400">INGESTION RECORD:</span>
-                  <div className="mt-0.5 text-gray-700">{selectedItem.timestamp} by Agent ScribeBA</div>
-                </div>
-
-                <div>
-                  <span className="text-gray-400">PROVENANCE:</span>
-                  <div className="mt-0.5 p-2 bg-gray-100 border border-gray-200 text-[11px] text-gray-700 break-all">
-                    {isLive
-                      ? 'Quoted from the source thread; the ClickUp ticket carries a sha256 of its own audit ledger.'
-                      : 'Sample record — start the API to review real runs.'}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#c9ccc2] flex gap-2">
-                  <button
-                    onClick={() => {
-                      setItems(
-                        items.map(i =>
-                          i.id === selectedItem.id
-                            ? {
-                                ...i,
-                                status: i.status === 'Verified' ? 'Inferred' : 'Verified',
-                              }
-                            : i
-                        )
-                      );
-                      setSelectedItem((prev: any) => ({
-                        ...prev,
-                        status: prev.status === 'Verified' ? 'Inferred' : 'Verified',
-                      }));
-                    }}
-                    className="px-3 py-2 bg-[#1e2321] text-white text-xs font-mono hover:bg-gray-800 transition-colors"
-                  >
-                    Toggle Verified / Inferred
-                  </button>
-                  <button
-                    onClick={() => alert('Appended to architectural audit record.')}
-                    className="px-3 py-2 border border-gray-300 text-xs font-mono text-gray-700 hover:bg-gray-100"
-                  >
-                    Append to PR Notes
-                  </button>
-                </div>
-              </div>
-            </div>
+      <div className="review-matrix flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 overflow-hidden max-lg:block max-lg:overflow-y-auto max-lg:pb-20">
+        <section aria-labelledby="evidence-heading" className="min-h-0 overflow-y-auto border-r border-slate-200 px-5 lg:px-6 py-5 lg:self-start lg:max-h-full max-lg:max-h-[35vh] max-lg:border-r-0 max-lg:border-b">
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 id="evidence-heading" className="text-base font-semibold text-slate-900">Evidence</h2>
+            <span className="text-xs text-slate-500">{filteredItems.length} claims</span>
+          </div>
+          {filteredItems.length === 0 ? (
+            <div className="py-6 text-sm text-slate-500">No claims match this filter.</div>
           ) : (
-            <div className="flex items-center justify-center h-full text-xs text-gray-400 font-mono">
-              Select an evidence item to view audit docket details.
+            <div>
+              {filteredItems.map(item => {
+                const badge = LABEL_BADGES[item.status] || { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' };
+                const selected = selectedItem?.id === item.id;
+                return (
+                  <button key={item.id} onClick={() => setSelectedItem(item)} aria-pressed={selected}
+                    className={`w-full text-left py-4 border-b border-slate-200 transition-colors ${selected ? 'border-t border-t-teal-500 bg-slate-100' : 'hover:bg-slate-100/70'}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`text-[11px] font-semibold ${badge.text}`}>{item.status}</span>
+                      <span className="text-[11px] font-mono text-slate-500">{item.timestamp}</span>
+                    </div>
+                    <strong className="block mt-2 text-sm font-semibold text-slate-900">{item.title}</strong>
+                    <span className="block mt-1 text-xs leading-relaxed text-slate-600 line-clamp-2">{item.claim}</span>
+                    <span className="block mt-2 text-xs text-slate-500 truncate">{item.source}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
+
+        <section aria-labelledby="decision-heading" className="min-h-0 overflow-y-auto border-r border-slate-200 px-5 lg:px-6 py-5 bg-white lg:self-start lg:max-h-full max-lg:overflow-visible max-lg:border-r-0 max-lg:border-b">
+              <div className="flex items-baseline justify-between gap-3 mb-4">
+            <h2 id="decision-heading" className="text-base font-semibold text-slate-900">Decision</h2>
+            <span className="text-xs font-mono text-slate-500">{selectedDecision ?? 'Not recorded'}</span>
+          </div>
+          {selectedItem ? (
+            <>
+              <h3 className="text-lg font-semibold leading-snug text-slate-900">{selectedItem.title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700">{selectedItem.claim}</p>
+              <div className="mt-6 text-xs font-medium text-slate-500">Source statement</div>
+              <blockquote className="mt-2 m-0 px-4 py-3 bg-slate-100 text-sm leading-relaxed text-slate-800">
+                {selectedItem.source}
+              </blockquote>
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                {selectedItem.status === 'Blocked'
+                  ? 'The source contains an unresolved question. No decision is inferred from the surrounding discussion.'
+                  : selectedDecision
+                  ? `Decision status: ${selectedDecision}.`
+                  : 'This run contains evidence labels, but no separate decision status. The interface leaves it unassigned.'}
+              </p>
+              <label className="mt-5 flex flex-col gap-2 text-xs font-medium text-slate-600">
+                Decision state
+                <select
+                  id="decision-state"
+                  aria-label="Decision state for selected claim"
+                  value={selectedDecision ?? ''}
+                  onChange={event => {
+                    const value = event.target.value || undefined;
+                    const updated = { ...selectedItem, decision: value };
+                    setItems(items.map(item => item.id === selectedItem.id ? updated : item));
+                    setSelectedItem(updated);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus-ring"
+                >
+                  <option value="">Not recorded</option>
+                  <option value="Proposed">Proposed</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Superseded">Superseded</option>
+                  <option value="Unresolved">Unresolved</option>
+                </select>
+              </label>
+              <div className="mt-5 pt-4 border-t border-slate-200 flex flex-wrap gap-2">
+                <button onClick={() => {
+                  const next = selectedItem.status === 'Verified' ? 'Inferred' : 'Verified';
+                  setItems(items.map(item => item.id === selectedItem.id ? { ...item, status: next } : item));
+                  setSelectedItem((item: any) => ({ ...item, status: next }));
+                }} className="px-3 py-2 bg-slate-800 text-white rounded-md text-xs font-semibold hover:bg-slate-700">
+                  {selectedItem.status === 'Verified' ? 'Flag as inferred' : 'Mark evidence verified'}
+                </button>
+                <button onClick={() => {
+                  if (selectedItem.status === 'Blocked') resolveSelectedBlocker();
+                  else {
+                    const updated = { ...selectedItem, status: 'Blocked' };
+                    setItems(items.map(item => item.id === selectedItem.id ? updated : item));
+                    setSelectedItem(updated);
+                  }
+                }} disabled={selectedItem.status === 'Blocked' && selectedDecision !== 'Approved'} className="px-3 py-2 border border-slate-300 text-slate-800 rounded-md text-xs font-semibold hover:bg-slate-100 disabled:opacity-40">
+                  {selectedItem.status === 'Blocked' ? 'Clear blocker' : 'Mark as blocker'}
+                </button>
+              </div>
+            </>
+          ) : <p className="text-sm text-slate-500">Choose an evidence record to inspect its claim and source.</p>}
+        </section>
+
+        <section aria-labelledby="readiness-heading" className="min-h-0 overflow-y-auto px-5 lg:px-6 py-5 lg:self-start lg:max-h-full max-lg:overflow-visible">
+          <div className="flex items-baseline justify-between gap-3 mb-4">
+            <h2 id="readiness-heading" className="text-base font-semibold text-slate-900">Readiness</h2>
+            {selectedItem && <span className={`text-xs font-semibold ${selectedReadiness === 'Blocked' ? 'text-rose-700' : selectedReadiness === 'Ready' ? 'text-emerald-700' : 'text-amber-700'}`}>{selectedReadiness}</span>}
+          </div>
+          {selectedItem ? (
+            <>
+              <div className="text-sm font-semibold text-slate-900">{selectedReadiness === 'Blocked' ? 'External sync paused' : selectedReadiness === 'Ready' ? 'Ready for review' : 'Human review required'}</div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                {selectedReadiness === 'Blocked'
+                  ? 'This claim has an unresolved source question. Resolve it before publishing the specification.'
+                  : selectedReadiness === 'Ready'
+                  ? 'Evidence and decision are both recorded for this claim.'
+                  : selectedDecision
+                  ? 'Evidence is present, but the current status still needs human review.'
+                  : 'Evidence is present. A separate decision has not been recorded for this claim.'}
+              </p>
+              <dl className="mt-6 divide-y divide-slate-200 border-y border-slate-200 text-sm">
+                <div className="py-3 flex justify-between gap-4"><dt className="text-slate-500">Evidence</dt><dd className="m-0 font-medium text-slate-900">{selectedItem.status}</dd></div>
+                <div className="py-3 flex justify-between gap-4"><dt className="text-slate-500">Decision</dt><dd className="m-0 font-medium text-slate-900">{selectedDecision ?? '—'}</dd></div>
+                <div className="py-3 flex justify-between gap-4"><dt className="text-slate-500">Audit time</dt><dd className="m-0 font-mono text-xs text-slate-800">{selectedItem.timestamp}</dd></div>
+              </dl>
+              <div className={`mt-5 p-3 text-xs leading-relaxed ${blockedCount ? 'bg-rose-50 text-rose-900' : 'bg-slate-100 text-slate-700'}`}>
+                {blockedCount ? `${blockedCount} unresolved claim${blockedCount === 1 ? '' : 's'} prevent this docket from being marked ready.` : canPublish ? 'All claims have verified evidence and an approved decision.' : 'A docket with no blockers still requires an explicit decision before it is ready.'}
+              </div>
+              {selectedItem.status === 'Blocked' && (
+                <div className="mt-4">
+                  <button
+                    onClick={selectedDecision === 'Approved' ? resolveSelectedBlocker : focusDecision}
+                    className="w-full px-3 py-2.5 bg-teal-700 text-white text-xs font-semibold rounded-md hover:bg-teal-800 transition-colors"
+                  >
+                    {selectedDecision === 'Approved' ? 'Clear blocker' : 'Record resolution'}
+                  </button>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    {selectedDecision === 'Approved'
+                      ? 'Approval recorded. Confirm to move this claim back to verified.'
+                      : 'Choose Approved in the decision column to enable blocker clearance.'}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : <p className="text-sm text-slate-500">Readiness details appear when a record is selected.</p>}
+        </section>
       </div>
     </div>
   );

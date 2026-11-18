@@ -42,6 +42,14 @@ export type Evidence = {
   field: string;
   value: string;
   quote_source?: string | null;
+  source_message?: {
+    message_id: string;
+    author: string;
+    timestamp: string;
+    excerpt: string;
+    thread_url: string | null;
+    match_status: 'matched' | 'unmatched';
+  } | null;
 };
 
 export type Run = {
@@ -55,6 +63,39 @@ export type Run = {
   evidence: Evidence[];
   clarifying_question?: string | null;
   ticket?: { id: string; url: string; title: string } | null;
+};
+
+export type ClickUpTask = {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  status: string;
+};
+
+export type ConflictNode = {
+  id: string;
+  type: 'task' | 'requirement' | 'code';
+  label: string;
+  subtitle?: string;
+  path?: string;
+  line?: number;
+  symbol?: string;
+  snippet?: string;
+};
+
+export type ConflictEdge = {
+  from: string;
+  to: string;
+  relation: 'conflict' | 'related' | 'unverified';
+  reason: string;
+};
+
+export type ConflictScan = {
+  task: { id?: string; name: string; description: string; url?: string };
+  nodes: ConflictNode[];
+  edges: ConflictEdge[];
+  summary: { conflicts: number; related: number; unverified: number; files_scanned: number };
 };
 
 export type Skill = {

@@ -18,6 +18,36 @@ class ClickUpClient:
         self.api_key = api_key or settings.clickup_api_key
         self.list_id = list_id or settings.clickup_list_id
 
+    async def list_tasks(self, page_size: int = 50, max_pages: int = 3) -> List[Dict[str, str]]:
+        """Read a bounded set of tasks from the configured ClickUp list."""
+        if not self.api_key or not self.list_id:
+            raise ValueError("ClickUp is not configured. Set CLICKUP_API_KEY and CLICKUP_LIST_ID to load tasks.")
+        page_size = max(1, min(int(page_size), 100))
+        max_pages = max(1, min(int(max_pages), 3))
+        output: List[Dict[str, str]] = []
+        for page in range(max_pages):
+            url = f"https://api.clickup.com/api/v2/list/{self.list_id}/task"
+            headers = {"Authorization": self.api_key, "Content-Type": "application/json"}
+            params = {"page": page, "per_page": page_size, "order_by": "updated", "reverse": "true", "include_closed": "true", "subtasks": "true"}
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers, params=params)
+                response.raise_for_status()
+                data = response.json()
+            tasks = data.get("tasks", [])
+            for task in tasks:
+                status = task.get("status") or {}
+                status_name = status.get("status") if isinstance(status, dict) else status
+                output.append({
+                    "id": str(task.get("id") or ""),
+                    "name": str(task.get("name") or "Untitled task"),
+                    "description": str(task.get("description") or ""),
+                    "url": str(task.get("url") or ""),
+                    "status": str(status_name or "Open"),
+                })
+            if len(tasks) < page_size:
+                break
+        return output[:page_size * max_pages]
+
     async def create_task_from_analysis(
         self,
         result: AnalysisResult,
@@ -83,13 +113,30 @@ class ClickUpClient:
             "---",
             "### 🏷️ ScribeBA Audit & Provenance Ledger",
             f"- **Applied Team Skill**: `{skill.name}` (v{skill.version})",
-            f"- **Source Thread**: {thread_url or 'Slack #proj-auth-federation (th-1789201948)'}",
+            f"- **Source Thread**: {thread_url or 'Unavailable'}",
             f"- **INVEST Verification Score**: `{result.invest_score.overall}/100`",
             f"- **Verified Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Verified')}",
             f"- **Inferred Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Inferred')}",
             f"- **Assumed Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Assumed')}",
             f"- **Blocked Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Blocked')}",
+            "",
+            "### Source Evidence by Claim",
         ]
+        for evidence in result.evidence_items:
+            source = evidence.source_message
+            audit_trail.append(f"- **{evidence.field}** — `{evidence.label.value}`: {evidence.value}")
+            if source and source.match_status == "matched":
+                excerpt = source.excerpt.replace("\n", " ").strip()
+                source_label = " · ".join(part for part in [source.author, source.timestamp] if part)
+                source_url = source.thread_url or thread_url
+                if source_url:
+                    source_label = f"[{source_label or 'Open source thread'}]({source_url})"
+                audit_trail.append(f"  - **Source**: {source_label or 'Matched message'} · `{source.message_id}`")
+                if excerpt:
+                    audit_trail.append(f"  - **Excerpt**: > {excerpt[:500]}")
+            else:
+                citation = evidence.quote_source or "No source quote recorded."
+                audit_trail.append(f"  - **Source unresolved**: {citation}")
         body = "\n".join(audit_trail)
         seal = hashlib.sha256(body.encode("utf-8")).hexdigest()
         return f"{body}\n- **Integrity Seal**: `sha256:{seal}`"

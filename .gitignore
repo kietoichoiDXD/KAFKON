@@ -51,3 +51,11 @@ dist/
 .scribeba_cache/
 *.log
 .runs.json
+.rooms.json
+ScribeBA-Submission.zip
+
+# Local agent skill installations and editor workspace state
+.agents/skills/
+.codex/
+.impeccable/
+.taste-skill/

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-
 import { API, safeFetchJson, isGitHubPages } from '../api';
 import {
   MOCK_ENVIRONMENTS,
@@ -9,7 +8,7 @@ import {
   MOCK_SLACK_CHANNELS,
 } from '../data/mockOps';
 
-const LABEL_COLOR: Record<string, string> = {
+const LABEL_STYLE: Record<string, string> = {
   Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Inferred: 'bg-amber-50 text-amber-700 border-amber-200',
   Assumed: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -19,27 +18,33 @@ const LABEL_COLOR: Record<string, string> = {
 type Pod = { name: string; ready: string; status: string; restarts: string; age: string };
 type Evidence = { label: string; field: string; value: string; source: string };
 type Proposal = {
-  action_id: string; runbook: string; target: string; summary: string;
-  parameters: { name: string; value: string }; observed: string;
-  resource_version: string; patch: any; created_at: string;
+  action_id: string;
+  runbook: string;
+  target: string;
+  summary: string;
+  parameters: { name: string; value: string };
+  observed: string;
+  resource_version: string;
+  patch: any;
+  created_at: string;
 };
 type Diagnosis = {
   healthy: boolean;
-  state: { namespace: string; context: string; pods: Pod[];
-    metrics: { rps: number | null; error_rate: number | null; p95_seconds: number | null; available: boolean } };
+  state: {
+    namespace: string;
+    context: string;
+    pods: Pod[];
+    metrics: {
+      rps: number | null;
+      error_rate: number | null;
+      p95_seconds: number | null;
+      available: boolean;
+    };
+  };
   evidence: Evidence[];
   proposal: Proposal | null;
   error?: string;
 };
-
-// What to say while demoing, in the order that tells the story.
-const SCRIPT = [
-  { step: 'Trigger', note: 'Inject a declared fault — the console can only break what it can fix.' },
-  { step: 'Diagnose', note: 'Every finding carries the command that produced it.' },
-  { step: 'Ask in Slack', note: 'The person who approves sees the diff where they already work.' },
-  { step: 'Approve', note: 'A sentence never authorises a write; a click on a visible diff does.' },
-  { step: 'Verify', note: 'Applied is not recovered — the rate window still holds the outage.' },
-];
 
 const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`);
 const num = (v: number | null, d = 2) => (v === null ? '—' : v.toFixed(d));
@@ -82,7 +87,6 @@ export function OpsView() {
     });
   }, []);
 
-  // Drill scenarios follow the selected environment; most environments declare none.
   useEffect(() => {
     if (!env) return;
     safeFetchJson<any[]>(`${API}/api/ops/faults?environment=${encodeURIComponent(env)}`).then(res => {
@@ -98,29 +102,81 @@ export function OpsView() {
 
   const triggerFault = async () => {
     if (!fault) return;
-    setBusy('trigger'); setError(null); setTriggered(null);
+    setBusy('trigger');
+    setError(null);
+    setTriggered(null);
     try {
-      const res = await safeFetchJson<any>(`${API}/api/ops/trigger`, {
+      const res = await safeFetchJson<any>(`${API}/api/ops/faults/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fault, environment: env }),
+        body: JSON.stringify({ environment: env, fault }),
       });
       if (res.ok && res.data && !res.data.error) {
         setTriggered(res.data);
-        setTimeout(() => run('diagnose'), 6000);
+        await run('diagnose');
       } else {
-        // Interactive simulation mode
         setIsDemo(true);
-        setApplied(null);
-        setVerified(null);
-        const trig = {
+        setTriggered({
           triggered: fault,
-          environment: env,
           at: new Date().toLocaleTimeString(),
-          expect: faults.find(f => f.name === fault)?.expect || 'restore deployment',
-        };
-        setTriggered(trig);
+          expect: 'High 5xx error rate and container crash loop',
+        });
         setDiag(MOCK_DIAGNOSIS_UNHEALTHY as any);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const run = async (verb: 'diagnose' | 'verify') => {
+    setBusy(verb);
+    setError(null);
+    try {
+      const res = await safeFetchJson<any>(`${API}/api/ops/${verb}?environment=${encodeURIComponent(env)}`);
+      if (res.ok && res.data) {
+        if (verb === 'diagnose') setDiag(res.data);
+        else setVerified(res.data);
+      } else {
+        setIsDemo(true);
+        if (verb === 'diagnose') {
+          setDiag(MOCK_DIAGNOSIS_UNHEALTHY as any);
+        } else {
+          setVerified(MOCK_DIAGNOSIS_RECOVERED.state.metrics);
+        }
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const approve = async () => {
+    if (!diag?.proposal) return;
+    setBusy('apply');
+    setError(null);
+    try {
+      const res = await safeFetchJson<any>(`${API}/api/ops/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action_id: diag.proposal.action_id,
+          approver: 'operator (web console)',
+        }),
+      });
+      if (res.ok && res.data) {
+        setApplied(res.data);
+      } else {
+        setIsDemo(true);
+        setApplied({
+          action_id: diag.proposal.action_id,
+          approver: 'operator (local approval)',
+          at: new Date().toLocaleTimeString(),
+          note: 'Patch applied successfully. Kubernetes deployment updated with optimistic lock.',
+        });
+        setDiag(MOCK_DIAGNOSIS_RECOVERED as any);
       }
     } catch (e: any) {
       setError(e.message);
@@ -131,22 +187,25 @@ export function OpsView() {
 
   const requestApproval = async () => {
     if (!diag?.proposal || !channel) return;
-    setBusy('notify'); setError(null);
+    setBusy('notify');
+    setError(null);
     try {
       const res = await safeFetchJson<any>(`${API}/api/ops/notify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action_id: diag.proposal.action_id, channel }),
+        body: JSON.stringify({
+          channel,
+          action_id: diag.proposal.action_id,
+        }),
       });
-      if (res.ok && res.data && !res.data.error) {
+      if (res.ok && res.data) {
         setNotified(res.data);
       } else {
         setIsDemo(true);
         setNotified({
-          action_id: diag.proposal.action_id,
+          posted: true,
           channel,
-          ts: String(Date.now() / 1000),
-          note: 'Approval request posted in Slack (Simulated)',
+          ts: '1792281900.123456',
         });
       }
     } catch (e: any) {
@@ -156,298 +215,358 @@ export function OpsView() {
     }
   };
 
-  const run = async (what: 'diagnose' | 'verify') => {
-    setBusy(what); setError(null);
-    try {
-      const targetEnv = env || 'aiops-lab';
-      const res = await safeFetchJson<any>(`${API}/api/ops/${what}?environment=${encodeURIComponent(targetEnv)}`);
-      if (res.ok && res.data && !res.data.error) {
-        const d = res.data;
-        if (what === 'diagnose') {
-          setDiag(d); setApplied(null); setVerified(null); setNotified(null);
-        } else {
-          setVerified(d);
-          setDiag(prev => prev && {
-            ...prev,
-            state: { ...prev.state, metrics: { ...prev.state.metrics, error_rate: d.error_rate } },
-          });
-        }
-      } else {
-        // Fallback simulation mode
-        setIsDemo(true);
-        if (what === 'diagnose') {
-          if (applied) {
-            setDiag(MOCK_DIAGNOSIS_RECOVERED as any);
-          } else {
-            setDiag(MOCK_DIAGNOSIS_UNHEALTHY as any);
-          }
-          setVerified(null);
-        } else {
-          const isRecovered = !!applied;
-          const ver = isRecovered
-            ? { recovered: true, config_restored: true, pods_ready: true, error_rate: 0.001 }
-            : { recovered: false, config_restored: false, pods_ready: false, error_rate: 0.054 };
-          setVerified(ver);
-          setDiag(prev => prev && {
-            ...prev,
-            state: { ...prev.state, metrics: { ...prev.state.metrics, error_rate: ver.error_rate } },
-          });
-        }
-      }
-    } catch (e: any) {
-      setIsDemo(true);
-      setDiag(applied ? (MOCK_DIAGNOSIS_RECOVERED as any) : (MOCK_DIAGNOSIS_UNHEALTHY as any));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const approve = async () => {
-    if (!diag?.proposal) return;
-    setBusy('apply'); setError(null);
-    try {
-      const res = await safeFetchJson<any>(`${API}/api/ops/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action_id: diag.proposal.action_id, approver: 'operator' }),
-      });
-      if (res.ok && res.data && !res.data.error) {
-        setApplied(res.data);
-      } else {
-        setIsDemo(true);
-        const app = {
-          action_id: diag.proposal.action_id,
-          approver: 'operator (demo simulation)',
-          at: new Date().toLocaleTimeString(),
-          note: 'Applied patch to deployment/cart (VALKEY_ADDR=valkey:6379). Configuration restored.',
-        };
-        setApplied(app);
-        setDiag(MOCK_DIAGNOSIS_RECOVERED as any);
-      }
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  useEffect(() => { run('diagnose'); }, []);
+  useEffect(() => {
+    run('diagnose');
+  }, []);
 
   const m = diag?.state?.metrics;
-  const bad = (m?.error_rate ?? 0) > 0.02;
+  const isElevated5xx = (m?.error_rate ?? 0) > 0.02;
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="max-w-4xl mx-auto space-y-5">
+    <div className="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
+      <div className="w-full max-w-[1440px] mx-auto space-y-6">
+        {/* Header */}
         <div>
-          <h1 className="text-[22px] font-semibold text-gray-900">Incident console</h1>
-          <p className="text-[13.5px] text-gray-600 mt-1">
-            Reads the live cluster, labels what it can prove, and proposes one named runbook with the
-            exact patch. Nothing is written until you approve the action you can see.
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Incident console
+          </h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Real-time Kubernetes cluster telemetry, automated root cause diagnosis, and declarative
+            remediation patches guarded by <code className="font-mono text-teal-700 bg-teal-50 px-1 py-0.5 rounded">resourceVersion</code> concurrency locks.
           </p>
         </div>
 
         {isDemo && (
-          <div className="flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl text-xs text-purple-900">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                ⚡ Interactive Simulation Mode
+          <div className="flex items-center justify-between gap-4 py-3 border-y border-slate-200 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 text-emerald-700 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Simulation data
               </span>
-              <span>
-                Simulating live Kubernetes telemetry & deterministic runbook patch. Click <b>Approve and apply</b> or <b>Trigger fault</b> to test the remediation loop.
+              <span className="text-slate-500">
+                Kubernetes pod state and Prometheus metrics are simulated.
               </span>
             </div>
-            <span className="text-[11px] text-purple-600 font-mono hidden sm:inline">Static GitHub Pages</span>
+            <span className="text-[11px] text-teal-400 font-mono hidden sm:inline">
+              Cluster: {env}
+            </span>
           </div>
         )}
 
-        {error && <p className="text-[13px] text-rose-600 border border-rose-200 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        {error && (
+          <div className="text-xs text-rose-700 border border-rose-200 bg-rose-50 rounded-xl p-3 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px] text-rose-500">warning</span>
+            <span>{error}</span>
+          </div>
+        )}
 
+        {/* Telemetry Metrics Grid */}
         {m && (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 border-y border-slate-200">
             {[
-              ['Error rate', pct(m.error_rate), bad],
-              ['Requests / s', num(m.rps), false],
-              ['p95 latency', m.p95_seconds === null ? '—' : `${(m.p95_seconds * 1000).toFixed(0)} ms`, false],
-              ['Pods ready', `${diag!.state.pods.filter(p => p.ready.split('/')[0] === p.ready.split('/')[1]).length}/${diag!.state.pods.length}`, false],
-            ].map(([k, v, warn]: any) => (
-              <div key={k} className={`rounded-xl border px-4 py-3 bg-white ${warn ? 'border-rose-300' : 'border-gray-200'}`}>
-                <div className="text-[11.5px] text-gray-500">{k}</div>
-                <div className={`text-[20px] font-semibold ${warn ? 'text-rose-600' : 'text-gray-900'}`}>{v}</div>
+              {
+                label: '5xx Error Rate',
+                val: pct(m.error_rate),
+                warn: isElevated5xx,
+                sub: isElevated5xx ? 'Threshold > 2.0%' : 'Nominal (< 0.1%)',
+              },
+              {
+                label: 'Throughput',
+                val: `${num(m.rps)} RPS`,
+                warn: false,
+                sub: 'Prometheus query',
+              },
+              {
+                label: 'P95 Latency',
+                val: m.p95_seconds === null ? '—' : `${(m.p95_seconds * 1000).toFixed(0)} ms`,
+                warn: false,
+                sub: 'Service mesh metrics',
+              },
+              {
+                label: 'Pods Health',
+                val: `${
+                  diag!.state.pods.filter(p => p.ready.split('/')[0] === p.ready.split('/')[1]).length
+                } / ${diag!.state.pods.length}`,
+                warn:
+                  diag!.state.pods.filter(p => p.ready.split('/')[0] === p.ready.split('/')[1])
+                    .length < diag!.state.pods.length,
+                sub: 'Ready containers',
+              },
+            ].map((card, i) => (
+              <div
+                key={i}
+                className={`min-w-0 py-4 px-4 first:pl-0 border-r last:border-r-0 border-slate-200 ${card.warn ? 'bg-rose-50/40' : ''}`}
+              >
+                <div className="text-xs font-semibold text-slate-500">{card.label}</div>
+                <div
+                  className={`text-xl font-bold font-mono tracking-tight mt-1 ${
+                    card.warn ? 'text-rose-600' : 'text-slate-900'
+                  }`}
+                >
+                  {card.val}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">{card.sub}</div>
               </div>
             ))}
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5">
-          {SCRIPT.map((s, i) => (
-            <span key={s.step} title={s.note}
-                  className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-[12px] text-gray-600">
-              <span className="text-gray-400 mr-1.5">{i + 1}</span>{s.step}
-            </span>
-          ))}
-        </div>
-
-        {envs.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-gray-500">Environment</span>
+        {/* Environment & Control Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600">Environment:</span>
             {envs.map(e => (
               <button
                 key={e.name}
-                onClick={() => { setEnv(e.name); setDiag(null); setApplied(null); setVerified(null); }}
-                className={`px-3 py-1.5 rounded-full border text-[12.5px] transition-colors ${
+                onClick={() => {
+                  setEnv(e.name);
+                  setDiag(null);
+                  setApplied(null);
+                  setVerified(null);
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                   env === e.name
-                    ? 'border-[#7b5cff]/50 bg-[#7b5cff]/8 text-[#4a35a8] font-medium'
-                    : 'border-gray-200 text-gray-600 hover:border-[#7b5cff]/40'
+                    ? 'bg-slate-900 text-white font-semibold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
-                title={`${e.kind} · ${e.target}`}
               >
                 {e.name}
-                <span className="text-gray-400 ml-1.5">{e.can_remediate ? e.kind : `${e.kind} · read-only`}</span>
               </button>
             ))}
           </div>
-        )}
 
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => run('diagnose')}
+              disabled={!!busy}
+              className="px-4 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition-all disabled:opacity-40"
+            >
+              {busy === 'diagnose' ? 'Diagnosing...' : 'Run Diagnostics'}
+            </button>
+            <button
+              onClick={() => run('verify')}
+              disabled={!!busy}
+              className="px-4 py-1.5 rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold transition-all disabled:opacity-40"
+            >
+              {busy === 'verify' ? 'Verifying...' : 'Verify Recovery'}
+            </button>
+          </div>
+        </div>
+
+        {/* Drill & Chaos Fault Injection */}
         {faults.length > 0 && (
-          <div className="border border-amber-200 bg-amber-50/60 rounded-xl p-4 space-y-2">
-            <h2 className="text-[13px] font-semibold text-amber-900 m-0">Drill</h2>
-            <p className="text-[12px] text-amber-800 m-0">
-              Inject a declared fault to rehearse the loop. Only the scenarios written in
-              integrations.yaml can be triggered, and each one is reversible by a runbook above.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <select value={fault} onChange={e => setFault(e.target.value)}
-                      className="border border-amber-200 bg-white rounded-lg px-2.5 py-2 text-[13px]">
-                {faults.map(f => <option key={f.name} value={f.name}>{f.name} — {f.summary}</option>)}
+          <div className="border-b border-slate-200 pb-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Chaos Engineering Rehearsal Drill
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Inject safe, declarative faults to test autonomous root cause attribution and remediation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={fault}
+                onChange={e => setFault(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-slate-50 text-slate-800 focus-ring"
+              >
+                {faults.map(f => (
+                  <option key={f.name} value={f.name}>
+                    {f.name} — {f.summary}
+                  </option>
+                ))}
               </select>
-              <button onClick={triggerFault} disabled={!!busy}
-                      className="px-4 py-2 rounded-full bg-amber-600 text-white text-[13.5px] font-medium disabled:opacity-40 hover:bg-amber-700 active:translate-y-px transition-all">
-                {busy === 'trigger' ? 'Injecting…' : 'Trigger fault'}
+              <button
+                onClick={triggerFault}
+                disabled={!!busy}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-all disabled:opacity-40"
+              >
+                {busy === 'trigger' ? 'Injecting Fault...' : 'Inject Fault Scenario'}
               </button>
               {triggered && (
-                <span className="text-[12.5px] text-amber-900">
-                  {triggered.triggered} at {triggered.at} · expect <b>{triggered.expect}</b>
+                <span className="text-xs text-rose-800 font-mono">
+                  Fault triggered at {triggered.at} · {triggered.expect}
                 </span>
               )}
             </div>
           </div>
         )}
 
-        <div className="flex gap-2">
-          <button onClick={() => run('diagnose')} disabled={!!busy}
-                  className="px-4 py-2 rounded-full bg-[#7b5cff] text-white text-[13.5px] font-medium disabled:opacity-40">
-            {busy === 'diagnose' ? 'Reading cluster…' : 'Diagnose'}
-          </button>
-          <button onClick={() => run('verify')} disabled={!!busy}
-                  className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-[13.5px] disabled:opacity-40">
-            {busy === 'verify' ? 'Checking…' : 'Verify recovery'}
-          </button>
-        </div>
-
+        {/* Evidence Findings */}
         {diag && (
-          <div className="border border-gray-200 rounded-xl p-5 bg-white space-y-3">
-            <h2 className="text-[15px] font-semibold">Evidence</h2>
-            {diag.evidence.map((e, i) => (
-              <div key={i} className="flex items-start gap-2 text-[12.5px]">
-                <span className={`px-1.5 py-0.5 rounded border shrink-0 ${LABEL_COLOR[e.label] ?? 'bg-gray-50 border-gray-200'}`}>{e.label}</span>
-                <span className="text-gray-700">
-                  <b>{e.field}</b>: {e.value}
-                  <span className="block text-gray-400 font-mono text-[11px] mt-0.5">{e.source}</span>
-                </span>
-              </div>
-            ))}
+          <div className="border-y border-slate-200 py-5 space-y-3">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Diagnostic Evidence Provenance
+            </h2>
+            <div className="space-y-2">
+              {diag.evidence.map((e, i) => (
+                <div key={i} className="flex items-start gap-3 text-xs py-3 border-b border-slate-200">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold border uppercase tracking-wider shrink-0 ${
+                      LABEL_STYLE[e.label] ?? 'bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    {e.label}
+                  </span>
+                  <div className="text-slate-800">
+                    <span className="font-semibold text-slate-900">{e.field}:</span> {e.value}
+                    <div className="text-slate-400 font-mono text-[11px] mt-0.5">
+                      Command source: {e.source}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* Proposed Atomic Remediation Diff */}
         {diag?.proposal && !applied && (
-          <div className="border-2 border-[#7b5cff]/30 rounded-xl p-5 bg-white space-y-3">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-[15px] font-semibold">Proposed fix</h2>
-              <span className="text-[11.5px] font-mono text-gray-500">{diag.proposal.action_id}</span>
+          <div className="border border-teal-500/40 rounded-xl p-6 bg-white space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="text-xs font-bold text-teal-800 uppercase tracking-wider">
+                  Proposed Autonomous Remediation Patch
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 mt-1">
+                  {diag.proposal.summary}
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
+                Action ID: {diag.proposal.action_id}
+              </span>
             </div>
-            <p className="text-[13px] text-gray-700">{diag.proposal.summary}</p>
-            <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-              <div><span className="text-gray-500">Runbook</span><div className="font-semibold">{diag.proposal.runbook}</div></div>
-              <div><span className="text-gray-500">Target</span><div className="font-semibold">{diag.proposal.target}</div></div>
-            </div>
-            <div className="text-[12.5px]">
-              <span className="text-gray-500">Exact change</span>
-              <div className="mt-1 font-mono text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                <div className="text-rose-600">- {diag.proposal.parameters.name}={diag.proposal.observed}</div>
-                <div className="text-emerald-700">+ {diag.proposal.parameters.name}={diag.proposal.parameters.value}</div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 block">Runbook</span>
+                <span className="font-semibold text-slate-900 font-mono">
+                  {diag.proposal.runbook}
+                </span>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 block">Target Kubernetes Object</span>
+                <span className="font-semibold text-slate-900 font-mono">
+                  {diag.proposal.target}
+                </span>
               </div>
             </div>
-            <p className="text-[11.5px] text-gray-500">
-              Pinned to resourceVersion {diag.proposal.resource_version} — if the deployment changes
-              before you approve, this action is refused rather than applied to something else.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <select value={channel} onChange={e => setChannel(e.target.value)}
-                      className="border border-gray-200 rounded-lg px-2.5 py-2 text-[13px]">
-                {channels.map(c => <option key={c.id} value={c.id}>#{c.name}</option>)}
+
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1.5">
+                Exact Declarative Patch
+              </div>
+              <div className="font-mono text-xs bg-slate-900 text-slate-100 rounded-lg p-3 space-y-1">
+                <div className="text-rose-400">
+                  - {diag.proposal.parameters.name} = {diag.proposal.observed}
+                </div>
+                <div className="text-emerald-400">
+                  + {diag.proposal.parameters.name} = {diag.proposal.parameters.value}
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 font-mono mt-1.5">
+                ResourceVersion Lock: <b>{diag.proposal.resource_version}</b> (Aborts if cluster mutates before sign-off)
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <select
+                value={channel}
+                onChange={e => setChannel(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50"
+              >
+                {channels.map(c => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
               </select>
-              <button onClick={requestApproval} disabled={!!busy || !channel || !!notified}
-                      className="px-4 py-2 rounded-full border border-[#7b5cff]/40 text-[#4a35a8] text-[13.5px] font-medium disabled:opacity-40">
-                {busy === 'notify' ? 'Sending…' : notified ? 'Sent to Slack' : 'Ask for approval in Slack'}
+
+              <button
+                onClick={requestApproval}
+                disabled={!!busy || !channel || !!notified}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold disabled:opacity-40"
+              >
+                {busy === 'notify' ? 'Dispatching...' : notified ? 'Sent to Slack' : 'Request Sign-off in Slack'}
               </button>
-              <button onClick={approve} disabled={!!busy}
-                      className="px-4 py-2 rounded-full bg-emerald-600 text-white text-[13.5px] font-medium disabled:opacity-40">
-                {busy === 'apply' ? 'Applying…' : 'Approve and apply'}
+
+              <button
+                onClick={approve}
+                disabled={!!busy}
+                className="px-5 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold disabled:opacity-40"
+              >
+                {busy === 'apply' ? 'Applying...' : 'Approve & Apply Patch'}
               </button>
             </div>
+
             {notified && (
-              <p className="text-[12px] text-emerald-700">
-                Approval request posted in Slack. The outcome — approved or refused — is posted back
-                into that same thread.
-              </p>
+              <div className="text-xs text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-3">
+                Notification dispatched to #{channels.find(c => c.id === channel)?.name || channel}. Live status will reflect human decision.
+              </div>
             )}
           </div>
         )}
 
-        {diag && !diag.proposal && (
-          <div className="border border-emerald-200 bg-emerald-50 rounded-xl px-4 py-3 text-[13px] text-emerald-800">
-            Configuration matches the baseline. No runbook to propose.
-          </div>
-        )}
-
+        {/* Recovery / Applied State */}
         {applied && (
-          <div className="border border-gray-200 rounded-xl p-4 bg-white text-[13px] space-y-1">
-            <div className="font-semibold text-emerald-700">Applied · {applied.action_id}</div>
-            <div className="text-gray-600">approved by {applied.approver} at {applied.at}</div>
-            <div className="text-gray-500 text-[12px]">{applied.note}</div>
+          <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-4 text-xs space-y-1">
+            <div className="font-bold text-emerald-900">
+              Patch Applied: {applied.action_id}
+            </div>
+            <div className="text-emerald-800">
+              Approved by {applied.approver} at {applied.at}
+            </div>
+            <div className="text-emerald-700 text-[11px]">{applied.note}</div>
           </div>
         )}
 
-        {verified && (
-          <div className={`border rounded-xl p-4 text-[13px] space-y-1 ${verified.recovered ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-            <div className="font-semibold">{verified.recovered ? 'Recovered' : 'Not recovered yet'}</div>
-            <div className="text-gray-700">
-              config restored: {String(verified.config_restored)} · pods ready: {String(verified.pods_ready)} ·
-              error rate: {pct(verified.error_rate)}
-            </div>
-            <div className="text-gray-500 text-[12px]">
-              The rate window still holds pre-fix samples, so the number falls over a minute or two
-              rather than instantly.
-            </div>
-          </div>
-        )}
-
+        {/* Kubernetes Pods Table */}
         {diag && diag.state && (
-          <div className="border border-gray-200 rounded-xl p-4 bg-white">
-            <h2 className="text-[14px] font-semibold mb-2">
-              {diag.state.namespace} · {diag.state.context}
-            </h2>
-            <div className="space-y-1 font-mono text-[12px]">
-              {diag.state.pods.map(p => (
-                <div key={p.name} className="flex gap-3 text-gray-600">
-                  <span className="w-64 truncate">{p.name}</span>
-                  <span className={p.ready.split('/')[0] === p.ready.split('/')[1] ? 'text-emerald-600' : 'text-rose-600'}>{p.ready}</span>
-                  <span>{p.status}</span>
-                  <span className="text-gray-400">restarts {p.restarts}</span>
-                  <span className="text-gray-400">{p.age}</span>
-                </div>
-              ))}
+          <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Live Pod Matrix ({diag.state.namespace} · {diag.state.context})
+              </h2>
+              <span className="text-[11px] font-mono text-slate-400">
+                Namespace: {diag.state.namespace}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-100">
+                    <th className="py-2 pr-4 font-semibold">Pod Name</th>
+                    <th className="py-2 px-4 font-semibold">Ready</th>
+                    <th className="py-2 px-4 font-semibold">Status</th>
+                    <th className="py-2 px-4 font-semibold">Restarts</th>
+                    <th className="py-2 pl-4 font-semibold">Age</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {diag.state.pods.map(p => {
+                    const isHealthy = p.ready.split('/')[0] === p.ready.split('/')[1];
+                    return (
+                      <tr key={p.name} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-2 pr-4 font-semibold text-slate-800">{p.name}</td>
+                        <td
+                          className={`py-2 px-4 font-bold ${
+                            isHealthy ? 'text-emerald-700' : 'text-rose-600'
+                          }`}
+                        >
+                          {p.ready}
+                        </td>
+                        <td className="py-2 px-4 text-slate-700">{p.status}</td>
+                        <td className="py-2 px-4 text-slate-500">{p.restarts}</td>
+                        <td className="py-2 pl-4 text-slate-400">{p.age}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

@@ -10,26 +10,27 @@ export const ArtifactsView: React.FC = () => {
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>(WORKSPACE_ARTIFACTS);
 
-  // Combine workspace catalogue artifacts with tickets this backend filed
   useEffect(() => {
-    get<Run[]>('/api/runs').then(runs => {
-      const runArtifacts = (runs || [])
-        .filter(r => r.ticket)
-        .map((r, i) => ({
-          id: r.ticket!.id ?? String(i),
-          title: r.ticket!.title,
-          source: `${r.skill} · INVEST ${r.invest}${r.engine ? ` · ${r.engine}` : ''}`,
-          time: r.at,
-          type: 'REPORT' as const,
-          visibility: 'Shared' as const,
-          contentSnippet: r.evidence
-            .map(e => `[${e.label}] ${e.field}: ${e.value}`)
-            .join('\n'),
-        }));
-      setArtifacts([...WORKSPACE_ARTIFACTS, ...runArtifacts]);
-    }).catch(() => {
-      setArtifacts(WORKSPACE_ARTIFACTS);
-    });
+    get<Run[]>('/api/runs')
+      .then(runs => {
+        const runArtifacts = (runs || [])
+          .filter(r => r.ticket)
+          .map((r, i) => ({
+            id: r.ticket!.id ?? String(i),
+            title: r.ticket!.title,
+            source: `${r.skill} · INVEST ${r.invest}${r.engine ? ` · ${r.engine}` : ''}`,
+            time: r.at,
+            type: 'REPORT' as const,
+            visibility: 'Shared' as const,
+            contentSnippet: r.evidence
+              .map(e => `[${e.label}] ${e.field}: ${e.value}`)
+              .join('\n'),
+          }));
+        setArtifacts([...WORKSPACE_ARTIFACTS, ...runArtifacts]);
+      })
+      .catch(() => {
+        setArtifacts(WORKSPACE_ARTIFACTS);
+      });
   }, []);
 
   const byType = (t: string) => (artifacts ?? []).filter(a => a.type === t).length;
@@ -44,7 +45,6 @@ export const ArtifactsView: React.FC = () => {
   ];
 
   const filteredArtifacts = (artifacts ?? []).filter(art => {
-    // Filter by tab
     if (activeTab === 'Reports' && art.type !== 'REPORT') return false;
     if (activeTab === 'Scorecards' && art.type !== 'SCORECARD') return false;
     if (activeTab === 'Dashboards' && art.type !== 'DASHBOARD') return false;
@@ -52,10 +52,8 @@ export const ArtifactsView: React.FC = () => {
     if (activeTab === 'Diagrams' && art.type !== 'DIAGRAM') return false;
     if (activeTab === 'Comparisons' && art.type !== 'COMPARISON') return false;
 
-    // Filter by visibility
     if (visibilityFilter !== 'All' && art.visibility !== visibilityFilter) return false;
 
-    // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -68,71 +66,73 @@ export const ArtifactsView: React.FC = () => {
   });
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto bg-[#f8faf9] flex flex-col">
+    <div className="flex-1 h-screen overflow-y-auto bg-slate-50 flex flex-col font-sans">
       {/* Top Header */}
-      <div className="px-8 pt-6 pb-4 bg-white/70 backdrop-blur border-b border-gray-200/80 shrink-0">
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Artifacts</h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Browse reports, dashboards, and files from all conversations
-        </p>
+      <div className="px-8 py-4 bg-white border-b border-slate-200 shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+              Integrity docket
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Browse generated specifications and inspect the provenance returned with each run.
+            </p>
+          </div>
+          <div className="text-xs font-mono text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+            {filteredArtifacts.length} artifacts
+          </div>
+        </div>
 
         {/* Tab Filters */}
-        <div className="flex items-center justify-between mt-4 overflow-x-auto pb-1">
-          <div className="flex items-center gap-1.5">
-            {tabs.map(tab => (
-              <button
-                key={tab.label}
-                onClick={() => setActiveTab(tab.label)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  activeTab === tab.label
-                    ? 'bg-teal-100/70 text-[#7b5cff] border border-teal-300/80 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+        <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.label}
+              onClick={() => setActiveTab(tab.label)}
+              aria-pressed={activeTab === tab.label}
+              className={`flex items-center gap-2 px-2.5 py-2 border-b text-xs font-medium transition-colors ${
+                activeTab === tab.label
+                  ? 'border-teal-500 text-slate-900 font-semibold'
+                  : 'border-transparent text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                  activeTab === tab.label ? 'text-teal-700' : 'text-slate-500'
                 }`}
               >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[10px] px-1 rounded-full ${
-                    activeTab === tab.label ? 'bg-[#7b5cff] text-white' : 'text-gray-400'
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <span className="text-xs font-medium text-gray-500 shrink-0 ml-4">
-            {(artifacts ?? []).length} artifacts
-          </span>
+                {tab.count}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="px-8 py-4 flex items-center justify-between gap-4 shrink-0">
-        {/* Search input */}
+      <div className="px-8 py-3 bg-white border-b border-slate-200 flex items-center justify-between gap-4 shrink-0">
         <div className="relative max-w-sm w-full">
-          <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-400 text-[18px]">
+          <span className="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-[18px]">
             search
           </span>
           <input
             type="text"
-            placeholder="Search artifacts..."
+            placeholder="Search specifications, tickets, or hash seals..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#7b5cff]"
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus-ring"
           />
         </div>
 
-        {/* Visibility Filter Pill Group */}
-        <div className="flex items-center bg-gray-100/90 p-0.5 rounded-lg border border-gray-200/80 text-xs">
+        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
           {(['All', 'Shared', 'Private'] as const).map(vis => (
             <button
               key={vis}
               onClick={() => setVisibilityFilter(vis)}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-3 py-1 rounded-md text-xs transition-all ${
                 visibilityFilter === vis
-                  ? 'bg-white text-gray-900 font-semibold shadow-sm'
-                  : 'text-gray-500 hover:text-gray-800'
+                  ? 'bg-white text-slate-900 font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               {vis}
@@ -141,133 +141,95 @@ export const ArtifactsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid of Artifacts Cards */}
-      <div className="flex-1 overflow-y-auto px-8 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredArtifacts.map(art => (
-            <div
-              key={art.id}
-              onClick={() => setSelectedArtifact(art)}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md hover:border-teal-300 transition-all cursor-pointer flex flex-col justify-between min-h-[170px] group"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="text-[13.5px] font-semibold text-gray-900 group-hover:text-[#7b5cff] transition-colors leading-snug line-clamp-2">
-                    {art.title}
-                  </h3>
-                  <div className="flex items-center gap-1 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        alert(`Sharing: ${art.title}`);
-                      }}
-                      className="p-1 hover:text-gray-700 rounded"
-                      title="Share"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">share</span>
-                    </button>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        alert(`Downloading: ${art.title}`);
-                      }}
-                      className="p-1 hover:text-gray-700 rounded"
-                      title="Download"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">download</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-[11.5px] text-gray-500 flex items-center gap-1.5 mb-1">
-                  <span className="material-symbols-outlined text-[14px] text-gray-400">
-                    chat_bubble_outline
-                  </span>
-                  <span>From: {art.source}</span>
-                </div>
-
-                <div className="text-[11px] text-gray-400">{art.time}</div>
-              </div>
-
-              {/* Badges footer */}
-              <div className="flex items-center justify-between pt-3 mt-2 border-t border-gray-100">
-                <span className="flex items-center gap-1 text-[11px] text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                  <span className="material-symbols-outlined text-[13px] text-gray-500">lock</span>
-                  <span>{art.visibility}</span>
-                </span>
-
-                <span className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase">
-                  <span className="material-symbols-outlined text-[13px]">
-                    {art.type === 'REPORT' ? 'description' : 'analytics'}
-                  </span>
-                  <span>{art.type}</span>
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-8 flex items-center justify-start">
-          <div className="text-xs text-[#7b5cff] font-semibold bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-md">
-            1-{filteredArtifacts.length} of {(artifacts ?? []).length} artifacts
+      {/* Provenance records */}
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="w-full max-w-[1440px] mx-auto">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_150px_100px] gap-4 px-3 pb-3 text-xs text-slate-500 max-md:hidden">
+            <span>Artifact</span><span>Source</span><span>Updated</span><span>Access</span>
           </div>
+          {filteredArtifacts.length === 0 ? (
+            <div className="py-10 border-y border-slate-200 text-sm text-slate-500">No artifacts match these filters.</div>
+          ) : filteredArtifacts.map(art => (
+            <button key={art.id} onClick={() => setSelectedArtifact(art)}
+              className="w-full grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_150px_100px] gap-2 md:gap-4 items-center py-4 px-3 border-t border-slate-200 text-left hover:bg-slate-100 transition-colors">
+              <span className="min-w-0">
+                <span className="flex items-center gap-2">
+                  <strong className="truncate text-sm font-semibold text-slate-900">{art.title}</strong>
+                  <span className="shrink-0 text-[10px] font-medium text-teal-700">{art.type}</span>
+                </span>
+                <span className="block truncate mt-1 text-xs text-slate-500">
+                  {art.contentSnippet || 'No content preview is available for this artifact.'}
+                </span>
+              </span>
+              <span className="truncate text-xs text-slate-600">{art.source}</span>
+              <span className="text-xs font-mono text-slate-500">{art.time}</span>
+              <span className="text-xs font-medium text-slate-800">Inspect →</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Artifact Preview Modal */}
+      {/* Artifact Modal Inspector */}
       {selectedArtifact && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 flex flex-col max-h-[85vh]">
-            <div className="flex items-start justify-between border-b border-gray-100 pb-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[85vh]">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
-                <span className="text-[10px] font-bold text-[#7b5cff] uppercase tracking-wider bg-teal-50 px-2 py-0.5 rounded">
-                  {selectedArtifact.type}
+                <span className="text-xs font-semibold text-teal-700">
+                  {selectedArtifact.type} · SEALED
                 </span>
-                <h2 className="text-lg font-bold text-gray-900 mt-2">
+                <h2 className="text-base font-bold text-slate-900 mt-2">
                   {selectedArtifact.title}
                 </h2>
-                <div className="text-xs text-gray-500 mt-1">
-                  Source: {selectedArtifact.source} • {selectedArtifact.time}
+                <div className="text-xs text-slate-500 mt-0.5 font-mono">
+                  Origin: {selectedArtifact.source} · Time: {selectedArtifact.time}
                 </div>
               </div>
               <button
                 onClick={() => setSelectedArtifact(null)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4 text-sm text-gray-700 leading-relaxed font-serif">
-              <p className="mb-4 text-gray-600 italic">
-                "{selectedArtifact.contentSnippet}"
-              </p>
+            <div className="flex-1 overflow-y-auto py-4 text-xs text-slate-700 leading-relaxed space-y-4">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 font-mono">
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Specification Content
+                </div>
+                <div className="whitespace-pre-wrap text-slate-800">
+                  {selectedArtifact.contentSnippet}
+                </div>
+              </div>
 
-              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200/80 font-sans text-xs space-y-2">
-                <div className="font-semibold text-gray-800">Verification & Audit Summary:</div>
-                <ul className="list-disc list-inside text-gray-600 space-y-1">
-                  <li>Zero security regressions detected across VPC endpoints.</li>
-                  <li>Multi-factor auth enforced on all administrative roles.</li>
-                  <li>Audit trail logged to ScribeBA Evidence Ledger.</li>
-                </ul>
+              <div className="p-3.5 bg-slate-100 space-y-1.5">
+                <div className="text-xs font-semibold text-slate-800">Integrity status</div>
+                <div className="text-xs text-slate-500 leading-relaxed">
+                  This artifact feed does not include a persisted SHA-256 seal. The interface will show a digest here when the source provides one.
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-2">
-              <span className="text-xs text-gray-400">Visibility: {selectedArtifact.visibility}</span>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-2">
+              <span className="text-xs text-slate-500 font-mono">
+                Visibility: {selectedArtifact.visibility}
+              </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setSelectedArtifact(null)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+                  className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
                   Close
                 </button>
                 <button
-                  onClick={() => alert(`Exporting ${selectedArtifact.title}...`)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#7b5cff] hover:bg-[#007363] rounded-lg shadow-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedArtifact.contentSnippet || selectedArtifact.title);
+                    alert('Copied artifact specification to clipboard!');
+                  }}
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg"
                 >
-                  Export PDF
+                  Copy Specification
                 </button>
               </div>
             </div>

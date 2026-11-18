@@ -14,23 +14,23 @@ export default {
           300: '#5eead2',
           400: '#2dd4bd',
           500: '#14b8a2',
-          600: '#008775', // CloudThinker primary teal
+          600: '#008775',
           700: '#007363',
           800: '#065f46',
           900: '#064e3b',
-          950: '#022c22',
+          950: '#022c22'
         },
         evidence: {
           verified: '#2F6F5E',
           inferred: '#B08628',
           assumed: '#7A5FA0',
-          blocked: '#B4402D',
+          blocked: '#B4402D'
         }
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Public Sans', 'Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
         serif: ['Source Serif 4', 'Georgia', 'serif'],
-        mono: ['IBM Plex Sans', 'JetBrains Mono', 'monospace'],
+        mono: ['JetBrains Mono', 'IBM Plex Mono', 'monospace'],
       }
     },
   },
