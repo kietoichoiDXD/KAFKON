@@ -48,9 +48,10 @@ export const ConflictGraphView: React.FC = () => {
       const nextTasks = result.data?.tasks ?? [];
       setTasks(nextTasks);
       if (nextTasks.length && !nextTasks.some(task => task.id === taskId)) {
-        setTaskId(nextTasks[0].id);
-        setTaskName(nextTasks[0].name);
-        setDescription(nextTasks[0].description || '');
+        const preferredTask = nextTasks.find(task => task.description?.trim()) ?? nextTasks[0];
+        setTaskId(preferredTask.id);
+        setTaskName(preferredTask.name);
+        setDescription(preferredTask.description || '');
       }
     }
     setLoadingTasks(false);
@@ -132,11 +133,11 @@ export const ConflictGraphView: React.FC = () => {
   const relationCount = (relation: ConflictEdge['relation']) => scan?.edges.filter(edge => edge.relation === relation).length ?? 0;
 
   return (
-    <div className="flex-1 h-screen min-w-0 overflow-y-auto bg-slate-50 text-slate-900">
-      <header className="px-6 lg:px-8 py-5 border-b border-slate-200 flex flex-wrap items-start justify-between gap-4">
+    <div className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
+      <header className="shrink-0 px-5 lg:px-7 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="m-0 text-2xl font-semibold tracking-tight text-slate-900">Task ↔ Code</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+          <h1 className="m-0 text-xl font-semibold tracking-tight text-slate-900">Task ↔ Code</h1>
+          <p className="mt-1 max-w-3xl text-xs text-slate-500">
             Trace a ClickUp requirement to repository code. A conflict is flagged only when a code location contradicts the task statement.
           </p>
         </div>
@@ -150,9 +151,9 @@ export const ConflictGraphView: React.FC = () => {
         </button>
       </header>
 
-      <div className="max-w-[1480px] mx-auto p-5 lg:p-8 space-y-5">
-        <section className="border border-slate-200 rounded-lg bg-white p-4 lg:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="mx-auto flex w-full max-w-[1480px] flex-1 min-h-0 flex-col gap-3 overflow-hidden p-3 lg:p-4">
+        <section className="shrink-0 border border-slate-200 rounded-lg bg-white p-3 lg:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <h2 className="m-0 text-sm font-semibold text-slate-900">Choose a task</h2>
             <span className={`px-2 py-1 rounded text-[11px] font-mono uppercase border ${tasks.length ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
               {loadingTasks ? 'Connecting' : tasks.length ? `${tasks.length} ClickUp tasks` : 'Manual task'}
@@ -192,7 +193,7 @@ export const ConflictGraphView: React.FC = () => {
             <label className="text-xs font-medium text-slate-600">
               Task description
               <textarea
-                rows={4}
+              rows={3}
                 value={description}
                 onChange={event => setDescription(event.target.value)}
                 placeholder="Paste task details or acceptance criteria. The comparison uses only this task and the current repository."
@@ -201,7 +202,7 @@ export const ConflictGraphView: React.FC = () => {
             </label>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
               onClick={() => void runScan()}
               disabled={loadingScan || loadingTasks || !taskName.trim() || !description.trim()}
@@ -212,20 +213,20 @@ export const ConflictGraphView: React.FC = () => {
             {selectedTask?.url && <a href={selectedTask.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-teal-700 hover:text-teal-800">Open in ClickUp ↗</a>}
             {!taskError && !loadingTasks && !tasks.length && <span className="text-xs text-slate-500">No sample task is inserted automatically.</span>}
           </div>
-          {scanError && <p role="alert" className="mt-3 mb-0 text-sm text-rose-700">{scanError}</p>}
+          {scanError && <p role="alert" className="mt-2 mb-0 text-sm text-rose-700">{scanError}</p>}
         </section>
 
-        {scan && (
-          <>
-            <section aria-label="Conflict summary" className="grid grid-cols-2 lg:grid-cols-4 border-y border-slate-200 bg-white">
+        {scan ? (
+          <section className="flex flex-1 min-h-0 flex-col gap-2 overflow-hidden" aria-label="Task and code comparison results">
+            <div aria-label="Conflict summary" className="grid shrink-0 grid-cols-2 lg:grid-cols-4 border border-slate-200 rounded-lg bg-white">
               <div className="px-4 py-3 border-r border-slate-200"><div className="text-xs text-slate-500">Potential conflicts</div><strong className="block mt-1 text-lg text-rose-700">{scan.summary.conflicts}</strong></div>
               <div className="px-4 py-3 border-r border-slate-200"><div className="text-xs text-slate-500">Related code</div><strong className="block mt-1 text-lg text-teal-700">{scan.summary.related}</strong></div>
               <div className="px-4 py-3 border-r border-slate-200"><div className="text-xs text-slate-500">Unverified statements</div><strong className="block mt-1 text-lg text-slate-600">{scan.summary.unverified}</strong></div>
               <div className="px-4 py-3"><div className="text-xs text-slate-500">Files scanned</div><strong className="block mt-1 text-lg text-slate-900">{scan.summary.files_scanned}</strong></div>
-            </section>
+            </div>
 
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_20rem] gap-4 items-start">
-              <section className="min-w-0 border border-slate-200 rounded-lg bg-white overflow-hidden">
+            <div className="grid flex-1 min-h-0 grid-cols-1 grid-rows-[minmax(180px,1fr)_minmax(110px,auto)] gap-3 overflow-hidden lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-1 items-stretch">
+              <section className="flex min-w-0 min-h-0 flex-col overflow-hidden border border-slate-200 rounded-lg bg-white lg:min-h-[260px]">
                 <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-200">
                   <div>
                     <h2 className="m-0 text-sm font-semibold text-slate-900">Conflict graph</h2>
@@ -236,7 +237,7 @@ export const ConflictGraphView: React.FC = () => {
                   </div>
                 </div>
                 {scan.nodes.length ? (
-                  <div className="overflow-x-auto">
+                  <div className="min-h-0 flex-1 overflow-auto max-h-[38vh] lg:max-h-none">
                     <svg
                       viewBox={`0 0 940 ${graphHeight}`}
                       className="block w-full min-w-[780px]"
@@ -305,7 +306,7 @@ export const ConflictGraphView: React.FC = () => {
                 )}
               </section>
 
-              <aside className="border border-slate-200 rounded-lg bg-white p-4 min-w-0" aria-live="polite">
+              <aside className="min-h-0 overflow-y-auto border border-slate-200 rounded-lg bg-white p-3 min-w-0" aria-live="polite">
                 <h2 className="m-0 text-sm font-semibold text-slate-900">Evidence detail</h2>
                 {selectedEdge ? (
                   <div className="mt-4 space-y-3">
@@ -326,17 +327,21 @@ export const ConflictGraphView: React.FC = () => {
               </aside>
             </div>
 
-            <section aria-labelledby="connections-heading">
-              <div className="flex items-baseline justify-between gap-3 mb-2"><h2 id="connections-heading" className="m-0 text-sm font-semibold text-slate-900">Connections</h2><span className="text-xs text-slate-500">Accessible text summary</span></div>
-              {scan.edges.length ? <div className="divide-y divide-slate-200 border-y border-slate-200">
+            <details className="shrink-0 rounded-lg border border-slate-200 bg-white">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold text-slate-800 focus-ring">
+                Connections ({scan.edges.length}) <span className="ml-1 font-normal text-slate-500">Text view for keyboard and screen reader users</span>
+              </summary>
+              {scan.edges.length ? <div className="max-h-40 divide-y divide-slate-200 overflow-y-auto border-t border-slate-200 px-3">
                 {scan.edges.map((edge, index) => <button key={`${edge.from}-${edge.to}-${index}`} onClick={() => { setSelectedEdge(edge); setSelectedNodeId(null); }} className="w-full text-left py-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 hover:bg-slate-100/50">
                   <span className={`text-[11px] font-semibold ${edge.relation === 'conflict' ? 'text-rose-700' : edge.relation === 'related' ? 'text-teal-700' : 'text-slate-500'}`}>{RELATION_STYLE[edge.relation].label}</span>
                   <span className="text-xs font-medium text-slate-800">{nodeById.get(edge.from)?.label ?? edge.from} → {nodeById.get(edge.to)?.label ?? edge.to}</span>
                   <span className="basis-full pl-0 text-xs text-slate-500">{edge.reason}</span>
                 </button>)}
-              </div> : <p className="text-sm text-slate-400">No code links were found for the statements in this task.</p>}
-            </section>
-          </>
+              </div> : <p className="m-0 border-t border-slate-200 px-3 py-2 text-xs text-slate-500">No code links were found for the statements in this task.</p>}
+            </details>
+          </section>
+        ) : (
+          <div className="flex-1 min-h-0" aria-live="polite" />
         )}
       </div>
     </div>

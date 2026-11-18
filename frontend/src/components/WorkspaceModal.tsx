@@ -137,6 +137,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [byokOpenRouterModel, setByokOpenRouterModel] = useState('anthropic/claude-sonnet-5');
   const [byokAnthropicKey, setByokAnthropicKey] = useState('');
   const [byokOpenAIKey, setByokOpenAIKey] = useState('');
+  const [byokNebiusKey, setByokNebiusKey] = useState('');
+  const [byokNebiusBaseUrl, setByokNebiusBaseUrl] = useState('https://api.studio.nebius.ai/v1/');
+  const [byokNebiusModel, setByokNebiusModel] = useState('Qwen/Qwen3-30B-A3B-Instruct-2507');
   const [byokAwsKeyId, setByokAwsKeyId] = useState('');
   const [byokAwsSecretKey, setByokAwsSecretKey] = useState('');
   const [byokAwsRegion, setByokAwsRegion] = useState('ap-southeast-1');
@@ -187,6 +190,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       if (data.openrouter_model) setByokOpenRouterModel(data.openrouter_model);
       if (data.anthropic_api_key) setByokAnthropicKey(data.anthropic_api_key);
       if (data.openai_api_key) setByokOpenAIKey(data.openai_api_key);
+      setByokNebiusKey(data.nebius_api_key || '');
+      if (data.nebius_base_url) setByokNebiusBaseUrl(data.nebius_base_url);
+      if (data.nebius_model) setByokNebiusModel(data.nebius_model);
       if (data.aws_access_key_id) setByokAwsKeyId(data.aws_access_key_id);
       if (data.aws_region) setByokAwsRegion(data.aws_region);
     });
@@ -357,12 +363,21 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
       openrouter_model: byokOpenRouterModel,
       anthropic_api_key: byokAnthropicKey,
       openai_api_key: byokOpenAIKey,
+      nebius_api_key: byokNebiusKey,
+      nebius_base_url: byokNebiusBaseUrl,
+      nebius_model: byokNebiusModel,
       aws_access_key_id: byokAwsKeyId,
       aws_secret_access_key: byokAwsSecretKey || undefined,
       aws_default_region: byokAwsRegion,
     });
     if (res && res.status === 'ok') {
       setByokStatusMessage('✅ Credentials successfully saved and verified!');
+      // Replace the just-saved secret with the API's masked status value.
+      setByokNebiusKey('');
+      const saved = await get<any>('/api/byok');
+      setByokNebiusKey(saved?.nebius_api_key || '');
+      if (saved?.nebius_base_url) setByokNebiusBaseUrl(saved.nebius_base_url);
+      if (saved?.nebius_model) setByokNebiusModel(saved.nebius_model);
       setTimeout(() => setByokStatusMessage(null), 4000);
     } else {
       setByokStatusMessage('❌ Failed to update credentials.');
@@ -370,9 +385,13 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
   };
 
   // Handle Test BYOK Key
-  const handleTestKey = async (provider: string, keyVal: string) => {
+  const handleTestKey = async (
+    provider: string,
+    keyVal: string,
+    config?: { base_url?: string; model?: string }
+  ) => {
     setByokTestStatus(prev => ({ ...prev, [provider]: 'Testing...' }));
-    const res = await post<any>('/api/byok/test', { provider, key: keyVal });
+    const res = await post<any>('/api/byok/test', { provider, key: keyVal, ...config });
     if (res && res.status === 'ok') {
       setByokTestStatus(prev => ({ ...prev, [provider]: `✅ ${res.message}` }));
     } else {
@@ -1768,8 +1787,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     Bring Your Own Key (BYOK)
                   </h3>
                   <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Configure your LLM providers and cloud credentials. Google Gemini is wired as
-                    an automatic fallback whenever OpenRouter runs out of credit (402) or is rate limited (429).
+                    Configure model providers and cloud credentials. Nebius AI Studio can be used as a direct provider alongside Gemini and OpenRouter.
                   </p>
                 </div>
 
@@ -1964,6 +1982,89 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                       className="px-3 py-1 text-xs font-semibold text-purple-800 bg-purple-100 hover:bg-purple-200 rounded-md transition-colors"
                     >
                       Test OpenRouter Key
+                    </button>
+                  </div>
+                </div>
+
+                {/* NEBIUS AI STUDIO */}
+                <div className="p-5 border border-teal-200 rounded-xl bg-teal-50/20 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        N
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">Nebius AI Studio</div>
+                        <div className="text-[11px] text-gray-500">
+                          OpenAI-compatible inference API
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded border border-teal-300">
+                      Nebius
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                    <div className="md:col-span-3">
+                      <label htmlFor="nebius-api-key" className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        API Key
+                      </label>
+                      <input
+                        id="nebius-api-key"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={byokNebiusKey ? 'Saved key (masked) — enter a new key to replace' : 'Enter Nebius API key'}
+                        value={byokNebiusKey}
+                        onChange={e => setByokNebiusKey(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-teal-500 bg-white"
+                      />
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        Saved keys are returned masked. The full key is not shown after saving.
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label htmlFor="nebius-base-url" className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        HTTPS Base URL
+                      </label>
+                      <input
+                        id="nebius-base-url"
+                        type="url"
+                        value={byokNebiusBaseUrl}
+                        onChange={e => setByokNebiusBaseUrl(e.target.value)}
+                        placeholder="https://api.studio.nebius.ai/v1/"
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-teal-500 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="nebius-model" className="text-[11px] font-semibold text-gray-700 block mb-1">
+                        Model ID
+                      </label>
+                      <input
+                        id="nebius-model"
+                        type="text"
+                        value={byokNebiusModel}
+                        onChange={e => setByokNebiusModel(e.target.value)}
+                        placeholder="Qwen/Qwen3-30B-A3B-Instruct-2507"
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-mono focus:outline-none focus:border-teal-500 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <span role="status" aria-live="polite" className="text-[11px] text-gray-500">
+                      {byokTestStatus['nebius'] || 'Test checks API access and whether the model appears in the model list.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTestKey('nebius', byokNebiusKey, {
+                        base_url: byokNebiusBaseUrl,
+                        model: byokNebiusModel,
+                      })}
+                      disabled={byokTestStatus['nebius'] === 'Testing...'}
+                      className="px-3 py-1 text-xs font-semibold text-teal-800 bg-teal-100 hover:bg-teal-200 disabled:opacity-50 rounded-md transition-colors"
+                    >
+                      {byokTestStatus['nebius'] === 'Testing...' ? 'Testing…' : 'Test connection'}
                     </button>
                   </div>
                 </div>

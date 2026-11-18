@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { ViewType, WorkspaceTab } from './types';
 import { Sidebar } from './components/Sidebar';
-import { HomeView } from './components/HomeView';
-import { RoomsView } from './components/RoomsView';
-import { LiveRunView } from './components/LiveRunView';
-import { OpsView } from './components/OpsView';
-import { ArtifactsView } from './components/ArtifactsView';
-import { AutomationsView } from './components/AutomationsView';
-import { ReviewView } from './components/ReviewView';
-import { ConflictGraphView } from './components/ConflictGraphView';
 import { WorkspaceModal } from './components/WorkspaceModal';
+
+const HomeView = lazy(() => import('./components/HomeView').then((module) => ({ default: module.HomeView })));
+const RoomsView = lazy(() => import('./components/RoomsView').then((module) => ({ default: module.RoomsView })));
+const LiveRunView = lazy(() => import('./components/LiveRunView').then((module) => ({ default: module.LiveRunView })));
+const OpsView = lazy(() => import('./components/OpsView').then((module) => ({ default: module.OpsView })));
+const ArtifactsView = lazy(() => import('./components/ArtifactsView').then((module) => ({ default: module.ArtifactsView })));
+const AutomationsView = lazy(() => import('./components/AutomationsView').then((module) => ({ default: module.AutomationsView })));
+const ReviewView = lazy(() => import('./components/ReviewView').then((module) => ({ default: module.ReviewView })));
+const ConflictGraphView = lazy(() => import('./components/ConflictGraphView').then((module) => ({ default: module.ConflictGraphView })));
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewType>('review');
@@ -26,6 +28,7 @@ export function App() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="app-shell flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
       {/* Main Command Sidebar */}
       <Sidebar
@@ -39,6 +42,16 @@ export function App() {
 
       {/* Primary Workspace Viewport */}
       <main className="app-main flex-1 flex overflow-hidden relative bg-slate-50">
+        <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={currentView}
+          className="flex-1 min-w-0 h-full min-h-0 overflow-hidden"
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -2 }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        >
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500" role="status">Loading workspace…</div>}>
         {currentView === 'home' && (
           <HomeView
             onSelectPrompt={handleSelectPrompt}
@@ -62,6 +75,9 @@ export function App() {
         {currentView === 'review' && <ReviewView />}
 
         {currentView === 'conflicts' && <ConflictGraphView />}
+        </Suspense>
+        </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* System Design & Workspace Modal */}
@@ -71,6 +87,7 @@ export function App() {
         initialTab={modalInitialTab}
       />
     </div>
+    </MotionConfig>
   );
 }
 

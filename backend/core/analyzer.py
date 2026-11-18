@@ -44,7 +44,13 @@ class ScribeBAAnalyzer:
             return result
 
         # Step 2: Analyze (Multi-tier model fallback or local simulation)
-        has_keys = bool(settings.openrouter_api_key or settings.openai_api_key or settings.anthropic_api_key)
+        # Nebius is a supported fallback provider even when no primary key is configured.
+        has_keys = bool(
+            settings.openrouter_api_key
+            or settings.openai_api_key
+            or settings.anthropic_api_key
+            or settings.nebius_api_key
+        )
         use_live = force_live or (settings.scribeba_mode == "live" and has_keys)
         if use_live:
             try:
