@@ -8,6 +8,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [hostedAuth, setHostedAuth] = useState({ enabled: false, google: false });
+  const [showInvite, setShowInvite] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -17,6 +19,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         return response.json();
       })
       .then((result) => {
+        if (active) setHostedAuth({ enabled: Boolean(result.cognito_enabled), google: Boolean(result.google_enabled) });
         if (active) setState(result.auth_required && !result.authenticated ? 'locked' : 'open');
       })
       .catch(() => {
@@ -48,6 +51,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   };
 
+  const startHostedAuth = (intent: 'login' | 'signup' | 'google') => {
+    const api = getApiUrl();
+    window.location.assign(`${api}/api/auth/cognito/start?intent=${intent}`);
+  };
+
   if (state === 'loading') {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500" role="status">Checking access…</div>;
   }
@@ -58,21 +66,40 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <form onSubmit={signIn} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-7 shadow-xl shadow-slate-900/5">
         <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-lg font-semibold text-teal-700">S</div>
         <h1 className="text-xl font-semibold tracking-tight">ScribeBA Studio</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-500">Enter your invite password to open this workspace.</p>
-        <label htmlFor="invite-password" className="mt-6 block text-sm font-medium text-slate-700">Invite password</label>
-        <input
-          autoComplete="current-password"
-          id="invite-password"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-          className="mt-2 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10"
-        />
-        {error && <p className="mt-3 text-sm text-rose-600" role="alert">{error}</p>}
-        <button disabled={submitting} className="mt-5 h-11 w-full rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60">
-          {submitting ? 'Signing in…' : 'Continue'}
-        </button>
+        {hostedAuth.enabled ? (
+          <div className="mt-6 space-y-3">
+            <button type="button" onClick={() => startHostedAuth('signup')} className="h-11 w-full rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800">
+              Create account
+            </button>
+            <button type="button" onClick={() => startHostedAuth('login')} className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
+              Sign in with email
+            </button>
+            {hostedAuth.google && (
+              <button type="button" onClick={() => startHostedAuth('google')} className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
+                Continue with Google
+              </button>
+            )}
+            <p className="text-xs leading-5 text-slate-500">New accounts receive an email verification code before access is granted.</p>
+          </div>
+        ) : (
+          <>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Enter your invite password to open this workspace.</p>
+            <label htmlFor="invite-password" className="mt-6 block text-sm font-medium text-slate-700">Invite password</label>
+            <input
+              autoComplete="current-password"
+              id="invite-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              className="mt-2 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10"
+            />
+            {error && <p className="mt-3 text-sm text-rose-600" role="alert">{error}</p>}
+            <button disabled={submitting} className="mt-5 h-11 w-full rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60">
+              {submitting ? 'Signing in…' : 'Continue'}
+            </button>
+          </>
+        )}
       </form>
     </main>
   );

@@ -7,6 +7,7 @@ python-dotenv>=1.0.1
 
 # Web Studio API
 flask>=3.0.0
+PyJWT[crypto]>=2.10.1
 
 # CLI & Terminal Formatting
 click>=8.1.7

@@ -11,8 +11,13 @@ type Health = {
   analysis: string;
   tier: string;
   slack: boolean;
+  discord?: boolean;
+  telegram?: boolean;
   clickup: boolean;
   exa: boolean;
+  openrouter?: boolean;
+  openai?: boolean;
+  nebius?: boolean;
 };
 
 type Channel = { id: string; name: string };
@@ -260,6 +265,15 @@ export function LiveRunView() {
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5 font-medium">
                 <Dot on={health.slack} /> Slack Bolt
+              </span>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Dot on={health.discord ?? false} /> Discord
+              </span>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Dot on={health.telegram ?? false} /> Telegram
+              </span>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Dot on={Boolean(health.openrouter || health.openai || health.nebius)} /> AI providers
               </span>
               <span className="flex items-center gap-1.5 font-medium">
                 <Dot on={health.clickup} /> ClickUp Sync
