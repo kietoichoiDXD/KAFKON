@@ -1,5 +1,7 @@
 """Bounded regression checks for the public API security boundary."""
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from backend import api
@@ -53,6 +55,79 @@ class TestPublicApiSecurity(unittest.TestCase):
     def test_untrusted_origin_is_rejected(self):
         response = self.client.get("/api/byok", headers={"Origin": "https://attacker.example"})
         self.assertEqual(response.status_code, 403)
+
+    def test_cors_preflight_allows_room_delete(self):
+        response = self.client.options(
+            "/api/rooms/room-test",
+            headers={
+                "Origin": "https://studio.example.test",
+                "Access-Control-Request-Method": "DELETE",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("DELETE", response.headers["Access-Control-Allow-Methods"])
+
+    def test_room_write_strips_case_and_separator_variants_of_secrets(self):
+        payload = {
+            "id": "room-secret-test",
+            "name": "Credential scrub test",
+            "social_links": [{
+                "platform": "Slack",
+                "channel": "#test",
+                "apiKey": "synthetic-api-key-value",
+                "privateKey": "synthetic-private-key-value",
+                "secret_key": "synthetic-secret-value",
+                "accessToken": "synthetic-access-token-value",
+                "token": "synthetic-token-value",
+                "webhook": "synthetic-webhook-value",
+                "chat_id": "synthetic-chat-id-value",
+            }],
+        }
+        with TemporaryDirectory() as temp_dir, patch.object(api, "ROOMS_FILE", Path(temp_dir) / "rooms.json"):
+            self._login()
+            response = self.client.post("/api/rooms", json=payload)
+            self.assertEqual(response.status_code, 200)
+            serialized = response.get_data(as_text=True)
+            persisted = api.ROOMS_FILE.read_text(encoding="utf-8")
+        for value in (
+            "synthetic-api-key-value",
+            "synthetic-private-key-value",
+            "synthetic-secret-value",
+            "synthetic-access-token-value",
+            "synthetic-token-value",
+            "synthetic-webhook-value",
+            "synthetic-chat-id-value",
+        ):
+            self.assertNotIn(value, serialized)
+            self.assertNotIn(value, persisted)
+
+    def test_room_payload_and_chat_message_limits(self):
+        self._login()
+        too_large_room = self.client.post("/api/rooms", json={"name": "x" * (64 * 1024)})
+        self.assertEqual(too_large_room.status_code, 413)
+        too_long_chat = self.client.post(
+            "/api/rooms/missing/chat",
+            json={"text": "x" * (api.MAX_ROOM_CHAT_CHARS + 1)},
+        )
+        self.assertEqual(too_long_chat.status_code, 413)
+
+    def test_room_write_rate_limit_is_separate_and_bounded(self):
+        self._login()
+        with patch.object(api, "_load_rooms", return_value=[]), patch.object(api, "_save_rooms"):
+            statuses = [
+                self.client.post("/api/rooms", json={"id": "room-test", "name": "Test"}).status_code
+                for _ in range(31)
+            ]
+        self.assertEqual(statuses[:30], [200] * 30)
+        self.assertEqual(statuses[30], 429)
+
+    def test_room_chat_history_is_capped(self):
+        self._login()
+        room = {"id": "room-test", "name": "Test", "chat_messages": [{"id": str(i)} for i in range(200)]}
+        with patch.object(api, "_load_rooms", return_value=[room]), patch.object(api, "_save_rooms"):
+            response = self.client.post("/api/rooms/room-test/chat", json={"text": "Hello"})
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(response.get_json()["room"]["chat_messages"]), api.MAX_ROOM_CHAT_MESSAGES)
 
     def test_login_rate_limit_is_bounded(self):
         statuses = [
