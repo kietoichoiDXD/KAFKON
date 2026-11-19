@@ -7,13 +7,15 @@ Flask rather than FastAPI: the FastAPI installed on the build machine is incompa
 Starlette, and a hackathon is not the place to fight a dependency tree.
 """
 import asyncio
+import hmac
 import json
 import time
 import yaml
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 
 from .config import settings
 from .core.analyzer import ScribeBAAnalyzer
@@ -24,6 +26,25 @@ from .platforms.slack_adapter import SlackAdapter
 from .core.conflict_service import scan_task_against_repository
 
 app = Flask(__name__)
+AUTH_ENABLED = settings.scribeba_public_mode
+if AUTH_ENABLED and (
+    not settings.scribeba_app_password
+    or not settings.scribeba_session_secret
+    or not settings.scribeba_allowed_origin
+):
+    raise RuntimeError(
+        "Public mode requires SCRIBEBA_APP_PASSWORD, SCRIBEBA_SESSION_SECRET, and SCRIBEBA_ALLOWED_ORIGIN."
+    )
+if AUTH_ENABLED and len(settings.scribeba_session_secret or "") < 32:
+    raise RuntimeError("SCRIBEBA_SESSION_SECRET must contain at least 32 characters in public mode.")
+
+app.secret_key = settings.scribeba_session_secret or "local-development-only-session-key"
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=AUTH_ENABLED,
+    SESSION_COOKIE_SAMESITE=settings.scribeba_cookie_samesite,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+)
 skill_manager = SkillManager()
 analyzer = ScribeBAAnalyzer(skill_manager)
 
@@ -44,10 +65,69 @@ def _record_run(entry: dict) -> None:
 
 @app.after_request
 def allow_cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    origin = request.headers.get("Origin")
+    allowed_origin = (settings.scribeba_allowed_origin or "").rstrip("/")
+    if origin and allowed_origin and origin.rstrip("/") == allowed_origin:
+        response.headers["Access-Control-Allow-Origin"] = allowed_origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers.add("Vary", "Origin")
     return response
+
+
+PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/auth/session",
+    "/api/auth/login",
+    "/api/auth/logout",
+}
+
+
+@app.before_request
+def require_public_session():
+    if not AUTH_ENABLED or not request.path.startswith("/api/"):
+        return None
+    origin_header = request.headers.get("Origin")
+    origin = origin_header.rstrip("/") if origin_header else ""
+    allowed_origin = (settings.scribeba_allowed_origin or "").rstrip("/")
+    if origin and allowed_origin and origin != allowed_origin:
+        return jsonify({"error": "Origin is not allowed."}), 403
+    if request.path in PUBLIC_API_PATHS:
+        return None
+    # Browsers omit cookies from CORS preflights. Only accept preflights from the
+    # explicitly configured frontend origin; the actual request still needs auth.
+    if request.method == "OPTIONS" and origin and allowed_origin and origin == allowed_origin:
+        return None
+    if not session.get("authenticated"):
+        return jsonify({"error": "Authentication required."}), 401
+    return None
+
+
+@app.get("/api/auth/session")
+def auth_session():
+    return jsonify({"auth_required": AUTH_ENABLED, "authenticated": not AUTH_ENABLED or bool(session.get("authenticated"))})
+
+
+@app.post("/api/auth/login")
+def auth_login():
+    if not AUTH_ENABLED:
+        return jsonify({"authenticated": True, "auth_required": False})
+    payload = request.get_json(silent=True) or {}
+    supplied = payload.get("password")
+    expected = settings.scribeba_app_password or ""
+    if not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
+        return jsonify({"error": "Invalid invite password."}), 401
+    session.clear()
+    session.permanent = True
+    session["authenticated"] = True
+    return jsonify({"authenticated": True, "auth_required": True})
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    session.clear()
+    return jsonify({"authenticated": not AUTH_ENABLED, "auth_required": AUTH_ENABLED})
 
 
 def _serialize(result) -> dict:
@@ -714,7 +794,8 @@ DEFAULT_ROOMS_DATA = [
             {"id": "m1", "sender": "@oliver_sec", "platform": "Slack", "time": "10:15", "text": "Team, Acme Corp needs Google Workspace SSO with domain restriction."},
             {"id": "m2", "sender": "@tony_db", "platform": "Discord", "time": "10:18", "text": "I'm staging the database migration for sso_provider unique index now."},
             {"id": "m3", "sender": "@alex_lead", "platform": "Telegram", "time": "10:22", "text": "What about session expiration? Can we check the production file tree to see where session timeouts are defined?"},
-            {"id": "m4", "sender": "Lead Agile PM (AI)", "platform": "AI Agent", "time": "10:23", "text": "I can visualize the production repository tree to locate our auth session handlers. Type /tree or click 'Visualize Production Tree' below to explore the codebase structure."}
+            {"id": "m4", "sender": "@pm_lead", "platform": "Console", "time": "10:23", "text": "/tree"},
+            {"id": "m5", "sender": "Lead Agile PM (AI)", "platform": "AI Agent", "time": "10:23", "text": "🌲 Live Production Codebase Architecture mapped for squad 'Auth & IAM Federation'. Below is the interactive hierarchy with file sizes, line counts, and microservice directories:", "has_tree": True}
         ]
     },
     {

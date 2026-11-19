@@ -37,10 +37,12 @@ EXPOSE 8000
 
 ENV PORT=8000
 ENV PYTHONUNBUFFERED=1
+# Container deployments are public by default and must supply the two auth secrets.
+ENV SCRIBEBA_PUBLIC_MODE=true
 
 # Container Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/api/health || exit 1
+  CMD curl -f "http://localhost:${PORT:-8000}/api/health" || exit 1
 
 # Launch production server
-CMD ["python", "-m", "backend.cli", "serve", "--port", "8000"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 120 backend.api:app"]
