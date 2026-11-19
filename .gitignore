@@ -59,3 +59,7 @@ ScribeBA-Submission.zip
 .codex/
 .impeccable/
 .taste-skill/
+
+# Local AWS credential exports; never commit provider access keys.
+/Kietran_credentials.csv
+/Kietran_accessKeys.csv

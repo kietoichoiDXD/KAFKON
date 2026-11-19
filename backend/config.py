@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # Runtime mode: 'local' (offline demo) or 'live' (real MCP/APIs)
     scribeba_mode: str = Field(default="local", alias="SCRIBEBA_MODE")
 
+    # Public deployment guard. When enabled, the UI and API require the shared invite password.
+    scribeba_public_mode: bool = Field(default=False, alias="SCRIBEBA_PUBLIC_MODE")
+    scribeba_app_password: Optional[str] = Field(default=None, alias="SCRIBEBA_APP_PASSWORD")
+    scribeba_session_secret: Optional[str] = Field(default=None, alias="SCRIBEBA_SESSION_SECRET")
+    scribeba_allowed_origin: Optional[str] = Field(default=None, alias="SCRIBEBA_ALLOWED_ORIGIN")
+    scribeba_cookie_samesite: str = Field(default="Lax", alias="SCRIBEBA_COOKIE_SAMESITE")
+
     # Anthropic
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_routing_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_ROUTING_MODEL")

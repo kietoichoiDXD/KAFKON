@@ -3,6 +3,7 @@ import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { ViewType, WorkspaceTab } from './types';
 import { Sidebar } from './components/Sidebar';
 import { WorkspaceModal } from './components/WorkspaceModal';
+import { AuthGate } from './components/AuthGate';
 
 const HomeView = lazy(() => import('./components/HomeView').then((module) => ({ default: module.HomeView })));
 const RoomsView = lazy(() => import('./components/RoomsView').then((module) => ({ default: module.RoomsView })));
@@ -14,7 +15,15 @@ const ReviewView = lazy(() => import('./components/ReviewView').then((module) =>
 const ConflictGraphView = lazy(() => import('./components/ConflictGraphView').then((module) => ({ default: module.ConflictGraphView })));
 
 export function App() {
-  const [currentView, setCurrentView] = useState<ViewType>('review');
+  const [currentView, setCurrentView] = useState<ViewType>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view') as ViewType;
+    const validViews: ViewType[] = ['home', 'rooms', 'live', 'ops', 'review', 'artifacts', 'automations', 'conflicts'];
+    if (validViews.includes(viewParam)) return viewParam;
+    const hash = window.location.hash.replace('#', '') as ViewType;
+    if (validViews.includes(hash)) return hash;
+    return 'rooms';
+  });
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<WorkspaceTab>('Agents');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -28,6 +37,7 @@ export function App() {
   };
 
   return (
+    <AuthGate>
     <MotionConfig reducedMotion="user">
     <div className="app-shell flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
       {/* Main Command Sidebar */}
@@ -88,6 +98,7 @@ export function App() {
       />
     </div>
     </MotionConfig>
+    </AuthGate>
   );
 }
 
