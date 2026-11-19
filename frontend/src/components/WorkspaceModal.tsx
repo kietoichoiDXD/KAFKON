@@ -20,7 +20,7 @@ import {
   KNOWLEDGE_BASES,
   INITIAL_CREDENTIALS,
 } from '../data/workspace';
-import { get, post, getApiUrl, setApiUrl, isGitHubPages, safeFetchJson } from '../api';
+import { API, get, post, getApiUrl, setApiUrl, isGitHubPages, safeFetchJson } from '../api';
 import { SkillMarkdownRenderer } from './SkillMarkdownRenderer';
 
 export const CURATED_REPOS_SKILLS = [
@@ -260,8 +260,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
     setSkillActionMessage(`Added custom skill: ${cleanId}`);
     setTimeout(() => setSkillActionMessage(null), 3000);
 
-    fetch('/api/skills', {
+    fetch(`${API}/api/skills`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: cleanId,
@@ -301,8 +302,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
     setSkillActionMessage(`Installed skill from ${curated.repo}: ${curated.name}`);
     setTimeout(() => setSkillActionMessage(null), 3000);
 
-    fetch('/api/skills', {
+    fetch(`${API}/api/skills`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: curated.name,
@@ -1287,13 +1289,8 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     </div>
 
                     <button
-                      onClick={() =>
-                        alert(
-                          currentConn.status === 'demo'
-                            ? 'Disconnecting demo cluster...'
-                            : `Connecting to ${currentConn.name}...`
-                        )
-                      }
+                      disabled
+                      title="Connection management is not available in this workspace"
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                         currentConn.status === 'demo' || currentConn.status === 'connected'
                           ? 'bg-red-600 text-white hover:bg-red-700'
@@ -1305,11 +1302,7 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                           ? 'link_off'
                           : 'add_link'}
                       </span>
-                      <span>
-                        {currentConn.status === 'demo' || currentConn.status === 'connected'
-                          ? 'Disconnect'
-                          : 'Connect'}
-                      </span>
+                      <span>Not connected</span>
                     </button>
                   </div>
 
@@ -1440,8 +1433,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     </span>
                     <span className="text-[11px] text-gray-400 font-mono">1/1</span>
                     <button
-                      onClick={() => alert('Create New Custom Agent')}
-                      className="p-0.5 hover:text-gray-800 text-gray-400"
+                      disabled
+                      title="Custom agent creation is not available"
+                      className="p-0.5 text-gray-300 cursor-not-allowed"
                     >
                       <span className="material-symbols-outlined text-[16px]">add</span>
                     </button>
@@ -1527,8 +1521,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
 
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={() => alert(`Opening test conversation with ${currentAgent.name}...`)}
-                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 shadow-xs"
+                        disabled
+                        title="Agent chat is not connected in this settings view"
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-400 flex items-center gap-1.5 cursor-not-allowed"
                       >
                         <span className="material-symbols-outlined text-[15px]">chat</span>
                         <span>Chat</span>
@@ -1540,8 +1535,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                         <span className="block w-3.5 h-3.5 rounded-full bg-white transition-transform shadow-xs absolute top-0.75 left-5.5" />
                       </button>
                       <button
-                        onClick={() => alert('Cannot delete default Arena investigator.')}
-                        className="text-gray-400 hover:text-red-600 p-1 rounded"
+                        disabled
+                        title="The default agent cannot be deleted"
+                        className="text-gray-300 p-1 rounded cursor-not-allowed"
                       >
                         <span className="material-symbols-outlined text-[17px]">delete</span>
                       </button>
@@ -1585,8 +1581,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                           <div>
                             <div className="text-xs font-semibold text-gray-800">No avatar set</div>
                             <button
-                              onClick={() => alert('Upload avatar icon')}
-                              className="text-[11px] text-gray-400 hover:text-gray-600 hover:underline"
+                              disabled
+                              title="Avatar uploads are not available"
+                              className="text-[11px] text-gray-400 cursor-not-allowed"
                             >
                               Click to change
                             </button>
@@ -1764,12 +1761,11 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     Reset
                   </button>
                   <button
-                    onClick={() => {
-                      alert('Agent settings saved successfully!');
-                    }}
-                    className="px-5 py-2 font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+                    disabled
+                    title="Agent settings are not connected to backend persistence"
+                    className="px-5 py-2 font-semibold text-gray-500 bg-gray-200 rounded-lg cursor-not-allowed"
                   >
-                    Save
+                    Save unavailable
                   </button>
                 </div>
               </div>
@@ -2192,10 +2188,11 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
 
                 <div className="pt-3">
                   <button
-                    onClick={() => alert('General settings updated!')}
-                    className="px-5 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700"
+                    disabled
+                    title="Workspace settings are not connected to a backend route"
+                    className="px-5 py-2 rounded-lg bg-gray-200 text-gray-500 font-semibold cursor-not-allowed"
                   >
-                    Save Changes
+                    Save unavailable
                   </button>
                 </div>
               </div>
@@ -2216,10 +2213,11 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                     </p>
                   </div>
                   <button
-                    onClick={() => alert('Invite member modal')}
-                    className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold hover:bg-teal-700"
+                    disabled
+                    title="Member invitations are not connected"
+                    className="px-3 py-1.5 bg-gray-200 text-gray-500 rounded-lg text-xs font-semibold cursor-not-allowed"
                   >
-                    + Invite Member
+                    Invites unavailable
                   </button>
                 </div>
 
@@ -2285,10 +2283,11 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
 
                 <div className="pt-3">
                   <button
-                    onClick={() => alert('Branding updated!')}
-                    className="px-5 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700"
+                    disabled
+                    title="Branding settings are not connected to a backend route"
+                    className="px-5 py-2 rounded-lg bg-gray-200 text-gray-500 font-semibold cursor-not-allowed"
                   >
-                    Save Branding
+                    Save unavailable
                   </button>
                 </div>
               </div>
@@ -2445,16 +2444,18 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                   </p>
                   <div className="flex items-center justify-end gap-2 pt-2">
                     <button
-                      onClick={() => alert('Proposal rejected.')}
-                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+                      disabled
+                      title="This sample proposal is not connected to a live remediation service"
+                      className="px-3 py-1.5 text-xs text-gray-400 rounded-lg cursor-not-allowed"
                     >
                       Reject
                     </button>
                     <button
-                      onClick={() => alert('Remediation approved and safely applied to cluster!')}
-                      className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs"
+                      disabled
+                      title="This sample proposal cannot be applied; no live cluster is connected"
+                      className="px-4 py-1.5 text-xs font-semibold text-gray-500 bg-gray-200 rounded-lg cursor-not-allowed"
                     >
-                      Approve & Apply
+                      Apply unavailable
                     </button>
                   </div>
                 </div>

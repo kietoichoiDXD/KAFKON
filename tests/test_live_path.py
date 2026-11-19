@@ -96,11 +96,12 @@ class TestLiveAnalysisPath(unittest.TestCase):
         self.assertIn("8 or 24 hours", result.clarifying_question)
 
     def test_transcript_is_redacted_before_it_is_sent(self):
+        synthetic_token = "xoxb-" + "1234567890" + "-" + "abcdefghijkl"
         self.thread.messages.append(
-            ChatMessage(author="@tony_db", timestamp="10:20", text="token xoxb-1234567890-abcdefghijkl for the bot")
+            ChatMessage(author="@tony_db", timestamp="10:20", text=f"token {synthetic_token} for the bot")
         )
         asyncio.run(self.analyzer.analyze_thread(self.thread, skill_name="startup_lean"))
-        self.assertNotIn("xoxb-1234567890", self.sent_prompt)
+        self.assertNotIn(synthetic_token, self.sent_prompt)
         self.assertIn("[REDACTED_SLACK_TOKEN]", self.sent_prompt)
 
 

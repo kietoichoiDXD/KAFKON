@@ -182,6 +182,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     try {
       const resp = await fetch(`${API}/api/chat`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction }),
       });
@@ -219,6 +220,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     try {
       const r = await fetch(`${API}/api/ops/apply`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action_id: actionId, approver: 'operator' }),
       });

@@ -7,15 +7,20 @@ Flask rather than FastAPI: the FastAPI installed on the build machine is incompa
 Starlette, and a hackathon is not the place to fight a dependency tree.
 """
 import asyncio
+import math
 import hmac
 import json
+import re
+import threading
 import time
 import yaml
+from collections import defaultdict, deque
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from flask import Flask, jsonify, request, session
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from .config import settings
 from .core.analyzer import ScribeBAAnalyzer
@@ -26,6 +31,7 @@ from .platforms.slack_adapter import SlackAdapter
 from .core.conflict_service import scan_task_against_repository
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 AUTH_ENABLED = settings.scribeba_public_mode
 if AUTH_ENABLED and (
     not settings.scribeba_app_password
@@ -63,6 +69,14 @@ def _record_run(entry: dict) -> None:
     RUNS_FILE.write_text(json.dumps(runs[:50], indent=2))
 
 
+def _safe_error(exc: Exception, fallback: str) -> str:
+    """Keep implementation details out of public API responses and logs."""
+    if AUTH_ENABLED:
+        app.logger.warning("%s (%s)", fallback, type(exc).__name__)
+        return fallback
+    return str(exc)
+
+
 @app.after_request
 def allow_cors(response):
     origin = request.headers.get("Origin")
@@ -73,6 +87,12 @@ def allow_cors(response):
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
         response.headers.add("Vary", "Origin")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     return response
 
 
@@ -88,11 +108,50 @@ PUBLIC_API_PATHS = {
 def require_public_session():
     if not AUTH_ENABLED or not request.path.startswith("/api/"):
         return None
+    # Do not trust X-Forwarded-For here; Lightsail is the only expected proxy.
+    # Using the transport peer avoids clients spoofing the rate-limit identity.
+    address = request.remote_addr or "unknown"
+    retry_after = _consume_rate_limit("api", address, 240, 60)
+    if retry_after:
+        response = jsonify({"error": "Too many requests. Please retry shortly."})
+        response.status_code = 429
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+
+    expensive_paths = {
+        "/api/analyze",
+        "/api/chat",
+        "/api/conflicts/scan",
+        "/api/slack-run",
+        "/api/slack/seed",
+        "/api/byok/test",
+        "/api/ops/trigger",
+        "/api/ops/notify",
+        "/api/ops/apply",
+    }
+    if request.method == "POST" and (
+        request.path in expensive_paths or re.fullmatch(r"/api/rooms/[^/]+/chat", request.path)
+    ):
+        retry_after = _consume_rate_limit("expensive", address, 12, 60)
+        if retry_after:
+            response = jsonify({"error": "This operation is temporarily rate limited. Please retry shortly."})
+            response.status_code = 429
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+
     origin_header = request.headers.get("Origin")
     origin = origin_header.rstrip("/") if origin_header else ""
     allowed_origin = (settings.scribeba_allowed_origin or "").rstrip("/")
     if origin and allowed_origin and origin != allowed_origin:
         return jsonify({"error": "Origin is not allowed."}), 403
+    if request.path == "/api/auth/login" and request.method == "POST":
+        retry_after = _consume_rate_limit("login", address, 6, 900)
+        if retry_after:
+            response = jsonify({"error": "Too many sign-in attempts. Please retry later."})
+            response.status_code = 429
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+
     if request.path in PUBLIC_API_PATHS:
         return None
     # Browsers omit cookies from CORS preflights. Only accept preflights from the
@@ -114,6 +173,8 @@ def auth_login():
     if not AUTH_ENABLED:
         return jsonify({"authenticated": True, "auth_required": False})
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "A JSON object with a password is required."}), 400
     supplied = payload.get("password")
     expected = settings.scribeba_app_password or ""
     if not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
@@ -146,40 +207,23 @@ def _serialize(result) -> dict:
 @app.get("/api/health")
 def health():
     """What is actually wired up right now. The studio renders this instead of claiming features."""
-    primary_analysis = "openrouter" if settings.openrouter_api_key else (
-        "gemini" if settings.gemini_api_key else (
-            "anthropic" if settings.anthropic_api_key else (
-                "nebius" if settings.nebius_api_key else "local-deterministic"
-            )
-        )
-    )
     return jsonify({
-        "mode": settings.scribeba_mode,
-        "analysis": primary_analysis,
-        "tier": settings.fallback_tier,
+        "status": "ok",
         "openrouter": bool(settings.openrouter_api_key),
-        "openrouter_model": settings.openrouter_model,
         "gemini": bool(settings.gemini_api_key),
-        "gemini_model": settings.gemini_model,
         "anthropic": bool(settings.anthropic_api_key),
         "openai": bool(settings.openai_api_key),
         "nebius": bool(settings.nebius_api_key),
-        "nebius_model": settings.nebius_model,
-        "nebius_base_url": settings.nebius_base_url,
         "slack": SlackAdapter().is_live,
         "clickup": bool(settings.clickup_api_key and settings.clickup_list_id),
         "exa": bool(settings.exa_api_key),
-        "aws": bool(settings.aws_access_key_id and settings.aws_secret_access_key),
-        "aws_region": settings.aws_default_region,
     })
 
 
 def _mask_key(s: Optional[str]) -> str:
     if not s:
         return ""
-    if len(s) <= 8:
-        return "••••••••"
-    return s[:4] + "••••••••" + s[-4:]
+    return "••••••••"
 
 
 @app.get("/api/byok")
@@ -197,20 +241,27 @@ def get_byok():
         "has_openai": bool(settings.openai_api_key),
         "nebius_api_key": _mask_key(settings.nebius_api_key),
         "has_nebius": bool(settings.nebius_api_key),
-        "nebius_base_url": settings.nebius_base_url,
         "nebius_model": settings.nebius_model,
         "aws_access_key_id": _mask_key(settings.aws_access_key_id),
         "has_aws": bool(settings.aws_access_key_id),
-        "aws_region": settings.aws_default_region,
     })
 
 
 @app.post("/api/byok")
 def save_byok():
+    if AUTH_ENABLED:
+        return jsonify({
+            "status": "error",
+            "message": "Public deployments do not write credentials to .env. Configure provider credentials in the deployment secret store.",
+        }), 403
+
     import os
-    body = request.get_json(force=True)
+    from dotenv import set_key
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"status": "error", "message": "A JSON object is required."}), 400
     env_path = Path(__file__).resolve().parent.parent / ".env"
-    env_content = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
 
     key_map = {
         "gemini_api_key": ("GEMINI_API_KEY", "gemini_api_key"),
@@ -246,23 +297,24 @@ def save_byok():
             setattr(settings, attr, val)
             os.environ[env_var] = val
             updated_any = True
-            if f"{env_var}=" in env_content:
-                import re
-                env_content = re.sub(rf"^{env_var}=.*$", f"{env_var}={val}", env_content, flags=re.MULTILINE)
-            else:
-                env_content += f"\n{env_var}={val}\n"
+            set_key(str(env_path), env_var, val, quote_mode="always")
 
-    if updated_any and env_content:
-        env_path.write_text(env_content, encoding="utf-8")
+    if updated_any:
+        try:
+            env_path.chmod(0o600)
+        except OSError:
+            pass
 
     return jsonify({"status": "ok", "message": "BYOK credentials updated successfully"})
 
 
 @app.post("/api/byok/test")
 def test_byok():
-    body = request.get_json(force=True)
-    provider = body.get("provider", "gemini").lower()
-    key = body.get("key", "").strip()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"status": "error", "message": "A JSON object is required."}), 400
+    provider = str(body.get("provider", "gemini")).lower()
+    key = str(body.get("key") or "").strip()
 
     import httpx
     if provider == "gemini":
@@ -277,9 +329,9 @@ def test_byok():
             if r.status_code == 200:
                 models = [m.get("name", "") for m in r.json().get("models", [])][:5]
                 return jsonify({"status": "ok", "message": f"Connected to Google Gemini! Available models: {', '.join(models)}"})
-            return jsonify({"status": "error", "message": f"Gemini error {r.status_code}: {r.text[:200]}"}), 400
-        except Exception as e:
-            return jsonify({"status": "error", "message": f"Connection failed: {e}"}), 400
+            return jsonify({"status": "error", "message": f"Gemini returned HTTP {r.status_code}. Check the key and provider status."}), 400
+        except Exception:
+            return jsonify({"status": "error", "message": "Could not reach Gemini. Check network access and provider status."}), 400
 
     elif provider == "openrouter":
         test_key = key if key and "••••" not in key else settings.openrouter_api_key
@@ -296,17 +348,22 @@ def test_byok():
                 limit = data.get("limit")
                 usage = data.get("usage")
                 return jsonify({"status": "ok", "message": f"OpenRouter Key Valid! Usage: ${usage or 0}, Limit: ${limit or 'none'}"})
-            return jsonify({"status": "error", "message": f"OpenRouter returned {r.status_code}: {r.text[:200]}"}), 400
-        except Exception as e:
-            return jsonify({"status": "error", "message": f"Connection failed: {e}"}), 400
+            return jsonify({"status": "error", "message": f"OpenRouter returned HTTP {r.status_code}. Check the key and provider status."}), 400
+        except Exception:
+            return jsonify({"status": "error", "message": "Could not reach OpenRouter. Check network access and provider status."}), 400
 
     elif provider == "nebius":
         test_key = key if key and "••••" not in key else settings.nebius_api_key
-        base_url = str(body.get("base_url") or settings.nebius_base_url).strip().rstrip("/")
+        configured_base_url = str(settings.nebius_base_url).strip().rstrip("/")
+        base_url = configured_base_url if AUTH_ENABLED else str(body.get("base_url") or configured_base_url).strip().rstrip("/")
         try:
             target = httpx.URL(base_url)
             if target.scheme != "https" or not target.host or target.query or target.fragment:
                 return jsonify({"status": "error", "message": "Nebius base URL must be an HTTPS API base URL without query or fragment."}), 400
+            if AUTH_ENABLED and target.host.lower() != "api.studio.nebius.ai":
+                return jsonify({"status": "error", "message": "Public Nebius checks are restricted to api.studio.nebius.ai."}), 400
+            if not AUTH_ENABLED and target.host.lower() in {"localhost", "127.0.0.1", "::1", "169.254.169.254"}:
+                return jsonify({"status": "error", "message": "Nebius base URL cannot target a local or link-local address."}), 400
         except Exception:
             return jsonify({"status": "error", "message": "Nebius base URL is invalid."}), 400
         if not test_key:
@@ -326,7 +383,7 @@ def test_byok():
         except Exception:
             return jsonify({"status": "error", "message": "Could not reach Nebius. Check network access and the base URL."}), 400
 
-    return jsonify({"status": "ok", "message": f"Provider {provider} format verified."})
+    return jsonify({"status": "error", "message": "Unsupported provider."}), 400
 
 
 
@@ -337,7 +394,7 @@ def ops_environments():
     try:
         return jsonify(ops.environments())
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _safe_error(e, "Could not load the configured environments.")}), 500
 
 
 @app.get("/api/ops/faults")
@@ -347,7 +404,7 @@ def ops_faults():
     try:
         return jsonify(ops.faults(request.args.get("environment")))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _safe_error(e, "Could not load fault scenarios.")}), 500
 
 
 @app.post("/api/ops/trigger")
@@ -358,7 +415,7 @@ def ops_trigger():
     try:
         return jsonify(ops.trigger(body["fault"], body.get("environment")))
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _safe_error(e, "Could not trigger the selected fault.")}), 400
 
 
 @app.get("/api/ops/state")
@@ -367,7 +424,7 @@ def ops_state():
     try:
         return jsonify(ops.cluster_state(request.args.get("environment")))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _safe_error(e, "Could not read the environment state.")}), 500
 
 
 @app.get("/api/ops/diagnose")
@@ -376,7 +433,7 @@ def ops_diagnose():
     try:
         return jsonify(ops.diagnose(request.args.get("environment")))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _safe_error(e, "Could not diagnose the selected environment.")}), 500
 
 
 @app.post("/api/ops/notify")
@@ -390,7 +447,7 @@ def ops_notify():
     try:
         return jsonify(asyncio.run(ops.notify(action, body.get("channel"))))
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _safe_error(e, "Could not send the notification.")}), 400
 
 
 @app.post("/api/ops/apply")
@@ -404,8 +461,8 @@ def ops_apply():
     except Exception as e:
         # A refusal is news too: whoever was asked to approve should see that it did not go through.
         if action is not None:
-            asyncio.run(ops.notify_outcome(action, f"⛔ *Not applied* — {e}"))
-        return jsonify({"error": str(e)}), 400
+            asyncio.run(ops.notify_outcome(action, f"⛔ *Not applied* — {_safe_error(e, 'Action could not be applied.') }"))
+        return jsonify({"error": _safe_error(e, "Action could not be applied.")}), 400
     asyncio.run(ops.notify_outcome(
         action,
         f"✅ *Approved and applied* by *{approver}* at {result['at']}  `{result['action_id']}`\n"
@@ -420,7 +477,7 @@ def ops_verify():
     try:
         return jsonify(ops.verify(request.args.get("environment")))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _safe_error(e, "Could not verify the selected environment.")}), 500
 
 
 @app.get("/api/runs")
@@ -449,9 +506,14 @@ def list_skills():
 @app.post("/api/skills")
 def create_skill():
     """Save a new skill or imported YAML to disk and hot-reload."""
-    body = request.get_json(force=True) or {}
-    name = body.get("name", "").strip().replace(" ", "_").lower()
-    if not name:
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "A JSON object is required."}), 400
+    raw_name = body.get("name", "")
+    if not isinstance(raw_name, str):
+        return jsonify({"error": "Skill name must be text."}), 400
+    name = raw_name.strip().replace(" ", "_").lower()
+    if not re.fullmatch(r"[a-z0-9_-]{1,64}", name) or ".." in name:
         return jsonify({"error": "Missing skill name"}), 400
 
     skill_file = settings.skills_dir / f"{name}.yaml"
@@ -592,7 +654,7 @@ def slack_run():
                 await slack.post_ticket_confirmation(channel, ts, ticket)
                 payload["ticket"] = {"id": ticket.created_task_id, "url": ticket.clickup_url, "title": ticket.title}
             except Exception as e:
-                payload["ticket_error"] = str(e)
+                payload["ticket_error"] = _safe_error(e, "Could not create the ClickUp task.")
 
         _record_run({
             "at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -613,8 +675,8 @@ def slack_run():
     except Exception as e:
         err = str(e)
         if "thread_not_found" in err or "message_not_found" in err:
-            return jsonify({"error": f"Thread '{ts}' not found in channel. Click 'Seed Sample Thread' to generate a live thread."}), 400
-        return jsonify({"error": f"Slack run failed: {err}"}), 400
+            return jsonify({"error": "Thread not found in the selected channel. Refresh the channel and try again."}), 400
+        return jsonify({"error": _safe_error(e, "Slack run failed. Check the selected channel and integration status.")}), 400
 
 
 @app.get("/api/clickup/tasks")
@@ -624,7 +686,7 @@ def clickup_tasks():
         tasks = asyncio.run(ClickUpClient().list_tasks())
         return jsonify({"tasks": tasks})
     except ValueError as e:
-        return jsonify({"error": str(e), "action": "Configure CLICKUP_API_KEY and CLICKUP_LIST_ID, or submit a task directly to /api/conflicts/scan."}), 503
+        return jsonify({"error": _safe_error(e, "ClickUp is not configured or unavailable."), "action": "Configure ClickUp credentials and list access, or submit a task directly to /api/conflicts/scan."}), 503
     except Exception:
         return jsonify({"error": "Could not load ClickUp tasks. Check ClickUp credentials, list access, and API availability.", "action": "Verify CLICKUP_API_KEY and CLICKUP_LIST_ID and retry."}), 502
 
@@ -646,9 +708,9 @@ def scan_conflicts():
         result = scan_task_against_repository(task, Path(__file__).resolve().parents[1])
         return jsonify(result)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _safe_error(e, "The task could not be scanned.")}), 400
     except Exception:
-        app.logger.exception("Conflict scan failed")
+        app.logger.warning("Conflict scan failed (%s)", "unexpected error")
         return jsonify({"error": "Repository conflict scan failed. Check repository access and retry."}), 500
 
 
@@ -695,7 +757,7 @@ def slack_seed():
             "message": f"Successfully seeded conversation with {len(messages)} messages!"
         })
     except Exception as e:
-        return jsonify({"error": f"Failed to seed Slack thread: {e}"}), 400
+        return jsonify({"error": _safe_error(e, "Could not seed the Slack thread. Check the selected channel and integration status.")}), 400
 
 
 @app.get("/api/slack/threads")
@@ -727,6 +789,32 @@ def slack_threads():
 
 ROOMS_FILE = Path(__file__).resolve().parent.parent / ".rooms.json"
 
+_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+_rate_lock = threading.Lock()
+
+
+def _consume_rate_limit(scope: str, address: str, limit: int, window_seconds: int) -> Optional[int]:
+    """Return retry seconds if the in-process public API limit has been exceeded."""
+    now = time.monotonic()
+    key = f"{scope}:{address}"
+    with _rate_lock:
+        bucket = _rate_buckets[key]
+        cutoff = now - window_seconds
+        while bucket and bucket[0] <= cutoff:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            return max(1, math.ceil(window_seconds - (now - bucket[0])))
+        bucket.append(now)
+
+        # Bound memory if requests arrive from many distinct addresses.
+        if len(_rate_buckets) > 10_000:
+            for bucket_key, times in list(_rate_buckets.items()):
+                while times and times[0] <= now - 900:
+                    times.popleft()
+                if not times:
+                    _rate_buckets.pop(bucket_key, None)
+    return None
+
 DEFAULT_ROOMS_DATA = [
     {
         "id": "room-auth-iam",
@@ -734,9 +822,9 @@ DEFAULT_ROOMS_DATA = [
         "topic": "Google Workspace SSO, RBAC roles, and session security compliance",
         "description": "Enterprise squad managing SSO login, OAuth2 federation, and token security.",
         "social_links": [
-            {"platform": "Slack", "channel": "#proj-auth-federation", "enabled": True, "webhook_url": "https://hooks.slack.com/services/T00/B00/X00", "status": "Connected"},
-            {"platform": "Discord", "channel": "#iam-dev-squad", "enabled": True, "webhook_url": "https://discord.com/api/webhooks/123/abc", "status": "Connected"},
-            {"platform": "Telegram", "channel": "@ops_auth_guard_bot", "enabled": True, "chat_id": "-100234987123", "status": "Connected"}
+            {"platform": "Slack", "channel": "#proj-auth-federation", "enabled": False, "status": "Disconnected"},
+            {"platform": "Discord", "channel": "#iam-dev-squad", "enabled": False, "status": "Disconnected"},
+            {"platform": "Telegram", "channel": "Not configured", "enabled": False, "status": "Disconnected"}
         ],
         "agent_config": {
             "agent_id": "agile-pm",
@@ -804,8 +892,8 @@ DEFAULT_ROOMS_DATA = [
         "topic": "Kubernetes production pod crash loops, Prometheus alerts, and runbook diffs",
         "description": "Rapid triage and remediation bridge for production cluster incidents.",
         "social_links": [
-            {"platform": "Slack", "channel": "#incident-bridge-aiops", "enabled": True, "webhook_url": "https://hooks.slack.com/services/T01/B01/X01", "status": "Connected"},
-            {"platform": "Telegram", "channel": "@k8s_ops_oncall_bot", "enabled": True, "chat_id": "-100987654321", "status": "Connected"}
+            {"platform": "Slack", "channel": "#incident-bridge-aiops", "enabled": False, "status": "Disconnected"},
+            {"platform": "Telegram", "channel": "Not configured", "enabled": False, "status": "Disconnected"}
         ],
         "agent_config": {
             "agent_id": "sre-ops",
@@ -850,14 +938,38 @@ DEFAULT_ROOMS_DATA = [
 def _load_rooms() -> list:
     if ROOMS_FILE.exists():
         try:
-            return json.loads(ROOMS_FILE.read_text(encoding="utf-8"))
+            return _scrub_room_secrets(json.loads(ROOMS_FILE.read_text(encoding="utf-8")))
         except Exception:
             pass
-    return DEFAULT_ROOMS_DATA
+    return _scrub_room_secrets(DEFAULT_ROOMS_DATA)
+
+
+_ROOM_SECRET_KEYS = {
+    "webhook_url", "bot_token", "api_key", "client_secret", "access_token",
+    "refresh_token", "authorization", "password", "secret", "chat_id",
+}
+
+
+def _scrub_room_secrets(value):
+    """Remove connector credentials and private chat identifiers from room data."""
+    if isinstance(value, dict):
+        return {
+            key: _scrub_room_secrets(item)
+            for key, item in value.items()
+            if key.lower() not in _ROOM_SECRET_KEYS
+        }
+    if isinstance(value, list):
+        return [_scrub_room_secrets(item) for item in value]
+    return value
 
 
 def _save_rooms(rooms: list) -> None:
-    ROOMS_FILE.write_text(json.dumps(rooms, indent=2, ensure_ascii=False), encoding="utf-8")
+    safe_rooms = _scrub_room_secrets(rooms)
+    ROOMS_FILE.write_text(json.dumps(safe_rooms, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        ROOMS_FILE.chmod(0o600)
+    except OSError:
+        pass
 
 
 @app.get("/api/rooms")
@@ -869,7 +981,10 @@ def get_rooms():
 @app.post("/api/rooms")
 def save_room():
     """Create or update a PM room."""
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A JSON object is required."}), 400
+    data = _scrub_room_secrets(data)
     room_id = data.get("id") or f"room-{int(time.time())}"
     data["id"] = room_id
 
@@ -881,7 +996,7 @@ def save_room():
         rooms.append(data)
 
     _save_rooms(rooms)
-    return jsonify({"status": "ok", "room": data})
+    return jsonify({"status": "ok", "room": _scrub_room_secrets(data)})
 
 
 @app.delete("/api/rooms/<room_id>")
@@ -1048,19 +1163,25 @@ def index():
 
 @app.errorhandler(500)
 def handle_500(e):
-    return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    app.logger.error("Unhandled API exception (%s)", type(e).__name__)
+    return jsonify({"error": "Internal server error."}), 500
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(_e):
+    return jsonify({"error": "Request body exceeds the 2 MB limit."}), 413
 
 
 @app.errorhandler(404)
 def handle_404(e):
     if request.path.startswith("/api"):
-        return jsonify({"error": f"Endpoint not found: {request.path}"}), 404
+        return jsonify({"error": "API endpoint not found."}), 404
     if FRONTEND_DIST.exists():
         from flask import send_from_directory
         file_path = FRONTEND_DIST / request.path.lstrip("/")
         if file_path.exists() and not file_path.is_dir():
             return send_from_directory(str(FRONTEND_DIST), request.path.lstrip("/"))
         return send_from_directory(str(FRONTEND_DIST), "index.html")
-    return jsonify({"error": f"Endpoint not found: {str(e)}"}), 404
+    return jsonify({"error": "Page not found."}), 404
 
 
