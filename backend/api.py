@@ -968,7 +968,7 @@ def _load_rooms() -> list:
 
 _ROOM_SECRET_KEY_PARTS = (
     "apikey", "secret", "password", "token", "authorization", "webhook",
-    "credential", "chatid",
+    "credential", "chatid", "cookie",
 )
 
 

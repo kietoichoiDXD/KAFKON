@@ -81,6 +81,7 @@ class TestPublicApiSecurity(unittest.TestCase):
                 "token": "synthetic-token-value",
                 "webhook": "synthetic-webhook-value",
                 "chat_id": "synthetic-chat-id-value",
+                "sessionCookie": "synthetic-session-cookie-value",
             }],
         }
         with TemporaryDirectory() as temp_dir, patch.object(api, "ROOMS_FILE", Path(temp_dir) / "rooms.json"):
@@ -97,6 +98,7 @@ class TestPublicApiSecurity(unittest.TestCase):
             "synthetic-token-value",
             "synthetic-webhook-value",
             "synthetic-chat-id-value",
+            "synthetic-session-cookie-value",
         ):
             self.assertNotIn(value, serialized)
             self.assertNotIn(value, persisted)
