@@ -54,7 +54,7 @@ export const ReviewView: React.FC = () => {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/api/runs`)
+    fetch(`${API}/api/runs`, { credentials: 'include' })
       .then(r => r.json())
       .then((runs: any[]) => {
         if (!Array.isArray(runs) || runs.length === 0) return;

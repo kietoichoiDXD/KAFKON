@@ -116,7 +116,10 @@ export interface SafeFetchResult<T> {
 /** Robust fetch that validates Content-Type and prevents SyntaxError on HTML (e.g. GitHub Pages 404). */
 export async function safeFetchJson<T>(url: string, init?: RequestInit): Promise<SafeFetchResult<T>> {
   try {
-    const r = await fetch(url, init);
+    // The public deployment can host the UI and API on different origins. Keep
+    // the session cookie on API requests so the auth gate and API agree about
+    // the signed-in user. Callers may still explicitly override this.
+    const r = await fetch(url, { credentials: 'include', ...init });
     const ct = r.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       return {

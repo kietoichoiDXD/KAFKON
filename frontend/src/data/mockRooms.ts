@@ -217,9 +217,9 @@ export const INITIAL_ROOMS: RoomItem[] = [
     topic: 'Google Workspace SSO, RBAC roles, and session security compliance',
     description: 'Enterprise squad managing SSO login, OAuth2 federation, and token security.',
     social_links: [
-      { platform: 'Slack', channel: '#proj-auth-federation', enabled: true, webhook_url: 'https://hooks.slack.com/services/T00/B00/X00', status: 'Connected' },
-      { platform: 'Discord', channel: '#iam-dev-squad', enabled: true, webhook_url: 'https://discord.com/api/webhooks/123/abc', status: 'Connected' },
-      { platform: 'Telegram', channel: '@ops_auth_guard_bot', enabled: true, chat_id: '-100234987123', status: 'Connected' },
+      { platform: 'Slack', channel: '#proj-auth-federation', enabled: false, status: 'Disconnected' },
+      { platform: 'Discord', channel: '#iam-dev-squad', enabled: false, status: 'Disconnected' },
+      { platform: 'Telegram', channel: 'Not configured', enabled: false, status: 'Disconnected' },
     ],
     agent_config: SPECIALIZED_PM_AGENTS[0],
     tasks: [
@@ -278,9 +278,9 @@ export const INITIAL_ROOMS: RoomItem[] = [
     topic: 'Kubernetes production pod crash loops, Prometheus alerts, and runbook diffs',
     description: 'Rapid triage and remediation bridge for production cluster incidents.',
     social_links: [
-      { platform: 'Slack', channel: '#incident-bridge-aiops', enabled: true, webhook_url: 'https://hooks.slack.com/services/T01/B01/X01', status: 'Connected' },
-      { platform: 'Telegram', channel: '@k8s_ops_oncall_bot', enabled: true, chat_id: '-100987654321', status: 'Connected' },
-      { platform: 'Discord', channel: '#sre-alerts', enabled: false, webhook_url: '', status: 'Disconnected' },
+      { platform: 'Slack', channel: '#incident-bridge-aiops', enabled: false, status: 'Disconnected' },
+      { platform: 'Telegram', channel: 'Not configured', enabled: false, status: 'Disconnected' },
+      { platform: 'Discord', channel: '#sre-alerts', enabled: false, status: 'Disconnected' },
     ],
     agent_config: SPECIALIZED_PM_AGENTS[4],
     tasks: [
@@ -316,8 +316,8 @@ export const INITIAL_ROOMS: RoomItem[] = [
     topic: 'Stripe webhook idempotency, cart reservation locks, and distributed saga rollback',
     description: 'High-throughput transactional squad handling order placement and payment webhooks.',
     social_links: [
-      { platform: 'Discord', channel: '#checkout-engine', enabled: true, webhook_url: 'https://discord.com/api/webhooks/checkout/1', status: 'Connected' },
-      { platform: 'Slack', channel: '#payments-audit', enabled: true, webhook_url: 'https://hooks.slack.com/services/payments', status: 'Connected' },
+      { platform: 'Discord', channel: '#checkout-engine', enabled: false, status: 'Disconnected' },
+      { platform: 'Slack', channel: '#payments-audit', enabled: false, status: 'Disconnected' },
     ],
     agent_config: SPECIALIZED_PM_AGENTS[1],
     tasks: [

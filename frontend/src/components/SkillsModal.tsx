@@ -289,9 +289,10 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                 />
               </div>
               <button
-                onClick={() => alert('Add new custom skill')}
-                className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center shrink-0"
-                title="Add skill"
+                disabled
+                className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center shrink-0 cursor-not-allowed"
+                title="Custom skill creation is not connected in this view"
+                aria-label="Add skill unavailable"
               >
                 <span className="material-symbols-outlined text-[17px]">add</span>
               </button>
@@ -406,23 +407,23 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
                 {/* Actions */}
                 <div className="flex items-center gap-1 text-gray-400">
                   <button
-                    onClick={() => alert(`Exported ${currentSkill.name}`)}
-                    className="p-1.5 hover:text-gray-700 rounded hover:bg-gray-100"
-                    title="Download"
+                    disabled
+                    className="p-1.5 text-gray-300 rounded cursor-not-allowed"
+                    title="Skill export is not available in this view"
                   >
                     <span className="material-symbols-outlined text-[17px]">download</span>
                   </button>
                   <button
-                    onClick={() => alert(`Editing ${currentSkill.name}`)}
-                    className="p-1.5 hover:text-gray-700 rounded hover:bg-gray-100"
-                    title="Edit"
+                    disabled
+                    className="p-1.5 text-gray-300 rounded cursor-not-allowed"
+                    title="Skill editing is not available in this view"
                   >
                     <span className="material-symbols-outlined text-[17px]">edit</span>
                   </button>
                   <button
-                    onClick={() => alert(`Delete ${currentSkill.name}`)}
-                    className="p-1.5 hover:text-red-600 rounded hover:bg-gray-100"
-                    title="Delete"
+                    disabled
+                    className="p-1.5 text-gray-300 rounded cursor-not-allowed"
+                    title="Skill deletion is not available in this view"
                   >
                     <span className="material-symbols-outlined text-[17px]">delete</span>
                   </button>

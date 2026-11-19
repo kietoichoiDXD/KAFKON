@@ -14,8 +14,21 @@ import {
   INITIAL_ROOMS,
 } from '../data/mockRooms';
 import { ProductionTreeVisualizer } from './ProductionTreeVisualizer';
+import { API } from '../api';
 
 type RoomTab = 'chat' | 'tree' | 'tasks' | 'channels' | 'agent' | 'repos';
+
+// Older browser snapshots contained demo webhook URLs and Telegram chat IDs.
+// Strip those fields and reset sample connections before they reach the UI.
+const sanitizeRoomConnections = (source: RoomItem[]): RoomItem[] =>
+  source.map(room => ({
+    ...room,
+    social_links: (room.social_links || []).map(({ webhook_url: _webhook, chat_id: _chatId, ...link }) => ({
+      ...link,
+      enabled: false,
+      status: 'Disconnected',
+    })),
+  }));
 
 export const RoomsView: React.FC = () => {
   // Rooms state initialized with rich initial mock rooms
@@ -23,7 +36,8 @@ export const RoomsView: React.FC = () => {
     const saved = localStorage.getItem('scribeba_rooms_v3');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? sanitizeRoomConnections(parsed) : INITIAL_ROOMS;
       } catch {
         return INITIAL_ROOMS;
       }
@@ -91,11 +105,11 @@ export const RoomsView: React.FC = () => {
 
   // Initial sync from backend API if available
   useEffect(() => {
-    fetch('/api/rooms')
+    fetch(`${API}/api/rooms`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          setRooms(data);
+          setRooms(sanitizeRoomConnections(data));
         }
       })
       .catch(() => {});
@@ -121,8 +135,7 @@ export const RoomsView: React.FC = () => {
         platform: 'Slack',
         channel: slackChannelName.startsWith('#') ? slackChannelName : `#${slackChannelName}`,
         enabled: true,
-        webhook_url: 'https://hooks.slack.com/services/T99/B99/auto',
-        status: 'Connected',
+        status: 'Disconnected',
       });
     }
     if (enableDiscord) {
@@ -130,8 +143,7 @@ export const RoomsView: React.FC = () => {
         platform: 'Discord',
         channel: discordChannelName.startsWith('#') ? discordChannelName : `#${discordChannelName}`,
         enabled: true,
-        webhook_url: 'https://discord.com/api/webhooks/999/auto',
-        status: 'Connected',
+        status: 'Disconnected',
       });
     }
     if (enableTelegram) {
@@ -139,8 +151,7 @@ export const RoomsView: React.FC = () => {
         platform: 'Telegram',
         channel: telegramChannelName.startsWith('@') ? telegramChannelName : `@${telegramChannelName}`,
         enabled: true,
-        chat_id: '-100999888777',
-        status: 'Connected',
+        status: 'Disconnected',
       });
     }
 
@@ -180,8 +191,9 @@ export const RoomsView: React.FC = () => {
     setIsCreateModalOpen(false);
 
     // Sync to backend API if reachable
-    fetch('/api/rooms', {
+    fetch(`${API}/api/rooms`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newRoom),
     }).catch(() => {});
@@ -196,7 +208,7 @@ export const RoomsView: React.FC = () => {
   const handleDeleteRoom = (roomId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Are you sure you want to delete this room and detach linked social channels?')) {
-      fetch(`/api/rooms/${roomId}`, { method: 'DELETE' }).catch(() => {});
+      fetch(`${API}/api/rooms/${roomId}`, { method: 'DELETE', credentials: 'include' }).catch(() => {});
       const nextRooms = rooms.filter(r => r.id !== roomId);
       setRooms(nextRooms);
       if (selectedRoomId === roomId) {
@@ -232,8 +244,9 @@ export const RoomsView: React.FC = () => {
     setIsAiThinking(true);
 
     // Try backend API first with graceful fallback
-    fetch(`/api/rooms/${currentRoom.id}/chat`, {
+    fetch(`${API}/api/rooms/${currentRoom.id}/chat`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: textToSend.trim(),
@@ -272,19 +285,9 @@ export const RoomsView: React.FC = () => {
       let hasTree = false;
       let hasTasks = false;
 
-      if (isTreeCommand) {
-        aiResponseText = `I have rendered the live production architecture tree for squad "${currentRoom.name}". Below is the interactive hierarchy with file sizes, line counts, and microservice directories. You can also inspect files in the Production Tree tab.`;
-        hasTree = true;
-      } else if (isTasksCommand) {
-        aiResponseText = `Currently tracking ${currentRoom.tasks.length} tasks in this room. ${
-          currentRoom.tasks.filter(t => t.status === 'Blocked').length
-        } blocked by unverified claims. Check the Kanban board to inspect INVEST stories.`;
-        hasTasks = true;
-      } else if (textToSend.toLowerCase().includes('blocker') || textToSend.toLowerCase().includes('issue')) {
-        aiResponseText = `I detected a risk signal in your message. Under our Zero-Blocker rule, I am flagging this requirement for 3-axis verification before story generation.`;
-      } else {
-        aiResponseText = `Received across ${userMsg.platform} bridge. Requirement claim parsed and verified against ${currentRoom.agent_config.agent_name} instructions. Type /tree anytime to see codebase changes.`;
-      }
+      aiResponseText = 'Backend is not connected. Your message was kept in this browser only; no AI analysis, repository lookup, or channel delivery was performed.';
+      hasTree = false;
+      hasTasks = false;
 
       const aiMsg: RoomChatMessage = {
         id: `ai-msg-${Date.now()}`,
@@ -371,7 +374,7 @@ export const RoomsView: React.FC = () => {
         updatedLinks[index] = {
           ...updatedLinks[index],
           enabled: !updatedLinks[index].enabled,
-          status: !updatedLinks[index].enabled ? 'Connected' : 'Disconnected',
+        status: 'Disconnected',
         };
         return { ...r, social_links: updatedLinks };
       })
@@ -1045,40 +1048,23 @@ export const RoomsView: React.FC = () => {
                               <span className="text-xs font-bold text-slate-900">{link.platform} Bridge</span>
                               <span
                                 className={`text-[10px] font-mono px-2 py-0.2 rounded border font-semibold ${
-                                  link.enabled
+                                  link.status === 'Connected' || link.status === 'Listening'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : 'bg-slate-100 text-slate-500 border-slate-200'
                                 }`}
                               >
-                                {link.enabled ? 'Active / Listening' : 'Disabled'}
+                                {link.status === 'Connected' || link.status === 'Listening' ? link.status : 'Not connected'}
                               </span>
                             </div>
                             <div className="text-xs text-slate-600 font-mono mt-0.5">
                               Channel / Handle: <strong className="text-slate-900">{link.channel}</strong>
                             </div>
-                            <div className="text-[11px] text-slate-500 mt-0.5">
-                              {link.webhook_url ? `Webhook: ${link.webhook_url.substring(0, 35)}...` : `Chat ID: ${link.chat_id}`}
-                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">Credentials are not configured for this channel.</div>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => alert(`Connection test successful for ${link.platform} (${link.channel}). Latency: 42ms.`)}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                          >
-                            Ping Test
-                          </button>
-                          <button
-                            onClick={() => handleToggleChannel(idx)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                              link.enabled
-                                ? 'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100'
-                                : 'bg-teal-600 text-white hover:bg-teal-700'
-                            }`}
-                          >
-                            {link.enabled ? 'Disable' : 'Enable'}
-                          </button>
+                          <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800" title="Configure the integration on the backend before testing it">Not connected</span>
                         </div>
                       </div>
                     ))}
@@ -1201,12 +1187,12 @@ export const RoomsView: React.FC = () => {
                     </div>
 
                     <div className="pt-2 flex justify-end">
-                      <button
-                        onClick={() => alert('Agent parameters updated and synchronized to room memory.')}
-                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition-all"
-                      >
-                        Save Configuration
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-amber-700">Room agent settings are local only; backend persistence is unavailable.</span>
+                        <button disabled title="No backend route is available to save room agent settings" className="px-4 py-2 bg-slate-200 text-slate-500 rounded-lg text-xs font-semibold cursor-not-allowed">
+                          Save unavailable
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
