@@ -268,7 +268,8 @@ export const INITIAL_ROOMS: RoomItem[] = [
       { id: 'm1', sender: '@oliver_sec', platform: 'Slack', time: '10:15', text: 'Team, Acme Corp needs Google Workspace SSO with domain restriction.' },
       { id: 'm2', sender: '@tony_db', platform: 'Discord', time: '10:18', text: 'I am staging the database migration for sso_provider unique index now.' },
       { id: 'm3', sender: '@alex_lead', platform: 'Telegram', time: '10:22', text: 'What about session expiration? Can we check the production file tree to see where session timeouts are defined?' },
-      { id: 'm4', sender: 'Lead Agile PM (AI)', platform: 'AI Agent', time: '10:23', text: 'I can visualize the production repository tree to locate our auth session handlers. Type /tree or click "Visualize Production Tree" below to explore the codebase structure.' },
+      { id: 'm4', sender: '@pm_lead', platform: 'Console', time: '10:23', text: '/tree' },
+      { id: 'm5', sender: 'Lead Agile PM (AI)', platform: 'AI Agent', time: '10:23', text: '🌲 Live Production Codebase Architecture mapped for squad "Auth & IAM Federation". Below is the interactive hierarchy with file sizes, line counts, and microservice directories:', has_tree: true },
     ],
   },
   {
