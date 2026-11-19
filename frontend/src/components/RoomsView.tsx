@@ -20,7 +20,7 @@ type RoomTab = 'chat' | 'tree' | 'tasks' | 'channels' | 'agent' | 'repos';
 export const RoomsView: React.FC = () => {
   // Rooms state initialized with rich initial mock rooms
   const [rooms, setRooms] = useState<RoomItem[]>(() => {
-    const saved = localStorage.getItem('scribeba_rooms');
+    const saved = localStorage.getItem('scribeba_rooms_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -31,8 +31,17 @@ export const RoomsView: React.FC = () => {
     return INITIAL_ROOMS;
   });
 
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>('room-auth-iam');
-  const [activeTab, setActiveTab] = useState<RoomTab>('chat');
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('room') === 'none') return null;
+    return params.get('room') || 'room-auth-iam';
+  });
+  const [activeTab, setActiveTab] = useState<RoomTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('tab') as RoomTab;
+    if (['chat', 'tree', 'tasks', 'channels', 'agent', 'repos'].includes(t)) return t;
+    return 'chat';
+  });
   const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dropTargetStatus, setDropTargetStatus] = useState<RoomTask['status'] | null>(null);
@@ -42,10 +51,22 @@ export const RoomsView: React.FC = () => {
   const [filterPlatform, setFilterPlatform] = useState<'All' | 'Slack' | 'Discord' | 'Telegram'>('All');
 
   // Modal: Create Room state
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomTopic, setNewRoomTopic] = useState('');
-  const [newRoomDescription, setNewRoomDescription] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('modal') === 'create';
+  });
+  const [newRoomName, setNewRoomName] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('modal') === 'create' ? 'proj-realtime-checkout' : '';
+  });
+  const [newRoomTopic, setNewRoomTopic] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('modal') === 'create' ? 'Distributed order reservation, Redis locks, and Stripe idempotency' : '';
+  });
+  const [newRoomDescription, setNewRoomDescription] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('modal') === 'create' ? 'Transactional squad handling multi-channel sprint triage.' : '';
+  });
   const [selectedAgentId, setSelectedAgentId] = useState<string>('agile-pm');
 
   // Channel toggles for creation
@@ -82,7 +103,7 @@ export const RoomsView: React.FC = () => {
 
   // Persist rooms to localStorage
   useEffect(() => {
-    localStorage.setItem('scribeba_rooms', JSON.stringify(rooms));
+    localStorage.setItem('scribeba_rooms_v3', JSON.stringify(rooms));
   }, [rooms]);
 
   // Current selected room
