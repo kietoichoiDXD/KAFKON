@@ -85,7 +85,7 @@ def allow_cors(response):
         response.headers["Access-Control-Allow-Origin"] = allowed_origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,DELETE,OPTIONS"
         response.headers.add("Vary", "Origin")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -135,6 +135,18 @@ def require_public_session():
         retry_after = _consume_rate_limit("expensive", address, 12, 60)
         if retry_after:
             response = jsonify({"error": "This operation is temporarily rate limited. Please retry shortly."})
+            response.status_code = 429
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+
+    is_room_write = (
+        (request.method == "POST" and request.path == "/api/rooms")
+        or (request.method == "DELETE" and re.fullmatch(r"/api/rooms/[^/]+", request.path))
+    )
+    if is_room_write:
+        retry_after = _consume_rate_limit("room-write", address, 30, 60)
+        if retry_after:
+            response = jsonify({"error": "Room changes are temporarily rate limited. Please retry shortly."})
             response.status_code = 429
             response.headers["Retry-After"] = str(retry_after)
             return response
@@ -788,6 +800,12 @@ def slack_threads():
 
 
 ROOMS_FILE = Path(__file__).resolve().parent.parent / ".rooms.json"
+MAX_ROOM_COUNT = 50
+MAX_ROOM_PAYLOAD_BYTES = 64 * 1024
+MAX_ROOMS_FILE_BYTES = 4 * 1024 * 1024
+MAX_ROOM_CHAT_CHARS = 4_000
+MAX_ROOM_CHAT_MESSAGES = 200
+MAX_ROOM_TASKS = 200
 
 _rate_buckets: dict[str, deque[float]] = defaultdict(deque)
 _rate_lock = threading.Lock()
@@ -938,34 +956,54 @@ DEFAULT_ROOMS_DATA = [
 def _load_rooms() -> list:
     if ROOMS_FILE.exists():
         try:
-            return _scrub_room_secrets(json.loads(ROOMS_FILE.read_text(encoding="utf-8")))
+            if ROOMS_FILE.stat().st_size > MAX_ROOMS_FILE_BYTES:
+                raise ValueError("Room storage limit exceeded.")
+            loaded = json.loads(ROOMS_FILE.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                return _scrub_room_secrets(loaded[:MAX_ROOM_COUNT])
         except Exception:
             pass
     return _scrub_room_secrets(DEFAULT_ROOMS_DATA)
 
 
-_ROOM_SECRET_KEYS = {
-    "webhook_url", "bot_token", "api_key", "client_secret", "access_token",
-    "refresh_token", "authorization", "password", "secret", "chat_id",
-}
+_ROOM_SECRET_KEY_PARTS = (
+    "apikey", "secret", "password", "token", "authorization", "webhook",
+    "credential", "chatid",
+)
+
+
+def _is_sensitive_room_key(key: Any) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+    secret_key_alias = normalized == "key" or normalized.endswith(
+        ("apikey", "clientkey", "privatekey", "secretkey", "signingkey", "encryptionkey")
+    )
+    return secret_key_alias or any(part in normalized for part in _ROOM_SECRET_KEY_PARTS)
 
 
 def _scrub_room_secrets(value):
-    """Remove connector credentials and private chat identifiers from room data."""
+    """Remove secret-like fields across common casing and separator variants."""
     if isinstance(value, dict):
-        return {
+        safe = {
             key: _scrub_room_secrets(item)
             for key, item in value.items()
-            if key.lower() not in _ROOM_SECRET_KEYS
+            if not _is_sensitive_room_key(key)
         }
+        if isinstance(safe.get("chat_messages"), list):
+            safe["chat_messages"] = safe["chat_messages"][-MAX_ROOM_CHAT_MESSAGES:]
+        if isinstance(safe.get("tasks"), list):
+            safe["tasks"] = safe["tasks"][:MAX_ROOM_TASKS]
+        return safe
     if isinstance(value, list):
         return [_scrub_room_secrets(item) for item in value]
     return value
 
 
 def _save_rooms(rooms: list) -> None:
-    safe_rooms = _scrub_room_secrets(rooms)
-    ROOMS_FILE.write_text(json.dumps(safe_rooms, indent=2, ensure_ascii=False), encoding="utf-8")
+    safe_rooms = _scrub_room_secrets(rooms[-MAX_ROOM_COUNT:])
+    serialized = json.dumps(safe_rooms, indent=2, ensure_ascii=False)
+    if len(serialized.encode("utf-8")) > MAX_ROOMS_FILE_BYTES:
+        raise ValueError("Room data exceeds the storage limit.")
+    ROOMS_FILE.write_text(serialized, encoding="utf-8")
     try:
         ROOMS_FILE.chmod(0o600)
     except OSError:
@@ -981,11 +1019,17 @@ def get_rooms():
 @app.post("/api/rooms")
 def save_room():
     """Create or update a PM room."""
+    if request.content_length is not None and request.content_length > MAX_ROOM_PAYLOAD_BYTES:
+        return jsonify({"error": "Room payload is too large."}), 413
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"error": "A JSON object is required."}), 400
+    if len(json.dumps(data, ensure_ascii=False).encode("utf-8")) > MAX_ROOM_PAYLOAD_BYTES:
+        return jsonify({"error": "Room payload is too large."}), 413
     data = _scrub_room_secrets(data)
     room_id = data.get("id") or f"room-{int(time.time())}"
+    if not isinstance(room_id, str) or len(room_id) > 120:
+        return jsonify({"error": "Room id is invalid."}), 400
     data["id"] = room_id
 
     rooms = _load_rooms()
@@ -993,9 +1037,14 @@ def save_room():
     if existing_idx is not None:
         rooms[existing_idx] = {**rooms[existing_idx], **data}
     else:
+        if len(rooms) >= MAX_ROOM_COUNT:
+            return jsonify({"error": "The room limit has been reached."}), 409
         rooms.append(data)
 
-    _save_rooms(rooms)
+    try:
+        _save_rooms(rooms)
+    except ValueError:
+        return jsonify({"error": "Room storage limit reached."}), 413
     return jsonify({"status": "ok", "room": _scrub_room_secrets(data)})
 
 
@@ -1009,10 +1058,23 @@ def delete_room(room_id: str):
 @app.post("/api/rooms/<room_id>/chat")
 def room_chat(room_id: str):
     """Handle conversational interaction between PM and the room's AI agent."""
-    body = request.get_json(force=True) or {}
-    user_text = (body.get("text") or body.get("message") or "").strip()
+    if request.content_length is not None and request.content_length > MAX_ROOM_PAYLOAD_BYTES:
+        return jsonify({"error": "Chat message is too large."}), 413
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "A JSON object is required."}), 400
+    raw_text = body.get("text", body.get("message", ""))
+    if not isinstance(raw_text, str):
+        return jsonify({"error": "Chat message must be text."}), 400
+    user_text = raw_text.strip()
+    if len(user_text) > MAX_ROOM_CHAT_CHARS:
+        return jsonify({"error": "Chat message exceeds the 4000-character limit."}), 413
     sender = body.get("sender", "@pm_lead")
     platform = body.get("platform", "Console")
+    if not isinstance(sender, str) or not isinstance(platform, str):
+        return jsonify({"error": "Chat sender and platform must be text."}), 400
+    sender = sender[:80]
+    platform = platform[:40]
 
     rooms = _load_rooms()
     room = next((r for r in rooms if r.get("id") == room_id), None)
@@ -1030,7 +1092,11 @@ def room_chat(room_id: str):
         "time": time.strftime("%H:%M"),
         "text": user_text,
     }
-    room.setdefault("chat_messages", []).append(user_msg)
+    messages = room.get("chat_messages")
+    if not isinstance(messages, list):
+        messages = []
+        room["chat_messages"] = messages
+    messages.append(user_msg)
 
     lower = user_text.lower()
     is_tree_command = any(k in lower for k in ["/tree", "cây thư mục", "repo tree", "file tree", "cấu trúc", "tree"])
@@ -1094,8 +1160,12 @@ def room_chat(room_id: str):
             "text": ai_reply,
         }
 
-    room["chat_messages"].append(ai_msg)
-    _save_rooms(rooms)
+    messages.append(ai_msg)
+    room["chat_messages"] = messages[-MAX_ROOM_CHAT_MESSAGES:]
+    try:
+        _save_rooms(rooms)
+    except ValueError:
+        return jsonify({"error": "Room storage limit reached."}), 413
     return jsonify({"status": "ok", "user_message": user_msg, "ai_message": ai_msg, "room": room})
 
 
