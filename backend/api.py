@@ -7,19 +7,24 @@ Flask rather than FastAPI: the FastAPI installed on the build machine is incompa
 Starlette, and a hackathon is not the place to fight a dependency tree.
 """
 import asyncio
+import base64
+import hashlib
 import math
 import hmac
 import json
 import re
+import secrets
 import threading
 import time
 import yaml
+from functools import lru_cache
 from collections import defaultdict, deque
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlencode
 
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, redirect, request, session
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from .config import settings
@@ -28,6 +33,8 @@ from .core.models import ChatMessage, ThreadContext
 from .core.skills import SkillManager
 from .integrations.clickup_client import ClickUpClient
 from .platforms.slack_adapter import SlackAdapter
+from .platforms.discord_adapter import DiscordAdapter
+from .platforms.telegram_adapter import TelegramAdapter
 from .core.conflict_service import scan_task_against_repository
 
 app = Flask(__name__)
@@ -101,6 +108,8 @@ PUBLIC_API_PATHS = {
     "/api/auth/session",
     "/api/auth/login",
     "/api/auth/logout",
+    "/api/auth/cognito/start",
+    "/api/auth/cognito/callback",
 }
 
 
@@ -177,7 +186,147 @@ def require_public_session():
 
 @app.get("/api/auth/session")
 def auth_session():
-    return jsonify({"auth_required": AUTH_ENABLED, "authenticated": not AUTH_ENABLED or bool(session.get("authenticated"))})
+    cognito_enabled = bool(
+        settings.cognito_region
+        and settings.cognito_user_pool_id
+        and settings.cognito_client_id
+        and settings.cognito_domain
+    )
+    return jsonify({
+        "auth_required": AUTH_ENABLED,
+        "authenticated": not AUTH_ENABLED or bool(session.get("authenticated")),
+        "cognito_enabled": cognito_enabled,
+        "google_enabled": cognito_enabled and settings.cognito_google_enabled,
+        "user": session.get("user") if session.get("authenticated") else None,
+    })
+
+
+def _cognito_configured() -> bool:
+    return bool(
+        settings.cognito_region
+        and settings.cognito_user_pool_id
+        and settings.cognito_client_id
+        and settings.cognito_domain
+    )
+
+
+def _cognito_domain() -> str:
+    domain = str(settings.cognito_domain or "").strip().rstrip("/")
+    if not domain.startswith("https://"):
+        domain = f"https://{domain}"
+    expected_suffix = f".auth.{settings.cognito_region}.amazoncognito.com"
+    if not domain.lower().split("/")[2].endswith(expected_suffix):
+        raise ValueError("Cognito domain is not in the configured AWS region.")
+    return domain
+
+
+def _cognito_issuer() -> str:
+    return f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/{settings.cognito_user_pool_id}"
+
+
+@lru_cache(maxsize=4)
+def _cognito_jwks_client(issuer: str):
+    from jwt import PyJWKClient
+    return PyJWKClient(f"{issuer}/.well-known/jwks.json", cache_keys=True)
+
+
+@app.get("/api/auth/cognito/start")
+def cognito_start():
+    if not AUTH_ENABLED or not _cognito_configured():
+        return jsonify({"error": "Hosted account sign-in is not configured."}), 503
+    intent = request.args.get("intent", "login")
+    if intent not in {"login", "signup", "google"}:
+        return jsonify({"error": "Unsupported sign-in flow."}), 400
+    if intent == "google" and not settings.cognito_google_enabled:
+        return jsonify({"error": "Google sign-in is not configured yet."}), 503
+
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    callback = f"{settings.scribeba_allowed_origin.rstrip('/')}/api/auth/cognito/callback"
+    session["cognito_oauth"] = {"state": state, "nonce": nonce, "verifier": verifier, "intent": intent}
+    query = {
+        "response_type": "code",
+        "client_id": settings.cognito_client_id,
+        "redirect_uri": callback,
+        "scope": "openid email profile",
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    }
+    if intent == "google":
+        query["identity_provider"] = "Google"
+    path = "/signup" if intent == "signup" else "/oauth2/authorize"
+    return redirect(f"{_cognito_domain()}{path}?{urlencode(query)}", code=302)
+
+
+@app.get("/api/auth/cognito/callback")
+def cognito_callback():
+    if not AUTH_ENABLED or not _cognito_configured():
+        return jsonify({"error": "Hosted account sign-in is not configured."}), 503
+    if request.args.get("error"):
+        session.pop("cognito_oauth", None)
+        return redirect("/?auth_error=sign_in_cancelled")
+    oauth = session.get("cognito_oauth")
+    code = request.args.get("code")
+    if not isinstance(oauth, dict) or not code or not hmac.compare_digest(
+        str(oauth.get("state", "")), str(request.args.get("state", ""))
+    ):
+        session.pop("cognito_oauth", None)
+        return redirect("/?auth_error=invalid_sign_in")
+
+    callback = f"{settings.scribeba_allowed_origin.rstrip('/')}/api/auth/cognito/callback"
+    try:
+        domain = _cognito_domain()
+        import httpx
+        token_response = httpx.post(
+            f"{domain}/oauth2/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": settings.cognito_client_id,
+                "code": code,
+                "redirect_uri": callback,
+                "code_verifier": oauth["verifier"],
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10.0,
+        )
+        token_response.raise_for_status()
+        id_token = token_response.json().get("id_token")
+        if not isinstance(id_token, str):
+            raise ValueError("Missing ID token.")
+
+        import jwt
+        issuer = _cognito_issuer()
+        signing_key = _cognito_jwks_client(issuer).get_signing_key_from_jwt(id_token)
+        claims = jwt.decode(
+            id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=settings.cognito_client_id,
+            issuer=issuer,
+            options={"require": ["exp", "iat", "sub", "aud", "nonce"]},
+        )
+        if claims.get("token_use") != "id" or claims.get("nonce") != oauth["nonce"]:
+            raise ValueError("ID token validation failed.")
+        if claims.get("email_verified") not in (True, "true"):
+            raise ValueError("Email address is not verified.")
+
+        session.clear()
+        session.permanent = True
+        session["authenticated"] = True
+        session["user"] = {
+            "id": claims["sub"],
+            "email": str(claims.get("email", ""))[:254],
+            "name": str(claims.get("name") or claims.get("email", ""))[:120],
+        }
+        return redirect("/", code=302)
+    except Exception as exc:
+        app.logger.warning("Cognito sign-in failed (%s)", type(exc).__name__)
+        session.pop("cognito_oauth", None)
+        return redirect("/?auth_error=sign_in_failed", code=302)
 
 
 @app.post("/api/auth/login")
@@ -227,6 +376,8 @@ def health():
         "openai": bool(settings.openai_api_key),
         "nebius": bool(settings.nebius_api_key),
         "slack": SlackAdapter().is_live,
+        "discord": DiscordAdapter().is_live,
+        "telegram": TelegramAdapter().is_live(),
         "clickup": bool(settings.clickup_api_key and settings.clickup_list_id),
         "exa": bool(settings.exa_api_key),
     })

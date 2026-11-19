@@ -30,10 +30,15 @@ export type Health = {
   analysis: string;
   tier: string;
   slack: boolean;
+  discord?: boolean;
+  telegram?: boolean;
   clickup: boolean;
   exa: boolean;
   openrouter?: boolean;
+  openai?: boolean;
+  anthropic?: boolean;
   gemini?: boolean;
+  nebius?: boolean;
   aws?: boolean;
 };
 

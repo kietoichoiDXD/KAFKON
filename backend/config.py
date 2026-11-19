@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     scribeba_allowed_origin: Optional[str] = Field(default=None, alias="SCRIBEBA_ALLOWED_ORIGIN")
     scribeba_cookie_samesite: str = Field(default="Lax", alias="SCRIBEBA_COOKIE_SAMESITE")
 
+    # Durable hosted authentication through Amazon Cognito.
+    cognito_region: Optional[str] = Field(default=None, alias="COGNITO_REGION")
+    cognito_user_pool_id: Optional[str] = Field(default=None, alias="COGNITO_USER_POOL_ID")
+    cognito_client_id: Optional[str] = Field(default=None, alias="COGNITO_CLIENT_ID")
+    cognito_domain: Optional[str] = Field(default=None, alias="COGNITO_DOMAIN")
+    cognito_google_enabled: bool = Field(default=False, alias="COGNITO_GOOGLE_ENABLED")
+
     # Anthropic
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_routing_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_ROUTING_MODEL")
