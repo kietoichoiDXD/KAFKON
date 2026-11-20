@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { get, Health, Run, LABEL_COLOR, API, safeFetchJson, safeRender } from '../api';
+import { ProjectItem } from '../types';
 
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
@@ -348,6 +349,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState('');
+  const [activeProject, setActiveProject] = useState<ProjectItem | null>(null);
 
   // Persist draft and configuration to prevent loss on navigation or refresh
   useEffect(() => {
@@ -362,23 +364,59 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     localStorage.setItem('scribeba.chat.model', modelMode);
   }, [modelMode]);
 
-  const persistNewSession = async () => {
-    const result = await safeFetchJson<{ id: string; title: string }>(`${API}/api/chat/sessions`, { method: 'POST' });
+  const loadSessionsForProject = async (project: ProjectItem | null, preferSessionId?: string) => {
+    const projId = project?.id || '';
+    const url = projId ? `${API}/api/chat/sessions?project_id=${encodeURIComponent(projId)}` : `${API}/api/chat/sessions`;
+    const result = await safeFetchJson<ChatSessionSummary[]>(url);
+    if (!result.ok || !Array.isArray(result.data)) return;
+    setChatSessions(result.data);
+
+    const projectKey = projId ? `scribeba.chat.active-session.${projId}` : 'scribeba.chat.active-session';
+    const savedId = preferSessionId || localStorage.getItem(projectKey) || '';
+    const selected = result.data.find(item => item.id === savedId);
+
+    if (selected) {
+      await openSession(selected.id, false, projId);
+    } else if (result.data.length > 0) {
+      await openSession(result.data[0].id, false, projId);
+    } else {
+      // If no sessions exist for this project, create a fresh, clean conversation!
+      await persistNewSession(projId);
+    }
+  };
+
+  const persistNewSession = async (targetProjId?: string) => {
+    const pId = targetProjId !== undefined ? targetProjId : (activeProject?.id || '');
+    const result = await safeFetchJson<{ id: string; title: string; project_id?: string }>(
+      `${API}/api/chat/sessions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: pId })
+      }
+    );
     if (!result.ok || !result.data) return;
-    setActiveSessionId(result.data.id);
-    localStorage.setItem('scribeba.chat.active-session', result.data.id);
+    const newId = result.data.id;
+    setActiveSessionId(newId);
+    const projectKey = pId ? `scribeba.chat.active-session.${pId}` : 'scribeba.chat.active-session';
+    localStorage.setItem(projectKey, newId);
+    setTurns([]);
+    setPendingAction(null);
+    setPromptInput('');
     setChatSessions(items => [
-      { id: result.data!.id, title: result.data!.title, updated_at: Date.now() / 1000 },
+      { id: newId, title: result.data!.title, updated_at: Date.now() / 1000 },
       ...items,
     ].slice(0, 100));
   };
 
-  const openSession = async (sessionId: string, clearDraft = false) => {
+  const openSession = async (sessionId: string, clearDraft = false, targetProjId?: string) => {
     if (!sessionId) return;
-    const result = await safeFetchJson<{ id: string; turns: Turn[] }>(`${API}/api/chat/sessions/${sessionId}`);
+    const result = await safeFetchJson<{ id: string; turns: Turn[]; project_id?: string }>(`${API}/api/chat/sessions/${sessionId}`);
     if (!result.ok || !result.data) return;
     setActiveSessionId(sessionId);
-    localStorage.setItem('scribeba.chat.active-session', sessionId);
+    const pId = targetProjId !== undefined ? targetProjId : (activeProject?.id || '');
+    const projectKey = pId ? `scribeba.chat.active-session.${pId}` : 'scribeba.chat.active-session';
+    localStorage.setItem(projectKey, sessionId);
     setTurns(result.data.turns ?? []);
     setPendingAction(null);
     if (clearDraft) {
@@ -391,23 +429,40 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     get<Health>('/api/health').then(setHealth);
     get<Run[]>('/api/runs').then(setRuns);
     let cancelled = false;
+
     void (async () => {
-      const result = await safeFetchJson<ChatSessionSummary[]>(`${API}/api/chat/sessions`);
-      if (!result.ok || !Array.isArray(result.data) || cancelled) return;
-      setChatSessions(result.data);
-      const savedId = localStorage.getItem('scribeba.chat.active-session') || '';
-      const selected = result.data.find(item => item.id === savedId) || result.data[0];
-      if (selected) await openSession(selected.id);
-      else await persistNewSession();
+      // 1. Fetch current active project
+      const projRes = await safeFetchJson<{ active_project: ProjectItem }>(`${API}/api/projects/active`);
+      if (cancelled) return;
+      const currentProj = projRes.ok ? projRes.data?.active_project ?? null : null;
+      setActiveProject(currentProj);
+
+      // 2. Load sessions scoped to this project
+      await loadSessionsForProject(currentProj);
     })();
-    return () => { cancelled = true; };
+
+    // 3. Listen to project-changed event
+    const handleProjectChanged = async (event: any) => {
+      const newProj = event.detail?.project ?? null;
+      setActiveProject(newProj);
+      setTurns([]);
+      setPromptInput('');
+      await loadSessionsForProject(newProj, event.detail?.sessionId);
+    };
+
+    window.addEventListener('project-changed', handleProjectChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('project-changed', handleProjectChanged);
+    };
   }, []);
 
   useEffect(() => {
     if (resetKey) {
       setTurns([]);
       setPromptInput('');
-      void persistNewSession();
+      void persistNewSession(activeProject?.id);
     }
   }, [resetKey]);
 
@@ -441,13 +496,21 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       const resp = await safeFetchJson<any>(`${API}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction, session_id: activeSessionId }),
+        body: JSON.stringify({
+          messages: history,
+          skill,
+          tier,
+          pending_action: pendingAction,
+          session_id: activeSessionId,
+          project_id: activeProject?.id || '',
+        }),
       });
       if (!resp.ok || !resp.data) throw new Error(resp.error ?? 'Request failed');
       const data = resp.data;
       if (data.session_id && data.session_id !== activeSessionId) {
         setActiveSessionId(data.session_id);
-        localStorage.setItem('scribeba.chat.active-session', data.session_id);
+        const pKey = activeProject?.id ? `scribeba.chat.active-session.${activeProject.id}` : 'scribeba.chat.active-session';
+        localStorage.setItem(pKey, data.session_id);
       }
 
       if (data.type === 'ops' && data.proposal) setPendingAction(data.proposal.action_id);
@@ -461,7 +524,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
           ? { role: 'approve', proposal: data.proposal }
           : { role: 'agent', result: data, skill, tier },
       ]);
-      const refreshed = await safeFetchJson<ChatSessionSummary[]>(`${API}/api/chat/sessions`);
+      const projParam = activeProject ? `?project_id=${encodeURIComponent(activeProject.id)}` : '';
+      const refreshed = await safeFetchJson<ChatSessionSummary[]>(`${API}/api/chat/sessions${projParam}`);
       if (refreshed.ok && Array.isArray(refreshed.data)) setChatSessions(refreshed.data);
     } catch (e: any) {
       setTurns(t => [
@@ -528,9 +592,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
         {!chatSessions.length && <option value={activeSessionId}>Current conversation</option>}
       </select>
       <button
-        onClick={() => { setTurns([]); setPromptInput(''); setPendingAction(null); void persistNewSession(); }}
-        className="px-3 py-2 rounded-md border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100"
-      >New session</button>
+        type="button"
+        onClick={() => { setTurns([]); setPromptInput(''); setPendingAction(null); void persistNewSession(activeProject?.id); }}
+        className="px-3 py-2 rounded-md border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+        title={activeProject ? `Tạo phiên chat mới cho dự án "${activeProject.name}"` : 'Tạo phiên chat mới'}
+      >+ New session</button>
     </div>
   );
 
@@ -640,8 +706,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   if (started) {
     return (
       <div className="flex-1 h-full min-h-0 flex flex-col bg-slate-50">
-        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200">
-          <span className="text-sm font-semibold text-slate-900">Specification session</span>
+        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white">
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-bold text-slate-900">Specification session</span>
+            {activeProject && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-medium text-xs">
+                <span className="material-symbols-outlined text-[14px]">folder</span>
+                <span>{activeProject.name}</span>
+              </span>
+            )}
+          </div>
           {sessionControls}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pt-6">
@@ -770,7 +844,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
 
   return (
     <div className="flex-1 h-full min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-start p-6 bg-slate-50">
-      <div className="w-full max-w-5xl flex justify-end mb-2">{sessionControls}</div>
+      <div className="w-full max-w-5xl flex items-center justify-between mb-2">
+        {activeProject ? (
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-medium">
+            <span className="material-symbols-outlined text-[15px]">folder_special</span>
+            <span>Không gian làm việc: <strong>{activeProject.name}</strong></span>
+            {activeProject.slack_channel && (
+              <span className="text-[11px] font-mono text-purple-600">({activeProject.slack_channel})</span>
+            )}
+          </div>
+        ) : <div />}
+        {sessionControls}
+      </div>
       <div className="w-full max-w-5xl pt-8 pb-6 flex flex-col items-center">
         <div className="w-full flex flex-col items-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-slate-900 text-teal-400 flex items-center justify-center mb-3">
