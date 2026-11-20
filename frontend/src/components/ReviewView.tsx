@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { API } from '../api';
+import { API, safeRender } from '../api';
 
 const LABEL_BADGES: Record<string, { bg: string; text: string; border: string }> = {
   Verified: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
@@ -63,9 +63,9 @@ export const ReviewView: React.FC = () => {
             id: `run-${ri}-${ei}`,
             status: e.label,
             tag: run.skill.toUpperCase().replace('_', '-'),
-            title: e.field,
-            claim: e.value,
-            source: e.quote_source ?? run.permalink,
+            title: safeRender(e.field),
+            claim: safeRender(e.value),
+            source: safeRender(e.quote_source ?? run.permalink),
             timestamp: run.at,
           }))
         );
@@ -195,9 +195,9 @@ export const ReviewView: React.FC = () => {
                       <span className={`text-[11px] font-semibold ${badge.text}`}>{item.status}</span>
                       <span className="text-[11px] font-mono text-slate-500">{item.timestamp}</span>
                     </div>
-                    <strong className="block mt-2 text-sm font-semibold text-slate-900">{item.title}</strong>
-                    <span className="block mt-1 text-xs leading-relaxed text-slate-600 line-clamp-2">{item.claim}</span>
-                    <span className="block mt-2 text-xs text-slate-500 truncate">{item.source}</span>
+                    <strong className="block mt-2 text-sm font-semibold text-slate-900">{safeRender(item.title)}</strong>
+                    <span className="block mt-1 text-xs leading-relaxed text-slate-600 line-clamp-2">{safeRender(item.claim)}</span>
+                    <span className="block mt-2 text-xs text-slate-500 truncate">{safeRender(item.source)}</span>
                   </button>
                 );
               })}
@@ -212,11 +212,11 @@ export const ReviewView: React.FC = () => {
           </div>
           {selectedItem ? (
             <>
-              <h3 className="text-lg font-semibold leading-snug text-slate-900">{selectedItem.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-700">{selectedItem.claim}</p>
+              <h3 className="text-lg font-semibold leading-snug text-slate-900">{safeRender(selectedItem.title)}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700">{safeRender(selectedItem.claim)}</p>
               <div className="mt-6 text-xs font-medium text-slate-500">Source statement</div>
               <blockquote className="mt-2 m-0 px-4 py-3 bg-slate-100 text-sm leading-relaxed text-slate-800">
-                {selectedItem.source}
+                {safeRender(selectedItem.source)}
               </blockquote>
               <p className="mt-3 text-xs leading-relaxed text-slate-500">
                 {selectedItem.status === 'Blocked'

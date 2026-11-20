@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { API, safeFetchJson, isGitHubPages } from '../api';
+import { API, safeFetchJson, isGitHubPages, safeRender } from '../api';
 import {
   MOCK_ENVIRONMENTS,
   MOCK_FAULTS,
@@ -412,9 +412,10 @@ export function OpsView() {
                     {e.label}
                   </span>
                   <div className="text-slate-800">
-                    <span className="font-semibold text-slate-900">{e.field}:</span> {e.value}
+                    <span className="font-semibold text-slate-900">{safeRender(e.field)}:</span>{' '}
+                    {safeRender(e.value)}
                     <div className="text-slate-400 font-mono text-[11px] mt-0.5">
-                      Command source: {e.source}
+                      Command source: {safeRender(e.source)}
                     </div>
                   </div>
                 </div>

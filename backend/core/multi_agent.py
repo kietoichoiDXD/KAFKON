@@ -447,12 +447,17 @@ class ProvenanceAuditorAgent:
                     lbl = EvidenceLabel(item.get("label", "Inferred"))
                 except ValueError:
                     lbl = EvidenceLabel.INFERRED
+                val = item.get("value", "")
+                if isinstance(val, dict):
+                    val_str = val.get("scenario") or val.get("title") or json.dumps(val, ensure_ascii=False)
+                else:
+                    val_str = str(val or "")
                 evidence_items.append(EvidenceItem(
-                    field=item.get("field", "Requirement"),
-                    value=item.get("value", ""),
+                    field=str(item.get("field", "Requirement") or "Requirement"),
+                    value=val_str,
                     label=lbl,
-                    quote_source=item.get("quote_source", ""),
-                    rationale=item.get("rationale", "")
+                    quote_source=str(item.get("quote_source", "") or ""),
+                    rationale=str(item.get("rationale", "") or "")
                 ))
             if evidence_items:
                 audit_notes.append(f"🛡️ Provenance Audit complete: {len(evidence_items)} explicit claims verified.")

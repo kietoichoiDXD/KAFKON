@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { get, Health, Run, LABEL_COLOR, API, safeFetchJson } from '../api';
+import { get, Health, Run, LABEL_COLOR, API, safeFetchJson, safeRender } from '../api';
 
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
@@ -145,7 +145,7 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
               <ul className="mt-1 list-disc pl-4 space-y-0.5 text-slate-700">
                 {result.agent_telemetry.quarantined_noise.map((item: any, qIdx: number) => (
                   <li key={qIdx}>
-                    <span className="font-mono font-semibold text-slate-800">{item.author || 'User'}</span>: "{item.text}" — <em className="text-amber-800">{item.reason}</em>
+                    <span className="font-mono font-semibold text-slate-800">{safeRender(item.author || 'User')}</span>: "{safeRender(item.text)}" — <em className="text-amber-800">{safeRender(item.reason)}</em>
                   </li>
                 ))}
               </ul>
@@ -167,22 +167,22 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="px-1.5 py-0.5 rounded bg-teal-700 text-white font-mono text-[10px] font-bold">
-                      {task.id || `TASK-${idx + 1}`}
+                      {safeRender(task.id || `TASK-${idx + 1}`)}
                     </span>
-                    <strong className="text-slate-900 font-semibold">{task.title}</strong>
+                    <strong className="text-slate-900 font-semibold">{safeRender(task.title)}</strong>
                     {task.owner && (
                       <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
-                        {task.owner}
+                        {safeRender(task.owner)}
                       </span>
                     )}
                   </div>
                   {task.description && (
-                    <p className="text-slate-600 m-0 leading-relaxed text-[11.5px]">{task.description}</p>
+                    <p className="text-slate-600 m-0 leading-relaxed text-[11.5px]">{safeRender(task.description)}</p>
                   )}
                 </div>
                 {task.priority && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 shrink-0">
-                    {task.priority}
+                    {safeRender(task.priority)}
                   </span>
                 )}
               </div>
@@ -203,33 +203,33 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
               return (
                 <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
                   <span className="font-mono text-teal-700 font-bold shrink-0">
-                    {isObj && ac.id ? ac.id : `${idx + 1}.`}
+                    {isObj && ac.id ? safeRender(ac.id) : `${idx + 1}.`}
                   </span>
                   <div className="leading-relaxed flex-1 min-w-0">
                     {isObj ? (
                       <div className="space-y-1">
-                        {ac.scenario && <div className="font-semibold text-slate-900">{ac.scenario}</div>}
+                        {ac.scenario && <div className="font-semibold text-slate-900">{safeRender(ac.scenario)}</div>}
                         {ac.given && (
                           <div className="text-slate-600">
-                            <span className="font-mono font-medium text-slate-700">Given</span> {ac.given}
+                            <span className="font-mono font-medium text-slate-700">Given</span> {safeRender(ac.given)}
                           </div>
                         )}
                         {ac.when && (
                           <div className="text-slate-600">
-                            <span className="font-mono font-medium text-slate-700">When</span> {ac.when}
+                            <span className="font-mono font-medium text-slate-700">When</span> {safeRender(ac.when)}
                           </div>
                         )}
                         {ac.then && (
                           <div className="text-slate-700">
-                            <span className="font-mono font-semibold text-teal-800">Then</span> {ac.then}
+                            <span className="font-mono font-semibold text-teal-800">Then</span> {safeRender(ac.then)}
                           </div>
                         )}
                         {!ac.scenario && !ac.given && !ac.when && !ac.then && (
-                          <div>{typeof ac === 'object' ? JSON.stringify(ac) : String(ac)}</div>
+                          <div>{safeRender(ac)}</div>
                         )}
                       </div>
                     ) : (
-                      <span>{String(ac)}</span>
+                      <span>{safeRender(ac)}</span>
                     )}
                   </div>
                 </div>
@@ -250,10 +250,10 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
               key={i}
               className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-100 bg-slate-50/60 text-xs"
             >
-              <EvidencePill label={e.label} />
+              <EvidencePill label={safeRender(e.label)} />
               <div className="flex-1 text-slate-800">
-                <span className="font-semibold text-slate-900">{e.field}:</span>{' '}
-                {typeof e.value === 'object' ? (e.value?.scenario || e.value?.title || e.value?.id || JSON.stringify(e.value)) : e.value}
+                <span className="font-semibold text-slate-900">{safeRender(e.field)}:</span>{' '}
+                {safeRender(e.value)}
                 {e.quote_source && (
                   e.source_message?.match_status === 'matched' ? (
                     <blockquote className="mt-1 m-0 bg-white p-2 rounded border border-slate-200">
@@ -637,48 +637,56 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
               t.role === 'you' ? (
                 <div key={i} className="flex justify-end">
                   <div className="max-w-[85%] bg-slate-900 text-white rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed">
-                    {t.text}
+                    {safeRender(t.text)}
                   </div>
                 </div>
               ) : t.role === 'agent' ? (
-                <AnalysisCard key={i} result={t.result} skill={t.skill} tier={t.tier} />
+                t.result ? (
+                  <AnalysisCard key={i} result={t.result} skill={t.skill || 'startup_lean'} tier={t.tier || 'low'} />
+                ) : (
+                  <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
+                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap m-0">
+                      {safeRender((t as any).text || 'Analysis completed')}
+                    </p>
+                  </div>
+                )
               ) : t.role === 'ops' ? (
                 <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
                   <div className="flex items-baseline justify-between border-b border-slate-100 pb-2">
                     <h3 className="text-sm font-bold text-slate-900 m-0">
-                      Namespace: {t.diag.state.namespace}
+                      Namespace: {safeRender(t.diag?.state?.namespace)}
                     </h3>
                     <span
                       className={`text-xs font-mono font-semibold ${
-                        (t.diag.state.metrics.error_rate ?? 0) > 0.02
+                        (t.diag?.state?.metrics?.error_rate ?? 0) > 0.02
                           ? 'text-rose-700'
                           : 'text-emerald-700'
                       }`}
                     >
                       5xx Rate:{' '}
-                      {t.diag.state.metrics.error_rate === null
+                      {t.diag?.state?.metrics?.error_rate == null
                         ? '—'
                         : `${(t.diag.state.metrics.error_rate * 100).toFixed(2)}%`}
                     </span>
                   </div>
                   <div className="space-y-1.5">
-                    {t.diag.evidence.map((e: any, j: number) => (
+                    {(t.diag?.evidence || []).map((e: any, j: number) => (
                       <div key={j} className="flex items-start gap-2 text-xs">
-                        <EvidencePill label={e.label} />
+                        <EvidencePill label={safeRender(e.label)} />
                         <span className="text-slate-800">
-                          <b>{e.field}</b>: {e.value}
+                          <b>{safeRender(e.field)}</b>: {safeRender(e.value)}
                           <span className="block text-slate-500 font-mono text-[11px] mt-0.5">
-                            {e.source}
+                            {safeRender(e.source)}
                           </span>
                         </span>
                       </div>
                     ))}
                   </div>
-                  {t.diag.proposal && (
+                  {t.diag?.proposal && (
                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-800">
-                      Proposed <b>{t.diag.proposal.runbook}</b> on {t.diag.proposal.target} ·{' '}
+                      Proposed <b>{safeRender(t.diag.proposal.runbook)}</b> on {safeRender(t.diag.proposal.target)} ·{' '}
                       <span className="font-mono text-[11px] text-teal-800">
-                        {t.diag.proposal.action_id}
+                        {safeRender(t.diag.proposal.action_id)}
                       </span>
                     </div>
                   )}
@@ -687,28 +695,28 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
                 <div key={i} className="bg-white rounded-xl border border-teal-500/40 p-5 space-y-3">
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-sm font-bold text-slate-900 m-0">
-                      {t.proposal.summary}
+                      {safeRender(t.proposal?.summary)}
                     </h3>
                     <span className="text-xs font-mono text-slate-600">
-                      {t.proposal.action_id}
+                      {safeRender(t.proposal?.action_id)}
                     </span>
                   </div>
                   <div className="font-mono text-xs bg-slate-900 text-slate-100 rounded-lg p-3 space-y-1">
-                    <div className="text-rose-400">- {t.proposal.parameters.name}={t.proposal.observed}</div>
-                    <div className="text-emerald-400">+ {t.proposal.parameters.name}={t.proposal.parameters.value}</div>
+                    <div className="text-rose-400">- {safeRender(t.proposal?.parameters?.name)}={safeRender(t.proposal?.observed)}</div>
+                    <div className="text-emerald-400">+ {safeRender(t.proposal?.parameters?.name)}={safeRender(t.proposal?.parameters?.value)}</div>
                   </div>
                   <div className="text-[11px] text-slate-600 font-mono">
-                    ResourceVersion: {t.proposal.resource_version} (atomic lock)
+                    ResourceVersion: {safeRender(t.proposal?.resource_version)} (atomic lock)
                   </div>
                   {t.applied ? (
                     <div className="text-xs text-emerald-800 font-medium">
-                      Applied at {t.applied.at} by {t.applied.approver}. {t.applied.note}
+                      Applied at {safeRender(t.applied.at)} by {safeRender(t.applied.approver)}. {safeRender(t.applied.note)}
                     </div>
                   ) : t.error ? (
-                    <div className="text-xs text-rose-700 font-medium">{t.error}</div>
+                    <div className="text-xs text-rose-700 font-medium">{safeRender(t.error)}</div>
                   ) : (
                     <button
-                      onClick={() => applyProposal(i, t.proposal.action_id)}
+                      onClick={() => applyProposal(i, t.proposal?.action_id)}
                       className="px-4 py-2 rounded-lg bg-teal-700 text-white text-xs font-semibold hover:bg-teal-800 transition-all"
                     >
                       Verify Diff & Apply Patch
@@ -718,12 +726,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
               ) : t.role === 'reply' ? (
                 <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
                   <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap m-0">
-                    {t.text}
+                    {safeRender(t.text)}
                   </p>
                 </div>
               ) : (
                 <div key={i} className="text-xs text-rose-800 border border-rose-200 bg-rose-50 rounded-xl p-3">
-                  {t.text}
+                  {safeRender(t.text)}
                 </div>
               )
             )}

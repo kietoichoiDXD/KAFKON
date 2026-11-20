@@ -1599,12 +1599,29 @@ def slack_sync_analysis():
             )
             for i, ac in enumerate(analysis_data.get("acceptance_criteria", []))
         ]
-        evidence = [
-            EvidenceItem(**e) if isinstance(e, dict) else EvidenceItem(
-                field="Requirement", value=str(e), label=EvidenceLabel.VERIFIED
-            )
-            for e in analysis_data.get("evidence", [])
-        ]
+        evidence = []
+        for e in analysis_data.get("evidence", []):
+            if isinstance(e, dict):
+                raw_val = e.get("value", "")
+                if isinstance(raw_val, dict):
+                    val_str = raw_val.get("scenario") or raw_val.get("title") or json.dumps(raw_val, ensure_ascii=False)
+                else:
+                    val_str = str(raw_val or "")
+                try:
+                    lbl = EvidenceLabel(e.get("label", "Verified"))
+                except ValueError:
+                    lbl = EvidenceLabel.VERIFIED
+                evidence.append(EvidenceItem(
+                    field=str(e.get("field", "Requirement") or "Requirement"),
+                    value=val_str,
+                    label=lbl,
+                    quote_source=e.get("quote_source"),
+                    rationale=e.get("rationale"),
+                ))
+            else:
+                evidence.append(EvidenceItem(
+                    field="Requirement", value=str(e), label=EvidenceLabel.VERIFIED
+                ))
         invest_data = analysis_data.get("invest", {})
         invest = InvestScore(
             independent=invest_data.get("independent", 85),

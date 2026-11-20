@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { API, getApiUrl, safeFetchJson } from '../api';
+import { API, getApiUrl, safeFetchJson, safeRender } from '../api';
 import {
   MOCK_SLACK_CHANNELS,
   MOCK_SLACK_THREADS,
@@ -1073,7 +1073,8 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                       {e.label}
                     </span>
                     <div className="text-slate-800">
-                      <span className="font-semibold text-slate-900">{e.field}:</span> {e.value}
+                      <span className="font-semibold text-slate-900">{safeRender(e.field)}:</span>{' '}
+                      {safeRender(e.value)}
                       {e.quote_source && (
                         e.source_message?.match_status === 'matched' ? (
                           <blockquote className="mt-1 m-0 rounded border border-slate-200 bg-white p-2">

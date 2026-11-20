@@ -25,6 +25,29 @@ export const isGitHubPages = (): boolean => {
   return window.location.hostname.includes('github.io');
 };
 
+/**
+ * Safely converts any value (primitive, object, acceptance criterion, array) into a string
+ * to prevent React "Objects are not valid as a React child" crashes.
+ */
+export function safeRender(val: any): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (typeof val === 'object') {
+    if (typeof val.scenario === 'string') return val.scenario;
+    if (typeof val.title === 'string') return val.title;
+    if (typeof val.text === 'string') return val.text;
+    if (typeof val.name === 'string') return val.name;
+    if (typeof val.id === 'string' && Object.keys(val).length <= 2) return val.id;
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+}
+
 export type Health = {
   mode: string;
   analysis: string;
