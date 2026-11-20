@@ -553,12 +553,25 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       </div>
 
       {/https?:\/\/[a-z0-9\-.]*slack\.com\//i.test(promptInput) && (
-        <div className="mb-2.5 flex items-center justify-between rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs text-teal-900">
-          <div className="flex items-center gap-1.5 font-medium">
-            <span className="material-symbols-outlined text-[16px] text-teal-700">link</span>
-            <span>Slack Discussion Link Detected</span>
+        <div className="mb-2.5 flex items-center justify-between gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-950 flex-wrap">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="material-symbols-outlined text-[18px] text-purple-700">link</span>
+            <div>
+              <span className="font-bold">Đã nhận diện Link Slack!</span>
+              <span className="text-[11px] text-purple-700 ml-1.5 hidden sm:inline">
+                ScribeBA AI sẽ tự động vào kênh, gửi thông báo và trích xuất task vào ClickUp.
+              </span>
+            </div>
           </div>
-          <span className="font-mono text-[11px] text-teal-700 font-semibold">AI4L - AIO Workspace Connected</span>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={analyzing}
+            className="inline-flex items-center gap-1 rounded-md bg-purple-700 hover:bg-purple-800 text-white font-semibold text-[11px] px-2.5 py-1 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[14px]">rocket_launch</span>
+            <span>Đưa AI Vào & Phân Tích Ngay</span>
+          </button>
         </div>
       )}
 
