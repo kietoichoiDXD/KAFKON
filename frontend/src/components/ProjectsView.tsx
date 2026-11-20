@@ -193,11 +193,31 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
       method: 'POST',
     });
     if (res.ok && res.data?.active_project) {
-      setActiveProject(res.data.active_project);
+      const act = res.data.active_project;
+      setActiveProject(act);
       setFeedback({ type: 'success', text: `Đã chuyển sang không gian làm việc của project: ${project.name}` });
+      localStorage.setItem('scribeba.active_project_id', project.id);
+      window.dispatchEvent(new CustomEvent('project-changed', { detail: { project: act } }));
       if (onSelectView) {
-        setTimeout(() => onSelectView('home'), 600);
+        setTimeout(() => onSelectView('home'), 400);
       }
+    }
+  };
+
+  const handleStartProjectChat = async (project: ProjectItem) => {
+    await safeFetchJson(`${API}/api/projects/${project.id}/activate`, { method: 'POST' });
+    setActiveProject(project);
+    localStorage.setItem('scribeba.active_project_id', project.id);
+
+    // Create fresh clean session specifically for this project
+    const sessRes = await safeFetchJson<{ id: string }>(`${API}/api/projects/${project.id}/new-session`, {
+      method: 'POST',
+    });
+    const sessionId = sessRes.ok ? sessRes.data?.id : undefined;
+
+    window.dispatchEvent(new CustomEvent('project-changed', { detail: { project, sessionId } }));
+    if (onSelectView) {
+      onSelectView('home');
     }
   };
 
@@ -1148,6 +1168,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
                           {isActive ? 'check' : 'login'}
                         </span>
                         {isActive ? 'Đang làm việc' : 'Mở Project'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleStartProjectChat(project)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 shadow-2xs cursor-pointer ${
+                          isDarkMode
+                            ? 'bg-purple-900/60 text-purple-200 hover:bg-purple-800'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                        }`}
+                        title="Vào phiên chat riêng của dự án này (Khởi tạo phiên sạch, không dùng chat mẫu)"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">chat</span>
+                        <span>Chat Dự Án</span>
                       </button>
 
                       <button
