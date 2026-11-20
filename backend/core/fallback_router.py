@@ -88,8 +88,8 @@ class ModelFallbackRouter:
     }
 
     def __init__(self):
-        # Ultra-fast timeout (5s). Never let LLM or agents stall the user for too long.
-        self.http_timeout = 5.0
+        # Balanced timeout (15s): Allows fast LLM inference (7-10s) to finish comfortably while preventing infinite hangs.
+        self.http_timeout = 15.0
 
     def get_chain_for_tier(self, tier_name: str) -> List[Dict[str, str]]:
         tier_key = FallbackTier.MEDIUM

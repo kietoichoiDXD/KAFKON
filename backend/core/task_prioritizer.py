@@ -23,15 +23,25 @@ def prioritize_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         raw_priority = str(task.get("priority") or "").lower()
 
         is_completed = any(w in status_lower for w in ["done", "complete", "closed", "resolved"])
-        is_blocked = any(w in status_lower for w in ["block", "hold", "wait", "chặn"]) or any(
-            kw in text_lower for kw in ["blocker", "bị chặn", "chưa có api", "chờ duyệt", "lỗi nghiêm trọng"]
-        )
+
+        # Check blocker status accurately, avoiding false positives from phrases like "remove the blocker", "Blocked Claims: 0"
+        is_blocked = False
+        if any(w in status_lower for w in ["block", "hold", "chặn"]):
+            is_blocked = True
+        elif any(kw in text_lower for kw in ["bị chặn", "chưa có api", "chờ duyệt", "lỗi nghiêm trọng"]):
+            is_blocked = True
+        elif "blocker" in text_lower:
+            negations = ["remove the blocker", "remove blocker", "unblock", "no blocker", "0 blocker", "blocked claims: 0", "blocker: none", "blockers: none"]
+            if not any(neg in text_lower for neg in negations):
+                if any(kw in name.lower() for kw in ["blocker", "blocked"]) or "is blocked" in text_lower:
+                    is_blocked = True
         is_mvp_core = any(kw in text_lower for kw in [
             "mvp", "core", "sso", "auth", "đặt trước", "waitlist", "search", "tìm kiếm", "hàng đợi", "queue", "email"
         ])
+        # Check time-sensitivity: focus on urgent deadlines, explicit SLA warnings, rather than general session timeout settings
         is_time_sensitive = any(kw in text_lower for kw in [
-            "48h", "48 giờ", "deadline", "timeout", "hết hạn", "sla", "gấp", "khẩn cấp"
-        ])
+            "48h", "48 giờ", "deadline", "hết hạn", "khẩn cấp", "vi phạm sla", "sla breached"
+        ]) or any(kw in name.lower() for kw in ["gấp", "urgent", "sla", "timeout"])
         assignees = task.get("assignees") or []
         is_unassigned = len(assignees) == 0
 
@@ -54,25 +64,25 @@ def prioritize_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             miss_risk = "CRITICAL_BLOCKED"
             risk_reason = "🚨 Đang bị chặn (Blocker)! Đang cản trở tiến độ release và các module liên quan."
             action_needed = "Cần họp gỡ vướng hoặc gửi cảnh báo lên Slack ngay lập tức."
+        elif is_mvp_core:
+            if is_unassigned:
+                score = 92
+                tier = "URGENT"
+                miss_risk = "UNASSIGNED_HIGH_PRIORITY"
+                risk_reason = "🔥 Tính năng cốt lõi (MVP Core) nhưng chưa có người nhận trách nhiệm. Rất dễ bị bỏ sót!"
+                action_needed = "Phân công người phụ trách (Assignee) và chốt tiêu chí nghiệm thu."
+            else:
+                score = 85
+                tier = "HIGH"
+                miss_risk = "CORE_FEATURE"
+                risk_reason = "⭐ Tính năng quan trọng đang tiến hành. Cần theo dõi kiểm thử nghiệm thu."
+                action_needed = "Chuẩn bị test cases và kịch bản E2E."
         elif is_time_sensitive:
             score = 89
             tier = "URGENT"
             miss_risk = "TIME_SENSITIVE"
             risk_reason = "⏱️ Có ràng buộc thời gian (SLA / 48h timeout). Nguy cơ vi phạm trải nghiệm người dùng."
             action_needed = "Ưu tiên đưa vào Sprint Backlog hiện tại và chỉ định người phụ trách."
-        elif is_mvp_core:
-            if is_unassigned:
-                score = 88
-                tier = "HIGH"
-                miss_risk = "UNASSIGNED_HIGH_PRIORITY"
-                risk_reason = "🔥 Tính năng cốt lõi (MVP Core) nhưng chưa có người nhận trách nhiệm. Rất dễ bị bỏ sót!"
-                action_needed = "Phân công người phụ trách (Assignee) và chốt tiêu chí nghiệm thu."
-            else:
-                score = 80
-                tier = "HIGH"
-                miss_risk = "CORE_FEATURE"
-                risk_reason = "⭐ Tính năng quan trọng đang tiến hành. Cần theo dõi kiểm thử nghiệm thu."
-                action_needed = "Chuẩn bị test cases và kịch bản E2E."
         elif is_unassigned:
             score = 62
             tier = "NORMAL"
@@ -107,6 +117,22 @@ def prioritize_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "is_unassigned": is_unassigned,
         })
 
-    # Sort descending by importance score
-    prioritized.sort(key=lambda t: t.get("importance_score", 0), reverse=True)
+    # Sort descending by importance score, with tie-break favoring newest tasks first
+    def _sort_key(t: Dict[str, Any]):
+        score = t.get("importance_score", 0)
+        ts = 0.0
+        for field in ("updated_at", "created_at", "date_updated", "date_created"):
+            val = t.get(field)
+            if val is not None:
+                try:
+                    num = float(val)
+                    if num > 1e11:  # clickup timestamp in milliseconds
+                        num /= 1000.0
+                    if num > ts:
+                        ts = num
+                except (ValueError, TypeError):
+                    pass
+        return (score, ts)
+
+    prioritized.sort(key=_sort_key, reverse=True)
     return prioritized

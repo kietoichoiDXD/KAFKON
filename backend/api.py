@@ -1346,11 +1346,13 @@ def _save_chat_turn(owner_id: str, session_id: str, turn: dict) -> None:
                    (title, now, session_id))
 
 
-def _save_product_task(task_id: str, name: str, description: str, status: str = "to do", url: str = "", source: str = "analysis") -> None:
+def _save_product_task(task_id: str, name: str, description: str, status: str = "to do", url: str = "", source: str = "analysis", created_at: Optional[float] = None, updated_at: Optional[float] = None) -> None:
     """Persist or update a product task in SQLite database."""
     safe_name, _ = redact(str(name or "Untitled task"))
     safe_desc, _ = redact(str(description or ""))
     now = time.time()
+    ts_created = float(created_at) if created_at is not None else now
+    ts_updated = float(updated_at) if updated_at is not None else now
     with _chat_db() as db:
         db.execute("""
             INSERT INTO product_tasks (id, name, description, status, url, source, created_at, updated_at)
@@ -1360,15 +1362,16 @@ def _save_product_task(task_id: str, name: str, description: str, status: str = 
                 description=excluded.description,
                 status=excluded.status,
                 url=CASE WHEN excluded.url != '' THEN excluded.url ELSE product_tasks.url END,
+                created_at=CASE WHEN excluded.created_at IS NOT NULL AND excluded.created_at > 0 THEN excluded.created_at ELSE product_tasks.created_at END,
                 updated_at=excluded.updated_at
-        """, (str(task_id), safe_name, safe_desc, str(status or "to do"), str(url or ""), str(source or "analysis"), now, now))
+        """, (str(task_id), safe_name, safe_desc, str(status or "to do"), str(url or ""), str(source or "analysis"), ts_created, ts_updated))
 
 
 def _get_product_tasks(limit: int = 100) -> List[dict]:
     """Retrieve product tasks ordered newest first."""
     with _chat_db() as db:
         rows = db.execute(
-            "SELECT id, name, description, status, url, source, created_at, updated_at FROM product_tasks ORDER BY updated_at DESC LIMIT ?",
+            "SELECT id, name, description, status, url, source, created_at, updated_at FROM product_tasks ORDER BY max(COALESCE(created_at, 0), COALESCE(updated_at, 0)) DESC LIMIT ?",
             (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
@@ -1433,7 +1436,7 @@ def _get_projects() -> List[dict]:
                     "main",
                     "D:/Hackathon/AITinker",
                     "C0CFE9GL4AK (#all-ai4l-aio)",
-                    "901202868154",
+                    settings.clickup_list_id or "901807029788",
                     "#library-dev",
                     "@library_bot",
                     "Tập trung vào logic hàng đợi thư viện, quy tắc 48h, gửi email cho sinh viên đầu tiên và tránh nhiễu phòng họp.",
@@ -1453,7 +1456,7 @@ def _get_projects() -> List[dict]:
                     "main",
                     "D:/Hackathon/AITinker",
                     "C0CFE9GL4AK (#all-ai4l-aio)",
-                    "901202868154",
+                    settings.clickup_list_id or "901807029788",
                     "#search-infra",
                     "",
                     "Tập trung vào tìm kiếm ngữ nghĩa, gợi ý từ khóa typo correction và đo lường bounce rate.",
@@ -1472,7 +1475,7 @@ def _get_projects() -> List[dict]:
                     "master",
                     "D:/Hackathon/AITinker",
                     "C0AUTH001 (#proj-auth-federation)",
-                    "901202868154",
+                    settings.clickup_list_id or "901807029788",
                     "#security-secops",
                     "",
                     "Tuân thủ nghiêm ngặt chuẩn OIDC, RFC 6749, phiên làm việc 8h và chỉ chấp nhận domain @acmecorp.com.",
@@ -2452,27 +2455,74 @@ def bring_ai_to_link():
                     (json.dumps(channels, ensure_ascii=False), f"{channel_id} (#{channel_name})", time.time(), project_id)
                 )
 
-        # 7. Run AI Multi-Agent analysis if requested
+        # 7. Run AI Multi-Agent analysis if requested & sync directly to ClickUp
         analysis_data = None
+        ticket_id = None
+        ticket_url = None
+        permalink = await slack.get_permalink(channel_id, actual_ts) if actual_ts else ""
+
         if auto_analyze and thread and thread.messages:
             try:
                 result = await analyzer.analyze_thread(thread, skill_name=skill_name, tier=tier, force_live=True)
                 analysis_data = _serialize(result)
+
+                # Resolve target ClickUp list for this project
+                target_list_id = None
+                with _chat_db() as db:
+                    p_row = db.execute("SELECT clickup_list_id FROM projects WHERE id=?", (project_id,)).fetchone()
+                    if p_row and p_row["clickup_list_id"]:
+                        target_list_id = p_row["clickup_list_id"]
+                target_list_id = target_list_id or settings.clickup_list_id
+
+                from .integrations.clickup_client import ClickUpClient
+                cu_client = ClickUpClient(list_id=target_list_id)
+                active_skill = analyzer.skill_manager.get_skill(skill_name)
+                ticket = await cu_client.create_task_from_analysis(
+                    result,
+                    active_skill,
+                    thread_url=permalink or f"https://slack.com/archives/{channel_id}"
+                )
+
+                if ticket and ticket.created_task_id:
+                    ticket_id = ticket.created_task_id
+                    ticket_url = ticket.clickup_url
+                    # Post confirmation back to Slack with direct ClickUp task link
+                    try:
+                        slack_msg = {
+                            "channel": channel_id,
+                            "text": f"✅ *[ClickUp Task Created]* <{ticket.clickup_url}|[{ticket.created_task_id}] {ticket.title}> [Priority: {ticket.priority.upper()}]"
+                        }
+                        if actual_ts:
+                            slack_msg["thread_ts"] = actual_ts
+                        await slack._call("chat.postMessage", slack_msg)
+                    except Exception as e:
+                        logger.warning("Could not post ClickUp confirmation to Slack: %s", e)
+
+                    # Save main story to local tasks with ClickUp link
+                    _save_product_task(
+                        task_id=ticket_id,
+                        name=result.story.title,
+                        description=result.story.i_want,
+                        status="to do",
+                        url=ticket_url or "",
+                        source="clickup"
+                    )
+
+                # Save decomposed subtasks
                 if result.decomposed_tasks:
-                    for task in result.decomposed_tasks:
-                        task_id = f"task-{uuid.uuid4().hex[:8]}"
+                    for idx, task in enumerate(result.decomposed_tasks):
+                        sub_task_id = f"{ticket_id}-sub-{idx+1}" if ticket_id else f"task-{uuid.uuid4().hex[:8]}"
                         _save_product_task(
-                            task_id=task_id,
+                            task_id=sub_task_id,
                             name=task.title,
-                            description=task.description or "",
+                            description=f"{task.description or ''} | Assignee: {task.owner or 'Unassigned'}",
                             status="to do",
-                            url="",
-                            source="slack_link_agent"
+                            url=ticket_url or "",
+                            source="clickup" if ticket_id else "slack_link_agent"
                         )
             except Exception as exc:
                 logger.warning("AI analysis error on brought slack link: %s", exc)
 
-        permalink = await slack.get_permalink(channel_id, actual_ts) if actual_ts else ""
         return {
             "channel_id": channel_id,
             "channel_name": channel_name,
@@ -2482,7 +2532,9 @@ def bring_ai_to_link():
             "announcement_ts": announcement_ts,
             "project_id": project_id,
             "project_name": project_name,
-            "analysis": analysis_data
+            "analysis": analysis_data,
+            "ticket_id": ticket_id,
+            "ticket_url": ticket_url
         }
 
     try:
@@ -2500,28 +2552,27 @@ def bring_ai_to_link():
 @app.get("/api/clickup/tasks")
 def clickup_tasks():
     """Return a unified, bounded list of tasks: local DB tasks merged with live ClickUp list, newest first."""
-    db_tasks = _get_product_tasks(limit=100)
-    existing_ids = {t["id"] for t in db_tasks}
     live_tasks: List[dict] = []
     try:
         live_tasks = asyncio.run(ClickUpClient().list_tasks())
         for t in live_tasks:
-            if t["id"] not in existing_ids:
-                try:
-                    _save_product_task(
-                        task_id=t["id"],
-                        name=t["name"],
-                        description=t.get("description") or "",
-                        status=t.get("status") or "to do",
-                        url=t.get("url") or "",
-                        source="clickup"
-                    )
-                except Exception:
-                    pass
-        db_tasks = _get_product_tasks(limit=100)
+            try:
+                _save_product_task(
+                    task_id=t["id"],
+                    name=t["name"],
+                    description=t.get("description") or "",
+                    status=t.get("status") or "to do",
+                    url=t.get("url") or "",
+                    source="clickup",
+                    created_at=t.get("created_at"),
+                    updated_at=t.get("updated_at")
+                )
+            except Exception:
+                pass
     except Exception as exc:
         logger.info("ClickUp live fetch skipped or failed: %s", exc)
 
+    db_tasks = _get_product_tasks(limit=100)
     if db_tasks:
         return jsonify({"tasks": db_tasks})
     elif live_tasks:

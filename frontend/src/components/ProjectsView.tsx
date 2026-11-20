@@ -66,6 +66,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
     messages_count?: number;
     project_name?: string;
     analysis?: any;
+    ticket_id?: string;
+    ticket_url?: string;
   } | null>(null);
 
   // Modal Direct Slack Link State
@@ -117,7 +119,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
     setFormBranch('main');
     setFormLocalPath('D:/Hackathon/AITinker');
     setFormSlack('#all-ai4l-aio');
-    setFormClickUp('901202868154');
+    setFormClickUp('901807029788');
     setFormDiscord('');
     setFormAiInstructions('');
     setFormStatus('active');
@@ -430,6 +432,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
           messages_count: res.data.messages_count,
           project_name: res.data.project_name,
           analysis: res.data.analysis,
+          ticket_id: (res.data as any).ticket_id,
+          ticket_url: (res.data as any).ticket_url,
         });
         await loadProjects();
       } else {
@@ -857,6 +861,17 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
                             className="font-semibold underline inline-flex items-center gap-0.5 hover:opacity-80"
                           >
                             <span>Mở nguồn Slack</span>
+                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                          </a>
+                        )}
+                        {bringAiFeedback.ticket_url && (
+                          <a
+                            href={bringAiFeedback.ticket_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold underline text-purple-700 dark:text-purple-300 inline-flex items-center gap-0.5 hover:opacity-80"
+                          >
+                            <span>✅ Xem trên ClickUp</span>
                             <span className="material-symbols-outlined text-[13px]">open_in_new</span>
                           </a>
                         )}

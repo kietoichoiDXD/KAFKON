@@ -28,9 +28,12 @@ class ClickUpClient:
         for page in range(max_pages):
             url = f"https://api.clickup.com/api/v2/list/{self.list_id}/task"
             headers = {"Authorization": self.api_key, "Content-Type": "application/json"}
-            params = {"page": page, "per_page": page_size, "order_by": "updated", "reverse": "true", "include_closed": "true", "subtasks": "true"}
+            params = {"page": page, "per_page": page_size, "order_by": "created", "reverse": "false", "include_closed": "true", "subtasks": "true"}
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=headers, params=params)
+                if response.status_code == 404 and settings.clickup_list_id and self.list_id != settings.clickup_list_id:
+                    fallback_url = f"https://api.clickup.com/api/v2/list/{settings.clickup_list_id}/task"
+                    response = await client.get(fallback_url, headers=headers, params=params)
                 response.raise_for_status()
                 data = response.json()
             tasks = data.get("tasks", [])
@@ -55,6 +58,9 @@ class ClickUpClient:
                     "assignees": assignees,
                     "tags": tags,
                     "date_updated": str(task.get("date_updated") or ""),
+                    "date_created": str(task.get("date_created") or ""),
+                    "created_at": (float(task["date_created"]) / 1000.0) if task.get("date_created") else None,
+                    "updated_at": (float(task["date_updated"]) / 1000.0) if task.get("date_updated") else None,
                 })
             if len(tasks) < page_size:
                 break
@@ -205,6 +211,9 @@ class ClickUpClient:
         }
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code == 404 and settings.clickup_list_id and self.list_id != settings.clickup_list_id:
+                fallback_url = f"https://api.clickup.com/api/v2/list/{settings.clickup_list_id}/task"
+                resp = await client.post(fallback_url, headers=headers, json=payload)
             resp.raise_for_status()
             return resp.json()
 

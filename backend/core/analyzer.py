@@ -153,9 +153,10 @@ class ScribeBAAnalyzer:
         # 2. Extract real feature topic dynamically from transcript
         feature_title = None
         topic_patterns = [
+            r'(?i)\[?(?:feature|story|epic|mvp)\]?[:\s-]+([^\.\n:;]+)',
             r'(?i)(?:cần\s+làm|triển\s+khai|tính\s+năng|chức\s+năng|phát\s+triển|xây\s+dựng|hệ\s+thống|tạo|tích\s+hợp|nâng\s+cấp|làm|bổ\s+sung)\s+([^\.\n,?!:;]+)',
-            r'(?i)(?:implement|build|develop|feature|add|create|setup|support)\s+([^\.\n,?!:;]+)',
-            r'(?i)(?:mvp:?|story:?|epic:?)\s*([^\.\n:;]+)',
+            r'(?i)(?:implement|build|develop|feature|setup|support)\s+([^\.\n,?!:;]+)',
+            r'(?i)(?:add|create)\s+([^\.\n,?!:;]+)',
         ]
 
         for pattern in topic_patterns:
@@ -163,6 +164,9 @@ class ScribeBAAnalyzer:
             for m in matches:
                 candidate = m.strip().strip('"\'')
                 if len(candidate) > 4 and len(candidate.split()) >= 2:
+                    cand_lower = candidate.lower()
+                    if any(bad in cand_lower for bad in ["sso_provider", "unique constraints", "column", "migration"]):
+                        continue
                     candidate = re.sub(r'^(chức\s+năng|tính\s+năng|hệ\s+thống|module|phần)\s+', '', candidate, flags=re.IGNORECASE)
                     feature_title = candidate[0].upper() + candidate[1:]
                     break
@@ -415,7 +419,7 @@ Return strictly valid JSON matching this schema:
                     skill=skill,
                     tier=tier
                 ),
-                timeout=5.0
+                timeout=15.0
             )
 
             if parsed and parsed.get("story"):
