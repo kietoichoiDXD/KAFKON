@@ -56,29 +56,29 @@ class ModelFallbackRouter:
     # error, and the run silently degrades to the local engine.
     TIER_MODEL_MAP: Dict[FallbackTier, List[Dict[str, str]]] = {
         FallbackTier.LOW: [
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-haiku-4.5",  "provider": "openrouter"},
             {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-8b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "qwen/qwen-2.5-7b-instruct",   "provider": "openrouter"},
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-haiku-4-5",            "provider": "anthropic"},
             {"alias": "openai_direct",      "model": "",                            "provider": "openai"},
         ],
         FallbackTier.MEDIUM: [
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-sonnet-5",   "provider": "openrouter"},
             {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-70b-instruct", "provider": "openrouter"},
             {"alias": "sol",                "model": "deepseek/deepseek-chat-v3.1", "provider": "openrouter"},
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-sonnet-5",             "provider": "anthropic"},
             {"alias": "openai_direct",      "model": "",                            "provider": "openai"},
         ],
         FallbackTier.HIGH: [
+            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-opus-5",     "provider": "openrouter"},
             {"alias": "gemini_pro",         "model": "gemini-2.5-pro",              "provider": "gemini"},
             {"alias": "luna",               "model": "deepseek/deepseek-r1",        "provider": "openrouter"},
             {"alias": "sol",                "model": "google/gemini-2.5-pro",       "provider": "openrouter"},
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
             {"alias": "anthropic_direct",   "model": "claude-opus-5",               "provider": "anthropic"},
             {"alias": "openai_direct",      "model": "",                            "provider": "openai"},
         ]
