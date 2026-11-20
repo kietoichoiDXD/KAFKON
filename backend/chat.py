@@ -174,12 +174,55 @@ class ChatResponder:
                     }
 
                 permalink = await slack.get_permalink(channel_id, ts)
+
+                # Post entry announcement in Slack thread
+                try:
+                    await slack._call("chat.postMessage", {
+                        "channel": channel_id,
+                        "thread_ts": ts,
+                        "text": (
+                            f"🤖 *[ScribeBA AI Agent]* Đã tham gia luồng thảo luận qua liên kết trực tiếp!\n"
+                            f"• Đang phân tích hội thoại ({len(thread.messages)} tin nhắn), lọc nhiễu và trích xuất task vào ClickUp."
+                        )
+                    })
+                except Exception:
+                    pass
+
                 result = await self.analyzer.analyze_thread(
                     thread, skill_name=skill, tier=tier, force_live=True
                 )
                 for evidence in result.evidence_items:
                     if evidence.source_message and evidence.source_message.match_status == "matched":
                         evidence.source_message.thread_url = permalink or None
+
+                # Auto-connect channel to project in DB if not already linked
+                try:
+                    import json
+                    import time
+                    from .core.cloud_db import cloud_db
+                    with cloud_db.get_connection() as db:
+                        p_row = db.execute("SELECT id, name, social_channels_json FROM projects ORDER BY updated_at DESC LIMIT 1").fetchone()
+                        if p_row:
+                            p_id = p_row["id"]
+                            raw_json = p_row["social_channels_json"] or "[]"
+                            try:
+                                ch_list = json.loads(raw_json)
+                            except Exception:
+                                ch_list = []
+                            if not any(c.get("id") == channel_id for c in ch_list):
+                                ch_list.append({
+                                    "id": channel_id,
+                                    "name": channel_id,
+                                    "platform": "slack",
+                                    "is_primary": False,
+                                    "purpose": "Hội thoại kỹ thuật & Task extraction (Link paste)"
+                                })
+                                db.execute(
+                                    "UPDATE projects SET social_channels_json=?, updated_at=? WHERE id=?",
+                                    (json.dumps(ch_list, ensure_ascii=False), time.time(), p_id)
+                                )
+                except Exception:
+                    pass
 
                 return {
                     "type": "analysis",
