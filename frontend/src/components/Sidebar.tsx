@@ -118,8 +118,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-content flex flex-col flex-1 min-h-0">
         <div className="sidebar-brandbar h-14 px-3 flex items-center justify-between border-b border-slate-200">
           <div
+            role="button"
+            tabIndex={0}
             className="flex items-center gap-2.5 cursor-pointer group"
             onClick={() => onSelectView('home')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelectView('home');
+              }
+            }}
           >
             <div className="w-8 h-8 rounded-md bg-slate-900 text-teal-400 font-bold flex items-center justify-center text-sm group-hover:bg-slate-800 transition-colors">
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">hub</span>
@@ -133,6 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onToggleCollapse}
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
@@ -147,6 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Action Button: New Session */}
         <div className="sidebar-new-session p-3">
           <button
+            type="button"
             onClick={onNewChat}
             aria-label="Start a new session"
             title="Start a new session"
@@ -163,6 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const isActive = currentView === item.id;
             return (
               <button
+                type="button"
                 key={item.id}
                 onClick={() => onSelectView(item.id)}
                 title={item.label}
@@ -222,6 +233,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center justify-between px-2.5 py-1 text-slate-700 text-[13px] font-semibold">
               <span>Recent runs</span>
               <button
+                type="button"
                 onClick={() => setSearchQuery(q => (q ? '' : ' '))}
                 className="hover:text-slate-900 text-slate-600"
                 title="Search runs"
@@ -252,6 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const isActive = activeChatId === chat.id;
                 return (
                   <button
+                    type="button"
                     key={chat.id}
                     onClick={() => {
                       setActiveChatId(chat.id);
@@ -285,6 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom Footer Section */}
       <div className="p-2 border-t border-slate-200 space-y-1">
         <button
+          type="button"
           onClick={() => onOpenCustomize('Agents')}
           className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 transition-colors text-left"
         >

@@ -134,7 +134,24 @@ export async function safeFetchJson<T>(url: string, init?: RequestInit): Promise
         error: `Endpoint returned HTML (${r.status} ${r.statusText}). When on GitHub Pages, start backend with 'python -m backend.cli serve' or connect your backend URL.`,
       };
     }
-    const data = await r.json();
+    const text = await r.text();
+    if (!text.trim()) {
+      return {
+        ok: false,
+        data: null,
+        error: `Server returned empty response (${r.status} ${r.statusText}).`,
+      };
+    }
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return {
+        ok: false,
+        data: null,
+        error: `Malformed JSON response from server (${r.status} ${r.statusText}).`,
+      };
+    }
     if (!r.ok) {
       return {
         ok: false,
