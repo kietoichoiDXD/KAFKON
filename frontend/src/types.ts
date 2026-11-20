@@ -182,6 +182,9 @@ export interface RoomAgentConfig {
   autonomy_mode: 'Supervised' | 'Semi-Autonomous' | 'Autonomous';
   verification_rigor: 'Strict 3-Axis' | 'Balanced';
   temperature: number;
+  avatar?: string;
+  repo_binding?: string;
+  skills?: string[];
 }
 
 export interface RoomTask {
@@ -193,6 +196,11 @@ export interface RoomTask {
   assigned_to: string;
   source_anchor: string;
   story?: string;
+  dispatch_status?: 'pending_review' | 'approved' | 'dispatched' | 'rejected';
+  execution_steps?: string[];
+  target_files?: string[];
+  assigned_agent_id?: string;
+  clickup_url?: string;
 }
 
 export interface RoomChatMessage {
@@ -203,6 +211,8 @@ export interface RoomChatMessage {
   text: string;
   has_tree?: boolean;
   has_tasks?: boolean;
+  avatar?: string;
+  agent_role?: string;
 }
 
 export interface RoomItem {
@@ -212,6 +222,9 @@ export interface RoomItem {
   description: string;
   social_links: RoomSocialLink[];
   agent_config: RoomAgentConfig;
+  squad_agents?: RoomAgentConfig[];
+  repo_url?: string;
+  local_path?: string;
   tasks: RoomTask[];
   chat_messages: RoomChatMessage[];
 }

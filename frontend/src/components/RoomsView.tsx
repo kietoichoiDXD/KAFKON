@@ -9,6 +9,7 @@ import {
 } from '../types';
 import {
   SPECIALIZED_PM_AGENTS,
+  DEFAULT_SQUAD_AGENTS,
   CURATED_OSS_REPOS,
   DEFAULT_PRODUCTION_TREE,
   INITIAL_ROOMS,
@@ -98,6 +99,27 @@ export const RoomsView: React.FC = () => {
   const [chatPlatformSender, setChatPlatformSender] = useState<'Slack' | 'Discord' | 'Telegram' | 'PM Lead'>('Slack');
   const [isAiThinking, setIsAiThinking] = useState(false);
 
+  // Multi-Agent Swarm Debate state
+  const [isDebateModalOpen, setIsDebateModalOpen] = useState(false);
+  const [isDebating, setIsDebating] = useState(false);
+  const [debateTopic, setDebateTopic] = useState('');
+
+  // Task Review & Dispatch state
+  const [isDispatchingTask, setIsDispatchingTask] = useState<string | null>(null);
+  const [dispatchSuccessMsg, setDispatchSuccessMsg] = useState<string | null>(null);
+
+  // Add Agent from Repo / Custom modal state
+  const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
+  const [newAgentName, setNewAgentName] = useState('');
+  const [newAgentAvatar, setNewAgentAvatar] = useState('🤖');
+  const [newAgentRole, setNewAgentRole] = useState('');
+  const [newAgentRepo, setNewAgentRepo] = useState('');
+  const [newAgentInstructions, setNewAgentInstructions] = useState('');
+  const [newAgentModel, setNewAgentModel] = useState('Nebius Qwen-30B (Fast)');
+  const [newAgentAutonomy, setNewAgentAutonomy] = useState<'Supervised' | 'Semi-Autonomous' | 'Autonomous'>('Semi-Autonomous');
+  const [isSavingAgent, setIsSavingAgent] = useState(false);
+  const [selectedAgentToEditId, setSelectedAgentToEditId] = useState<string>('lead-agile-pm');
+
   // Persist selected room, active tab, and draft input to localStorage
   useEffect(() => {
     if (selectedRoomId) localStorage.setItem('scribeba_selected_room', selectedRoomId);
@@ -148,7 +170,12 @@ export const RoomsView: React.FC = () => {
         .then(data => {
           if (data && Array.isArray(data.chat_messages)) {
             setRooms(prev =>
-              prev.map(r => (r.id === targetRoomId ? { ...r, chat_messages: data.chat_messages } : r))
+              prev.map(r => (r.id === targetRoomId ? {
+                ...r,
+                chat_messages: data.chat_messages,
+                tasks: data.tasks || r.tasks,
+                squad_agents: data.squad_agents || r.squad_agents,
+              } : r))
             );
           }
         })
@@ -407,6 +434,134 @@ export const RoomsView: React.FC = () => {
     );
   };
 
+  // Handle Multi-Agent Swarm Debate
+  const handleRunSwarmDebate = async (customTopic?: string) => {
+    if (!currentRoom) return;
+    setIsDebating(true);
+    const topicToUse = customTopic || debateTopic.trim() || currentRoom.topic || currentRoom.description;
+    try {
+      const res = await fetch(`${API}/api/rooms/${currentRoom.id}/swarm-debate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ topic: topicToUse }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRooms(prev => prev.map(r => (r.id === data.room.id ? { ...data.room } : r)));
+        }
+      }
+    } catch (err) {
+      console.error('Swarm debate error:', err);
+    } finally {
+      setIsDebating(false);
+      setIsDebateModalOpen(false);
+    }
+  };
+
+  // Handle Review & Dispatch Task
+  const handleDispatchTask = async (taskId: string, action: 'approve' | 'reject' | 'dispatch_clickup', notes?: string) => {
+    if (!currentRoom) return;
+    setIsDispatchingTask(taskId);
+    try {
+      const res = await fetch(`${API}/api/rooms/${currentRoom.id}/dispatch-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ task_id: taskId, action, notes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRooms(prev => prev.map(r => (r.id === data.room.id ? { ...data.room } : r)));
+        }
+        if (action === 'dispatch_clickup' && data.task?.clickup_url) {
+          setDispatchSuccessMsg(`🚀 Đã đồng bộ nhiệm vụ lên ClickUp: "${data.task.title}"`);
+          setTimeout(() => setDispatchSuccessMsg(null), 6000);
+        } else if (action === 'approve') {
+          setDispatchSuccessMsg(`✅ Đã phê duyệt và giao việc: "${data.task.title}"`);
+          setTimeout(() => setDispatchSuccessMsg(null), 5000);
+        }
+      }
+    } catch (err) {
+      console.error('Dispatch task error:', err);
+    } finally {
+      setIsDispatchingTask(null);
+    }
+  };
+
+  // Save Agent in Squad (Customized or from Repo)
+  const handleSaveSquadAgent = async (agent: RoomAgentConfig) => {
+    if (!currentRoom) return;
+    setIsSavingAgent(true);
+    try {
+      const res = await fetch(`${API}/api/rooms/${currentRoom.id}/agents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(agent),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRooms(prev => prev.map(r => (r.id === data.room.id ? { ...data.room } : r)));
+        }
+        setDispatchSuccessMsg(`✨ Đã lưu cấu hình Agent: ${agent.agent_name}`);
+        setTimeout(() => setDispatchSuccessMsg(null), 4000);
+      }
+    } catch (err) {
+      console.error('Save squad agent error:', err);
+    } finally {
+      setIsSavingAgent(false);
+      setIsAddAgentModalOpen(false);
+    }
+  };
+
+  // Delete Agent from Squad
+  const handleDeleteSquadAgent = async (agentId: string) => {
+    if (!currentRoom) return;
+    try {
+      const res = await fetch(`${API}/api/rooms/${currentRoom.id}/agents/${agentId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setRooms(prev =>
+          prev.map(r => {
+            if (r.id !== currentRoom.id) return r;
+            return {
+              ...r,
+              squad_agents: (r.squad_agents || []).filter(a => a.agent_id !== agentId),
+            };
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Delete squad agent error:', err);
+    }
+  };
+
+  // 1-Click activate OSS repo into room squad
+  const handleInstallCuratedRepo = async (repo: any) => {
+    if (!currentRoom) return;
+    const newAgent: RoomAgentConfig = {
+      agent_id: `agent-oss-${repo.repo.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      agent_name: `${repo.title} Agent`,
+      avatar: '⚡',
+      role: repo.role,
+      repo_binding: repo.url,
+      skills: [repo.role.toLowerCase().replace(/\s+/g, '_')],
+      instructions: `Ground yourself in the open-source repository ${repo.repo} (${repo.url}). ${repo.description}`,
+      model_tier: 'Nebius Qwen-30B (Fast)',
+      autonomy_mode: 'Semi-Autonomous',
+      verification_rigor: 'Strict 3-Axis',
+      temperature: 0.2,
+    };
+    await handleSaveSquadAgent(newAgent);
+    setActiveTab('chat');
+  };
+
   // Toggle Social Channel
   const handleToggleChannel = (index: number) => {
     if (!currentRoom) return;
@@ -607,52 +762,105 @@ export const RoomsView: React.FC = () => {
               {activeTab === 'chat' && (
                 <div className="max-w-5xl mx-auto h-full flex flex-col bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                   {/* Room chat and shortcuts */}
-                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Room conversation</span>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Messages here stay in this room. Connect a channel in Channels to import or send social messages.</p>
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Room conversation</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Messages here stay in this room. Connect a channel in Channels to import or send social messages.</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-slate-500 mr-1">Shortcuts:</span>
+                        <button
+                          onClick={() => handleSendMessage('/tree')}
+                          className="px-2.5 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
+                          title="Show the repository tree in the conversation"
+                        >
+                          <span>Code tree</span>
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage('/sync')}
+                          className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
+                          title="Sync latest discussion from Slack channel"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">sync</span>
+                          <span>Sync Slack</span>
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage('/tasks')}
+                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <span>Room tasks</span>
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage('Check for any unverified claims or blocked requirements')}
+                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors"
+                        >
+                          <span>Review open questions</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11px] font-semibold text-slate-500 mr-1">Shortcuts:</span>
+                    {/* Active Agent Squad bar & Swarm Debate Trigger */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mr-1">
+                          <span className="material-symbols-outlined text-[15px] text-teal-600">groups</span>
+                          Hội đồng Agent ({(currentRoom.squad_agents || DEFAULT_SQUAD_AGENTS).length}):
+                        </span>
+                        {(currentRoom.squad_agents || DEFAULT_SQUAD_AGENTS).map(agent => (
+                          <span
+                            key={agent.agent_id}
+                            title={`${agent.role} · Model: ${agent.model_tier}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white text-slate-800 border border-slate-200 shadow-2xs hover:border-teal-400 hover:bg-teal-50/50 cursor-pointer transition-colors"
+                            onClick={() => {
+                              setSelectedAgentToEditId(agent.agent_id);
+                              setActiveTab('agent');
+                            }}
+                          >
+                            <span>{agent.avatar || '🤖'}</span>
+                            <span className="font-semibold">{agent.agent_name.replace(' & INVEST Scorer', '').replace(' & System Architect', '').replace(' & DevSecOps Auditor', '').replace(' & Execution Specialist', '')}</span>
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Swarm Debate Action Trigger */}
                       <button
-                        onClick={() => handleSendMessage('/tree')}
-                        className="px-2.5 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
-                        title="Show the repository tree in the conversation"
+                        disabled={isDebating}
+                        onClick={() => {
+                          setDebateTopic(currentRoom.topic || currentRoom.description || '');
+                          setIsDebateModalOpen(true);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all ${
+                          isDebating
+                            ? 'bg-teal-100 text-teal-700 cursor-wait'
+                            : 'bg-gradient-to-r from-teal-600 via-indigo-600 to-purple-600 hover:from-teal-700 hover:to-purple-700 text-white'
+                        }`}
                       >
-                        <span>Code tree</span>
-                      </button>
-                      <button
-                        onClick={() => handleSendMessage('/sync')}
-                        className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
-                        title="Sync latest discussion from Slack channel"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">sync</span>
-                        <span>Sync Slack</span>
-                      </button>
-                      <button
-                        onClick={() => handleSendMessage('/tasks')}
-                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <span>Room tasks</span>
-                      </button>
-                      <button
-                        onClick={() => handleSendMessage('Check for any unverified claims or blocked requirements')}
-                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors"
-                      >
-                        <span>Review open questions</span>
+                        <span className="material-symbols-outlined text-[15px] animate-spin-slow">
+                          {isDebating ? 'sync' : 'forum'}
+                        </span>
+                        <span>{isDebating ? 'Đang tranh biện...' : '🤖 Thảo luận Đa Agent'}</span>
                       </button>
                     </div>
+
+                    {dispatchSuccessMsg && (
+                      <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 animate-fadeIn">
+                        <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                        <span>{dispatchSuccessMsg}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Messages Feed */}
                   <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 bg-slate-50/50">
                     {currentRoom.chat_messages.map(msg => {
                       const isAi = msg.platform === 'AI Agent';
+                      const isHumanGate = msg.sender.includes('Human PM Gate') || msg.sender.includes('[Human Gate]');
                       return (
                         <div
                           key={msg.id}
-                          className={`flex flex-col ${isAi ? 'items-start' : 'items-start'} max-w-3xl`}
+                          className={`flex flex-col items-start max-w-3xl ${isHumanGate ? 'w-full' : ''}`}
                         >
                           <div className="flex items-center gap-2 mb-1">
                             <span
@@ -663,20 +871,32 @@ export const RoomsView: React.FC = () => {
                                   ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
                                   : msg.platform === 'Telegram'
                                   ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                  : isHumanGate
+                                  ? 'bg-purple-100 text-purple-900 border-purple-300 font-bold'
                                   : msg.platform === 'AI Agent'
                                   ? 'bg-teal-50 text-teal-900 border-teal-300 font-bold'
                                   : 'bg-slate-100 text-slate-700 border-slate-200'
                               }`}
                             >
-                              {msg.platform}
+                              {isHumanGate ? 'Human Gate' : msg.platform}
                             </span>
-                            <span className="text-xs font-bold text-slate-900">{msg.sender}</span>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                              {msg.avatar && <span>{msg.avatar}</span>}
+                              <span>{msg.sender}</span>
+                            </span>
+                            {msg.agent_role && (
+                              <span className="text-[10px] text-teal-700 font-medium bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                                {msg.agent_role}
+                              </span>
+                            )}
                             <span className="text-[11px] text-slate-500 font-mono">{msg.time}</span>
                           </div>
 
                           <div
                             className={`p-3.5 rounded-xl border text-xs leading-relaxed ${
-                              isAi
+                              isHumanGate
+                                ? 'bg-purple-50/90 border-purple-300 text-purple-950 shadow-xs w-full font-sans'
+                                : isAi
                                 ? 'bg-teal-50/60 border-teal-200 text-slate-900 shadow-xs'
                                 : 'bg-white border-slate-200 text-slate-800 shadow-xs'
                             }`}
@@ -919,6 +1139,103 @@ export const RoomsView: React.FC = () => {
                     </button>
                   </div>
 
+                  {/* Human Review Gate for Pending Dispatch Tasks */}
+                  {(() => {
+                    const pendingTasks = currentRoom.tasks.filter(t => t.dispatch_status === 'pending_review');
+                    if (pendingTasks.length === 0) return null;
+                    return (
+                      <div className="bg-gradient-to-r from-teal-50/90 via-sky-50/90 to-indigo-50/90 border-2 border-teal-500/50 rounded-xl p-4 shadow-sm mb-4 animate-fadeIn">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-teal-200/60">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[20px] text-teal-700 animate-pulse">fact_check</span>
+                            <h3 className="text-sm font-bold text-slate-900">
+                              📋 Cổng Phê Duyệt Nhiệm Vụ (Human Review Gate)
+                            </h3>
+                            <span className="px-2 py-0.5 text-xs font-mono font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                              {pendingTasks.length} nhiệm vụ chờ kiểm tra
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-600">
+                            Các task do Agent Squad tự động bóc tách từ tranh luận, cần Human PM phê duyệt trước khi giao việc
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {pendingTasks.map(task => (
+                            <div key={task.id} className="bg-white p-3.5 rounded-lg border border-teal-200 shadow-2xs flex flex-col md:flex-row md:items-start justify-between gap-3">
+                              <div className="flex-1 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                    task.priority === 'Critical' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                                    task.priority === 'High' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'
+                                  }`}>
+                                    {task.priority}
+                                  </span>
+                                  <h4 className="text-xs font-bold text-slate-900">{task.title}</h4>
+                                  <span className="text-[11px] text-slate-500">· Phụ trách: <strong className="text-slate-800">{task.assigned_to}</strong></span>
+                                </div>
+
+                                {task.target_files && task.target_files.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                                    <span className="text-slate-500 font-semibold">📁 File:</span>
+                                    {task.target_files.map((file, i) => (
+                                      <span key={i} className="px-1.5 py-0.2 font-mono text-[10px] bg-slate-100 text-teal-900 font-medium rounded border border-slate-200">
+                                        {file}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {task.execution_steps && task.execution_steps.length > 0 && (
+                                  <div className="bg-slate-50 p-2 rounded border border-slate-200/80 mt-1">
+                                    <div className="text-[10px] font-bold text-slate-600 mb-1">🛠️ Các bước thực thi chi tiết (Step-by-step):</div>
+                                    <ol className="list-decimal list-inside text-[11px] text-slate-700 space-y-0.5 leading-relaxed">
+                                      {task.execution_steps.map((step, idx) => (
+                                        <li key={idx}><span className="font-normal">{step}</span></li>
+                                      ))}
+                                    </ol>
+                                  </div>
+                                )}
+
+                                {task.story && (
+                                  <p className="text-[11px] text-slate-600 italic bg-amber-50/50 p-1.5 rounded border border-amber-200/50">
+                                    {task.story}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex md:flex-col items-center gap-2 shrink-0">
+                                <button
+                                  disabled={isDispatchingTask === task.id}
+                                  onClick={() => handleDispatchTask(task.id, 'approve')}
+                                  className="w-full px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs flex items-center justify-center gap-1 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                                  <span>{isDispatchingTask === task.id ? 'Đang xử lý...' : 'Phê duyệt & Giao việc'}</span>
+                                </button>
+                                <button
+                                  disabled={isDispatchingTask === task.id}
+                                  onClick={() => handleDispatchTask(task.id, 'dispatch_clickup')}
+                                  className="w-full px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs flex items-center justify-center gap-1 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">rocket_launch</span>
+                                  <span>{isDispatchingTask === task.id ? 'Đang đẩy...' : 'Đẩy lên ClickUp'}</span>
+                                </button>
+                                <button
+                                  disabled={isDispatchingTask === task.id}
+                                  onClick={() => handleDispatchTask(task.id, 'reject')}
+                                  className="w-full px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 rounded text-xs font-medium border border-slate-200 transition-colors"
+                                >
+                                  <span>Từ chối</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* 4-Column Board */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {(['Backlog', 'In Progress', 'Blocked', 'Done'] as const).map(colStatus => {
@@ -1029,9 +1346,45 @@ export const RoomsView: React.FC = () => {
                                     </p>
                                   )}
 
-                                  <div className="text-[10px] font-mono text-slate-500 mb-2 flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-[12px]">link</span>
-                                    <span className="truncate">{task.source_anchor}</span>
+                                  {task.target_files && task.target_files.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      {task.target_files.slice(0, 2).map((f, i) => (
+                                        <span key={i} className="text-[9px] font-mono px-1 py-0.2 bg-slate-100 rounded text-slate-600 truncate max-w-[140px]">
+                                          {f}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {task.clickup_url && (
+                                    <a
+                                      href={task.clickup_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 mb-2 transition-colors"
+                                    >
+                                      <span>ClickUp Task</span>
+                                      <span className="material-symbols-outlined text-[11px]">open_in_new</span>
+                                    </a>
+                                  )}
+
+                                  <div className="text-[10px] font-mono text-slate-500 mb-2 flex items-center justify-between gap-1">
+                                    <span className="truncate flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-[12px]">link</span>
+                                      {task.source_anchor}
+                                    </span>
+                                    {task.dispatch_status && (
+                                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold shrink-0 ${
+                                        task.dispatch_status === 'approved' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                                        task.dispatch_status === 'dispatched' ? 'bg-indigo-50 text-indigo-800 border border-indigo-200' :
+                                        task.dispatch_status === 'pending_review' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                                        'bg-slate-100 text-slate-600'
+                                      }`}>
+                                        {task.dispatch_status === 'approved' ? 'Đã duyệt' :
+                                         task.dispatch_status === 'dispatched' ? 'Đã đẩy ClickUp' :
+                                         task.dispatch_status === 'pending_review' ? 'Chờ duyệt' : 'Draft'}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1124,129 +1477,258 @@ export const RoomsView: React.FC = () => {
                 </div>
               )}
 
-              {/* TAB 5: AGENT CONFIG */}
+              {/* TAB 5: AGENT CONFIG & SQUAD MANAGEMENT */}
               {activeTab === 'agent' && (
                 <div className="max-w-4xl mx-auto space-y-4">
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-teal-600">tune</span>
-                      <span>Specialized PM Agent Configuration</span>
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Tailor the AI agent that autonomously triages chats, validates claims, decomposes tasks, and maps the codebase.
-                    </p>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[18px] text-teal-600">groups</span>
+                        <span>Hội đồng Agent & Cá nhân hóa (Agent Squad & Repo Grounding)</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Quản lý đội ngũ AI Agent chuyên biệt: phân vai trò, gán repository ngữ cảnh thực tế và điều chỉnh mức độ tự chủ.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setIsAddAgentModalOpen(true)}
+                      className="px-3 py-1.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                      <span>+ Thêm Agent từ Repo</span>
+                    </button>
                   </div>
 
-                  {/* Preset Selector */}
+                  {/* Squad Members Selector */}
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                     <label className="text-xs font-bold text-slate-900 block mb-2">
-                      Switch to Specialized Agent Preset:
+                      Chọn Agent trong Hội đồng để cấu hình:
                     </label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                      {SPECIALIZED_PM_AGENTS.map(agent => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      {(currentRoom.squad_agents || DEFAULT_SQUAD_AGENTS).map(agent => (
                         <div
                           key={agent.agent_id}
-                          onClick={() => handleUpdateAgentConfig(agent)}
-                          className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                            currentRoom.agent_config.agent_id === agent.agent_id
-                              ? 'bg-teal-50 border-teal-500 ring-1 ring-teal-500/30'
+                          onClick={() => setSelectedAgentToEditId(agent.agent_id)}
+                          className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                            selectedAgentToEditId === agent.agent_id
+                              ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30 shadow-xs'
                               : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <div className="text-xs font-bold text-slate-900 mb-1">{agent.agent_name}</div>
-                          <p className="text-[11px] text-slate-600 leading-tight line-clamp-2">{agent.role}</p>
-                          <div className="mt-2 text-[10px] font-mono text-teal-800 font-semibold">
-                            {agent.model_tier} · {agent.autonomy_mode}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-lg">{agent.avatar || '🤖'}</span>
+                              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 bg-white rounded border border-slate-200 text-slate-700">
+                                {agent.autonomy_mode}
+                              </span>
+                            </div>
+                            <div className="text-xs font-bold text-slate-900 mb-0.5 line-clamp-1">{agent.agent_name}</div>
+                            <p className="text-[11px] text-slate-600 leading-tight line-clamp-2">{agent.role}</p>
                           </div>
+                          {agent.repo_binding && (
+                            <div className="mt-2 text-[10px] font-mono text-teal-800 bg-teal-100/50 px-1.5 py-0.5 rounded truncate">
+                              📁 {agent.repo_binding}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Directives & Controls Form */}
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-bold text-slate-800 block mb-1">
-                          Agent Name & Title
-                        </label>
-                        <input
-                          type="text"
-                          value={currentRoom.agent_config.agent_name}
-                          onChange={e => handleUpdateAgentConfig({ agent_name: e.target.value })}
-                          className="w-full text-xs font-semibold px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
-                        />
-                      </div>
+                  {/* Active Selected Agent Form */}
+                  {(() => {
+                    const squad = currentRoom.squad_agents || DEFAULT_SQUAD_AGENTS;
+                    const activeAgent = squad.find(a => a.agent_id === selectedAgentToEditId) || squad[0];
+                    if (!activeAgent) return null;
 
-                      <div>
-                        <label className="text-xs font-bold text-slate-800 block mb-1">
-                          Model Tier
-                        </label>
-                        <select
-                          value={currentRoom.agent_config.model_tier}
-                          onChange={e => handleUpdateAgentConfig({ model_tier: e.target.value })}
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus-ring"
-                        >
-                          <option value="Nebius Qwen-30B (Fast)">Nebius Qwen-30B (Fast Ingestion)</option>
-                          <option value="Claude 3.5 Sonnet (High)">Claude 3.5 Sonnet (Complex Logic)</option>
-                          <option value="Gemini 2.5 Flash">Gemini 2.5 Flash (Low Latency)</option>
-                          <option value="DeepSeek R1 (Reasoning)">DeepSeek R1 (Deep Tree Reasoning)</option>
-                        </select>
-                      </div>
-                    </div>
+                    return (
+                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 animate-fadeIn">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{activeAgent.avatar || '🤖'}</span>
+                            <div>
+                              <h3 className="text-xs font-bold text-slate-900">Chi tiết cấu hình: {activeAgent.agent_name}</h3>
+                              <p className="text-[11px] text-slate-500">{activeAgent.role}</p>
+                            </div>
+                          </div>
+                          {squad.length > 1 && (
+                            <button
+                              onClick={() => handleDeleteSquadAgent(activeAgent.agent_id)}
+                              className="text-xs text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">delete</span>
+                              <span>Xóa Agent</span>
+                            </button>
+                          )}
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-bold text-slate-800 block mb-1">
-                          Autonomy Mode
-                        </label>
-                        <select
-                          value={currentRoom.agent_config.autonomy_mode}
-                          onChange={e => handleUpdateAgentConfig({ autonomy_mode: e.target.value as any })}
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus-ring"
-                        >
-                          <option value="Supervised">Supervised (Requires PM Confirmation)</option>
-                          <option value="Semi-Autonomous">Semi-Autonomous (Auto Drafts Stories)</option>
-                          <option value="Autonomous">Autonomous (Direct Backlog & Code Mapping)</option>
-                        </select>
-                      </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Tên Agent & Chức danh
+                            </label>
+                            <input
+                              type="text"
+                              value={activeAgent.agent_name}
+                              onChange={e => {
+                                const updated = { ...activeAgent, agent_name: e.target.value };
+                                setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                  ...r,
+                                  squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                } : r));
+                              }}
+                              className="w-full text-xs font-semibold px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                            />
+                          </div>
 
-                      <div>
-                        <label className="text-xs font-bold text-slate-800 block mb-1">
-                          Verification Rigor
-                        </label>
-                        <select
-                          value={currentRoom.agent_config.verification_rigor}
-                          onChange={e => handleUpdateAgentConfig({ verification_rigor: e.target.value as any })}
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus-ring"
-                        >
-                          <option value="Strict 3-Axis">Strict 3-Axis (Zero-Blocker Ingestion)</option>
-                          <option value="Balanced">Balanced Agile (Standard QA Gates)</option>
-                        </select>
-                      </div>
-                    </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Biểu tượng / Avatar
+                            </label>
+                            <div className="flex items-center gap-2">
+                              {['👔', '🏛️', '🛡️', '⚡', '💻', '🛠️', '🔒', '📊', '🤖'].map(emoji => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = { ...activeAgent, avatar: emoji };
+                                    setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                      ...r,
+                                      squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                    } : r));
+                                  }}
+                                  className={`p-1.5 rounded-lg border text-base ${
+                                    activeAgent.avatar === emoji
+                                      ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30'
+                                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
 
-                    <div>
-                      <label className="text-xs font-bold text-slate-800 block mb-1">
-                        System Instructions & Behavioral Directives
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={currentRoom.agent_config.instructions}
-                        onChange={e => handleUpdateAgentConfig({ instructions: e.target.value })}
-                        className="w-full text-xs font-mono p-3 border border-slate-200 rounded-lg text-slate-900 focus-ring leading-relaxed"
-                      />
-                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Vai trò & Trách nhiệm chính
+                            </label>
+                            <input
+                              type="text"
+                              value={activeAgent.role}
+                              onChange={e => {
+                                const updated = { ...activeAgent, role: e.target.value };
+                                setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                  ...r,
+                                  squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                } : r));
+                              }}
+                              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                            />
+                          </div>
 
-                    <div className="pt-2 flex justify-end">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-amber-700">Room agent settings are local only; backend persistence is unavailable.</span>
-                        <button disabled title="No backend route is available to save room agent settings" className="px-4 py-2 bg-slate-200 text-slate-500 rounded-lg text-xs font-semibold cursor-not-allowed">
-                          Save unavailable
-                        </button>
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Repository / Codebase Binding (File hoặc Folder ngữ cảnh)
+                            </label>
+                            <input
+                              type="text"
+                              value={activeAgent.repo_binding || ''}
+                              placeholder="e.g. backend/api.py hoặc d:/Hackathon/AITinker"
+                              onChange={e => {
+                                const updated = { ...activeAgent, repo_binding: e.target.value };
+                                setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                  ...r,
+                                  squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                } : r));
+                              }}
+                              className="w-full text-xs font-mono px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Model Tier
+                            </label>
+                            <select
+                              value={activeAgent.model_tier}
+                              onChange={e => {
+                                const updated = { ...activeAgent, model_tier: e.target.value };
+                                setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                  ...r,
+                                  squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                } : r));
+                              }}
+                              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus-ring"
+                            >
+                              <option value="Nebius Qwen-30B (Fast)">Nebius Qwen-30B (Fast Ingestion)</option>
+                              <option value="Claude 3.5 Sonnet (High)">Claude 3.5 Sonnet (Complex Logic)</option>
+                              <option value="Gemini 2.5 Flash">Gemini 2.5 Flash (Low Latency)</option>
+                              <option value="DeepSeek R1 (Reasoning)">DeepSeek R1 (Deep Tree Reasoning)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Chế độ Tự chủ (Autonomy Mode)
+                            </label>
+                            <select
+                              value={activeAgent.autonomy_mode}
+                              onChange={e => {
+                                const updated = { ...activeAgent, autonomy_mode: e.target.value as any };
+                                setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                  ...r,
+                                  squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                                } : r));
+                              }}
+                              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus-ring"
+                            >
+                              <option value="Supervised">Supervised (Chờ Human PM phê duyệt)</option>
+                              <option value="Semi-Autonomous">Semi-Autonomous (Tự động thảo luận & phác thảo)</option>
+                              <option value="Autonomous">Autonomous (Tự động bóc tách & dispatch)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-800 block mb-1">
+                            Chỉ thị Hệ thống & Định hướng Hành vi (System Prompt)
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={activeAgent.instructions}
+                            onChange={e => {
+                              const updated = { ...activeAgent, instructions: e.target.value };
+                              setRooms(prev => prev.map(r => r.id === currentRoom.id ? {
+                                ...r,
+                                squad_agents: (r.squad_agents || []).map(a => a.agent_id === activeAgent.agent_id ? updated : a)
+                              } : r));
+                            }}
+                            className="w-full text-xs font-mono p-3 border border-slate-200 rounded-lg text-slate-900 focus-ring leading-relaxed"
+                          />
+                        </div>
+
+                        <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                          <span className="text-xs text-slate-500">
+                            Cấu hình Agent sẽ được lưu bền vững vào máy chủ và áp dụng ngay trong tranh biện room.
+                          </span>
+                          <button
+                            disabled={isSavingAgent}
+                            onClick={() => handleSaveSquadAgent(activeAgent)}
+                            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">save</span>
+                            <span>{isSavingAgent ? 'Đang lưu...' : 'Lưu Cấu Hình Agent'}</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1256,10 +1738,10 @@ export const RoomsView: React.FC = () => {
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                     <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                       <span className="material-symbols-outlined text-[18px] text-teal-600">source</span>
-                      <span>Curated Open-Source Repositories for Social Mesh & Tree Visualization</span>
+                      <span>Kho Agent Framework Nguồn Mở Tích Hợp (Curated OSS Agent Frameworks)</span>
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Key open-source frameworks and libraries integrated to build multi-channel agents, Slack/Discord/Telegram adapters, and interactive codebase visualizers.
+                      Các framework mã nguồn mở hàng đầu được đóng gói sẵn để bạn có thể kích hoạt trực tiếp thành Agent trong Squad với 1 click.
                     </p>
                   </div>
 
@@ -1293,15 +1775,23 @@ export const RoomsView: React.FC = () => {
                             {repo.role}
                           </span>
 
-                          <a
-                            href={repo.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-semibold text-slate-700 hover:text-teal-700 flex items-center gap-1"
-                          >
-                            <span>GitHub</span>
-                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleInstallCuratedRepo(repo)}
+                              className="px-2.5 py-1 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white rounded text-xs font-semibold shadow-xs flex items-center gap-1 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">bolt</span>
+                              <span>Kích hoạt vào Squad</span>
+                            </button>
+                            <a
+                              href={repo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-semibold text-slate-700 hover:text-teal-700 flex items-center gap-0.5"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                            </a>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1660,6 +2150,229 @@ export const RoomsView: React.FC = () => {
               >
                 <span className="material-symbols-outlined text-[16px]">rocket_launch</span>
                 <span>Create Room & Launch Agent</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MULTI-AGENT SWARM DEBATE */}
+      {isDebateModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🤖</span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Thảo luận Đa Agent & Phân rã Tasks</h3>
+                  <p className="text-xs text-slate-500">Hội đồng 4 Agent sẽ phản biện nghiệp vụ, kiến trúc và an ninh</p>
+                </div>
+              </div>
+              <button onClick={() => !isDebating && setIsDebateModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">
+                  Chủ đề / Yêu cầu cần Hội đồng Agent thảo luận & phân rã *
+                </label>
+                <textarea
+                  rows={3}
+                  value={debateTopic}
+                  onChange={e => setDebateTopic(e.target.value)}
+                  placeholder="e.g. Google Workspace SSO with domain restriction & account provisioning for Acme Corp"
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-xs text-slate-900 focus-ring leading-relaxed"
+                />
+              </div>
+
+              {/* Squad Preview */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-700 block mb-2">Thành viên tham gia tranh biện:</span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-800">
+                    <span>👔</span>
+                    <span className="font-semibold">Lead Agile PM</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-800">
+                    <span>🏛️</span>
+                    <span className="font-semibold">Tech Lead Architect</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-800">
+                    <span>🛡️</span>
+                    <span className="font-semibold">QA & Security Auditor</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-800">
+                    <span>⚡</span>
+                    <span className="font-semibold">Dev Task Decomposer</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                disabled={isDebating}
+                onClick={() => setIsDebateModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                disabled={isDebating || !debateTopic.trim()}
+                onClick={() => handleRunSwarmDebate()}
+                className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-teal-600 via-indigo-600 to-purple-600 hover:from-teal-700 hover:to-purple-700 disabled:opacity-50 rounded-lg shadow-sm flex items-center gap-2"
+              >
+                {isDebating ? (
+                  <>
+                    <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                    <span>Đang tranh biện & phân rã tasks...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+                    <span>Bắt đầu Thảo luận</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD AGENT FROM REPO */}
+      {isAddAgentModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[22px] text-teal-600">source</span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Thêm Agent từ Repository</h3>
+                  <p className="text-xs text-slate-500">Gán ngữ cảnh mã nguồn cụ thể để Agent hiểu rõ codebase</p>
+                </div>
+              </div>
+              <button onClick={() => !isSavingAgent && setIsAddAgentModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5 max-h-[60vh] overflow-y-auto pr-1">
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Tên Agent & Chức danh *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Backend API Core Engineer"
+                  value={newAgentName}
+                  onChange={e => setNewAgentName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus-ring"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Avatar</label>
+                  <div className="flex items-center gap-1.5">
+                    {['💻', '🛠️', '🔒', '📊', '⚡', '🤖'].map(emoji => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setNewAgentAvatar(emoji)}
+                        className={`p-1.5 rounded-lg border text-base ${
+                          newAgentAvatar === emoji
+                            ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30'
+                            : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Model Tier</label>
+                  <select
+                    value={newAgentModel}
+                    onChange={e => setNewAgentModel(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white"
+                  >
+                    <option value="Nebius Qwen-30B (Fast)">Nebius Qwen-30B (Fast)</option>
+                    <option value="Claude 3.5 Sonnet (High)">Claude 3.5 Sonnet</option>
+                    <option value="DeepSeek R1 (Reasoning)">DeepSeek R1</option>
+                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">
+                  Repository / Local Path Liên Kết *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. backend/api.py hoặc https://github.com/org/repo"
+                  value={newAgentRepo}
+                  onChange={e => setNewAgentRepo(e.target.value)}
+                  className="w-full font-mono text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                />
+                <span className="text-[10px] text-slate-500 mt-0.5 block">Agent sẽ dùng ngữ cảnh mã nguồn này khi phản biện kiến trúc và đề xuất file sửa đổi.</span>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Vai trò & Trách nhiệm</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Phụ trách API endpoints, data validation và xử lý concurrency"
+                  value={newAgentRole}
+                  onChange={e => setNewAgentRole(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Chỉ thị Hệ thống (System Prompt)</label>
+                <textarea
+                  rows={3}
+                  placeholder="Directives for the agent regarding code quality, testing rigor, etc."
+                  value={newAgentInstructions}
+                  onChange={e => setNewAgentInstructions(e.target.value)}
+                  className="w-full p-2.5 font-mono text-xs border border-slate-200 rounded-lg text-slate-900 focus-ring"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                disabled={isSavingAgent}
+                onClick={() => setIsAddAgentModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={isSavingAgent || !newAgentName.trim()}
+                onClick={() => {
+                  const agentObj: RoomAgentConfig = {
+                    agent_id: `agent-custom-${Date.now()}`,
+                    agent_name: newAgentName.trim(),
+                    avatar: newAgentAvatar,
+                    role: newAgentRole.trim() || 'Kỹ sư phát triển phần mềm',
+                    repo_binding: newAgentRepo.trim() || 'Local Codebase',
+                    skills: ['repo_code_specialist'],
+                    instructions: newAgentInstructions.trim() || 'Phân tích mã nguồn thực tế và đề xuất file sửa đổi chuẩn xác.',
+                    model_tier: newAgentModel,
+                    autonomy_mode: newAgentAutonomy,
+                    verification_rigor: 'Strict 3-Axis',
+                    temperature: 0.2,
+                  };
+                  handleSaveSquadAgent(agentObj);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-lg shadow-sm flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[15px]">add</span>
+                <span>{isSavingAgent ? 'Đang thêm...' : 'Tạo & Thêm vào Squad'}</span>
               </button>
             </div>
           </div>

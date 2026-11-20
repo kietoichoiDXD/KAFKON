@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" role="img" aria-labelledby="title desc">
+  <title id="title">ScribeBA AI Processing Flow</title>
+  <desc id="desc">A source conversation is normalized and redacted, routed through a selected skill and model fallback chain, validated for evidence and readiness, then returned as a draft for human review.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c1828"/><stop offset="1" stop-color="#08101c"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#14b8a6"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M1 1L10 6L1 11" fill="none" stroke="#35d6c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".25"/></filter>
+    <style>
+      .eyebrow{font:700 16px Inter,Segoe UI,Arial,sans-serif;letter-spacing:3px;fill:#5eead4}
+      .title{font:750 56px Inter,Segoe UI,Arial,sans-serif;letter-spacing:-1.5px;fill:#f8fafc}
+      .sub{font:400 23px Inter,Segoe UI,Arial,sans-serif;fill:#a7b7ca}
+      .step{font:700 14px Inter,Segoe UI,Arial,sans-serif;letter-spacing:1.8px;fill:#0f766e}
+      .h{font:700 27px Inter,Segoe UI,Arial,sans-serif;letter-spacing:-.4px;fill:#0f172a}
+      .body{font:400 18px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+      .small{font:500 15px Inter,Segoe UI,Arial,sans-serif;fill:#64748b}
+      .pill{font:700 14px Inter,Segoe UI,Arial,sans-serif;fill:#0f766e}
+      .outhead{font:700 21px Inter,Segoe UI,Arial,sans-serif;fill:#f8fafc}
+      .outbody{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#c4d2e1}
+      .gate{font:700 22px Inter,Segoe UI,Arial,sans-serif;fill:#f8fafc}
+      .gatebody{font:500 16px Inter,Segoe UI,Arial,sans-serif;fill:#b5c5d7}
+    </style>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <circle cx="1605" cy="90" r="300" fill="#0f766e" opacity=".09"/><circle cx="240" cy="980" r="260" fill="#0369a1" opacity=".08"/>
+  <text x="82" y="76" class="eyebrow">SCRIBEBA · AI DECISION PIPELINE</text>
+  <text x="82" y="145" class="title">From conversation to verified action</text>
+  <text x="84" y="188" class="sub">One auditable path for product requirements and incident response.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="238" width="400" height="310" rx="22" fill="#f8fafc"/>
+    <rect x="510" y="238" width="400" height="310" rx="22" fill="#f8fafc"/>
+    <rect x="940" y="238" width="400" height="310" rx="22" fill="#f8fafc"/>
+    <rect x="1370" y="238" width="470" height="310" rx="22" fill="#f8fafc"/>
+  </g>
+  <path d="M480 393H500M910 393H930M1340 393H1360" stroke="#35d6c3" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <circle cx="122" cy="284" r="20" fill="#ccfbf1"/><text x="122" y="289" text-anchor="middle" class="step">01</text>
+    <text x="155" y="291" class="step">INGEST</text><text x="112" y="345" class="h">Source context</text>
+    <text x="112" y="386" class="body">Slack / Discord / Telegram</text><text x="112" y="418" class="body">Pasted conversation or room chat</text><text x="112" y="450" class="body">Cluster state + Prometheus signals</text>
+    <rect x="112" y="484" width="310" height="35" rx="10" fill="#ecfeff"/><text x="128" y="507" class="pill">Keep speaker + source anchors</text>
+  </g>
+  <g>
+    <circle cx="552" cy="284" r="20" fill="#ccfbf1"/><text x="552" y="289" text-anchor="middle" class="step">02</text>
+    <text x="585" y="291" class="step">PREPARE</text><text x="542" y="345" class="h">Normalize &amp; protect</text>
+    <text x="542" y="386" class="body">Parse transcript and timestamps</text><text x="542" y="418" class="body">Redact secrets and personal data</text><text x="542" y="450" class="body">Route intent, skill and model tier</text>
+    <rect x="542" y="484" width="310" height="35" rx="10" fill="#ecfeff"/><text x="558" y="507" class="pill">Evidence stays attached to claims</text>
+  </g>
+  <g>
+    <circle cx="982" cy="284" r="20" fill="#ccfbf1"/><text x="982" y="289" text-anchor="middle" class="step">03</text>
+    <text x="1015" y="291" class="step">REASON</text><text x="972" y="345" class="h">Skill-aware AI</text>
+    <text x="972" y="386" class="body">Structured analysis and task agents</text><text x="972" y="418" class="body">Configured provider fallback chain</text><text x="972" y="450" class="body">Local deterministic fallback</text>
+    <rect x="972" y="484" width="310" height="35" rx="10" fill="#f0fdfa"/><text x="988" y="507" class="pill">Story · criteria · tasks · findings</text>
+  </g>
+  <g>
+    <circle cx="1412" cy="284" r="20" fill="#ccfbf1"/><text x="1412" y="289" text-anchor="middle" class="step">04</text>
+    <text x="1445" y="291" class="step">CHECK</text><text x="1402" y="345" class="h">Validate &amp; label</text>
+    <text x="1402" y="386" class="body">Evidence · decision · readiness</text><text x="1402" y="418" class="body">Parse and validate structured output</text><text x="1402" y="450" class="body">Missing decisions remain unresolved</text>
+    <rect x="1402" y="484" width="360" height="35" rx="10" fill="#fff7ed"/><text x="1418" y="507" style="font:700 14px Inter,Segoe UI,Arial,sans-serif;fill:#c2410c">Never promote an open question to fact</text>
+  </g>
+
+  <text x="82" y="622" class="eyebrow">OUTPUTS · READY FOR REVIEW</text>
+  <path d="M1605 548V588H350V638M1605 588H960V638M1605 588H1570V638" fill="none" stroke="#35d6c3" stroke-width="3" opacity=".78" marker-end="url(#arrow)"/>
+  <g filter="url(#shadow)">
+    <rect x="80" y="650" width="550" height="160" rx="20" fill="#122033" stroke="#244158"/>
+    <rect x="685" y="650" width="550" height="160" rx="20" fill="#122033" stroke="#244158"/>
+    <rect x="1290" y="650" width="550" height="160" rx="20" fill="#122033" stroke="#244158"/>
+  </g>
+  <text x="112" y="696" class="outhead">Agile specification</text><text x="112" y="732" class="outbody">User story · Gherkin criteria · task breakdown</text><text x="112" y="766" class="outbody">INVEST score · source-linked claims</text>
+  <text x="717" y="696" class="outhead">Grounded answer</text><text x="717" y="732" class="outbody">Answer with context and evidence</text><text x="717" y="766" class="outbody">Clarifying question for what remains unknown</text>
+  <text x="1322" y="696" class="outhead">Incident proposal</text><text x="1322" y="732" class="outbody">Diagnostic findings · named runbook · exact diff</text><text x="1322" y="766" class="outbody">Kubernetes resourceVersion concurrency lock</text>
+
+  <path d="M355 810V852H960M960 810V852M1565 810V852H960" fill="none" stroke="#35d6c3" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="540" y="858" width="840" height="116" rx="22" fill="#0f766e"/>
+  <circle cx="592" cy="916" r="22" fill="#99f6e4"/><path d="M582 916l7 7 14-16" fill="none" stroke="#115e59" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="635" y="905" class="gate">Human review before external change</text>
+  <text x="635" y="939" class="gatebody">Approve or reject the ticket sync or remediation proposal.</text>
+  <text x="960" y="1024" text-anchor="middle" class="small" fill="#71849b">Evidence first · unresolved means review · writes follow an explicit decision</text>
+</svg>

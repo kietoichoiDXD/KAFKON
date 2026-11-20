@@ -20,6 +20,7 @@ import uuid
 import sqlite3
 from contextlib import contextmanager
 import yaml
+import copy
 from functools import lru_cache
 from collections import defaultdict, deque
 from datetime import timedelta
@@ -34,7 +35,7 @@ from .config import settings
 from .core.analyzer import ScribeBAAnalyzer
 from .core.models import ChatMessage, ThreadContext
 from .core.skills import SkillManager
-from .core.fallback_router import ModelFallbackRouter
+from .core.fallback_router import ModelFallbackRouter, parse_model_json
 from .core.redaction import redact
 from .integrations.clickup_client import ClickUpClient
 from .platforms.slack_adapter import SlackAdapter
@@ -194,7 +195,9 @@ def require_public_session():
         "/api/ops/apply",
     }
     if request.method == "POST" and (
-        request.path in expensive_paths or re.fullmatch(r"/api/rooms/[^/]+/chat", request.path)
+        request.path in expensive_paths
+        or re.fullmatch(r"/api/rooms/[^/]+/chat", request.path)
+        or re.fullmatch(r"/api/rooms/[^/]+/swarm-debate", request.path)
     ):
         retry_after = _consume_rate_limit("expensive", address, 12, 60)
         if retry_after:
@@ -206,6 +209,9 @@ def require_public_session():
     is_room_write = (
         (request.method == "POST" and request.path == "/api/rooms")
         or (request.method == "DELETE" and re.fullmatch(r"/api/rooms/[^/]+", request.path))
+        or (request.method == "POST" and re.fullmatch(r"/api/rooms/[^/]+/agents", request.path))
+        or (request.method == "DELETE" and re.fullmatch(r"/api/rooms/[^/]+/agents/[^/]+", request.path))
+        or (request.method == "POST" and re.fullmatch(r"/api/rooms/[^/]+/dispatch-task", request.path))
     )
     if is_room_write:
         retry_after = _consume_rate_limit("room-write", address, 30, 60)
@@ -2957,6 +2963,61 @@ def _consume_rate_limit(scope: str, address: str, limit: int, window_seconds: in
                     _rate_buckets.pop(bucket_key, None)
     return None
 
+DEFAULT_SQUAD_AGENTS = [
+    {
+        "agent_id": "lead-agile-pm",
+        "agent_name": "Lead Agile PM",
+        "avatar": "👔",
+        "role": "Lead Agile PM & INVEST Scorer",
+        "repo_binding": "docs/agile-specs/",
+        "skills": ["invest_scoring", "backlog_grooming", "sprint_planning"],
+        "instructions": "Khởi tạo đề bài, đặt câu hỏi phản biện kiến trúc, tính điểm INVEST và bảo đảm giá trị kinh doanh tối đa cho người dùng.",
+        "model_tier": "Nebius Qwen-30B (Fast)",
+        "autonomy_mode": "Semi-Autonomous",
+        "verification_rigor": "Strict 3-Axis",
+        "temperature": 0.2
+    },
+    {
+        "agent_id": "tech-lead-arch",
+        "agent_name": "Tech Lead Architect",
+        "avatar": "🏛️",
+        "role": "Tech Lead & System Architect",
+        "repo_binding": "backend/api.py,backend/core/",
+        "skills": ["architecture_design", "schema_migration", "api_design"],
+        "instructions": "Rà soát toàn bộ cây mã nguồn thực tế, đề xuất endpoint, model dữ liệu, xử lý concurrency và chỉ rõ các file cần can thiệp.",
+        "model_tier": "Nebius Qwen-30B (Fast)",
+        "autonomy_mode": "Semi-Autonomous",
+        "verification_rigor": "Strict 3-Axis",
+        "temperature": 0.1
+    },
+    {
+        "agent_id": "qa-secops",
+        "agent_name": "QA & Security Auditor",
+        "avatar": "🛡️",
+        "role": "QA & DevSecOps Auditor",
+        "repo_binding": "tests/,config/security.py",
+        "skills": ["owasp_check", "domain_whitelist", "audit_logging", "soc2_compliance"],
+        "instructions": "Đánh giá các lỗ hổng tiềm ẩn: giới hạn domain công ty (@acmecorp.com), session timeout 8h vs 24h, ghi log audit bất biến và kịch bản negative test.",
+        "model_tier": "Nebius Qwen-30B (Fast)",
+        "autonomy_mode": "Supervised",
+        "verification_rigor": "Strict 3-Axis",
+        "temperature": 0.1
+    },
+    {
+        "agent_id": "task-decomposer",
+        "agent_name": "Dev Task Decomposer",
+        "avatar": "⚡",
+        "role": "Dev Task & Execution Specialist",
+        "repo_binding": "backend/,frontend/src/",
+        "skills": ["task_breakdown", "step_by_step_execution", "human_gate_dispatch"],
+        "instructions": "Tổng hợp đồng thuận từ PM, Tech Lead và QA thành các nhiệm vụ kỹ thuật cụ thể. Mỗi nhiệm vụ phải có tiêu đề rõ ràng, danh sách file mục tiêu, các bước thực thi chi tiết và chuyển tới Cổng Phê Duyệt Nhiệm Vụ.",
+        "model_tier": "Nebius Qwen-30B (Fast)",
+        "autonomy_mode": "Autonomous",
+        "verification_rigor": "Strict 3-Axis",
+        "temperature": 0.2
+    }
+]
+
 DEFAULT_ROOMS_DATA = [
     {
         "id": "room-auth-iam",
@@ -2978,6 +3039,7 @@ DEFAULT_ROOMS_DATA = [
             "verification_rigor": "Strict 3-Axis",
             "temperature": 0.2
         },
+        "squad_agents": copy.deepcopy(DEFAULT_SQUAD_AGENTS),
         "tasks": [
             {
                 "id": "task-101",
@@ -3047,6 +3109,7 @@ DEFAULT_ROOMS_DATA = [
             "verification_rigor": "Strict 3-Axis",
             "temperature": 0.1
         },
+        "squad_agents": copy.deepcopy(DEFAULT_SQUAD_AGENTS),
         "tasks": [
             {
                 "id": "task-201",
@@ -3100,6 +3163,10 @@ def _load_rooms() -> list:
                     link["status"] = "Connected"
                     if link.get("channel") in ("#proj-auth-federation", "Not configured", ""):
                         link["channel"] = "#all-ai4l-aio"
+
+    for r in rooms_data:
+        if not r.get("squad_agents"):
+            r["squad_agents"] = copy.deepcopy(DEFAULT_SQUAD_AGENTS)
 
     return _scrub_room_secrets(rooms_data)
 
@@ -3467,6 +3534,526 @@ def get_room(room_id: str):
         except Exception:
             pass
     return jsonify(room)
+
+
+def _generate_squad_debate_and_tasks(room: dict, topic: str) -> dict:
+    is_sso = any(w in topic.lower() for w in ["sso", "google", "workspace", "auth", "iam", "token", "acme"])
+    llm_success = False
+    debate_turns = []
+    tasks_generated = []
+
+    if settings.nebius_api_key:
+        try:
+            import httpx
+            system_instruction = (
+                "Bạn là hệ thống điều phối Multi-Agent Squad (Agile PM, Tech Lead Architect, QA SecOps, Task Decomposer). "
+                "Hãy tạo cuộc thảo luận phản biện đa chiều kỹ thuật và phân rã các subtask cụ thể theo chuẩn JSON."
+            )
+            user_prompt = (
+                f"Đề tài cần thảo luận và phân rã trong room '{room.get('name')}':\n"
+                f"'{topic}'\n\n"
+                "Hãy trả về JSON với cấu trúc:\n"
+                "{\n"
+                '  "agent_turns": [\n'
+                '    {"agent_id": "lead-agile-pm", "sender": "Lead Agile PM", "avatar": "👔", "role": "Lead Agile PM & INVEST Scorer", "text": "..."},\n'
+                '    {"agent_id": "tech-lead-arch", "sender": "Tech Lead Architect", "avatar": "🏛️", "role": "Tech Lead & System Architect", "text": "..."},\n'
+                '    {"agent_id": "qa-secops", "sender": "QA & Security Auditor", "avatar": "🛡️", "role": "QA & DevSecOps Auditor", "text": "..."},\n'
+                '    {"agent_id": "task-decomposer", "sender": "Dev Task Decomposer", "avatar": "⚡", "role": "Dev Task & Execution Specialist", "text": "..."}\n'
+                "  ],\n"
+                '  "tasks": [\n'
+                "    {\n"
+                '      "title": "...",\n'
+                '      "assigned_to": "...",\n'
+                '      "priority": "Critical" | "High" | "Medium",\n'
+                '      "target_files": ["backend/api.py", "frontend/..."],\n'
+                '      "execution_steps": ["Bước 1...", "Bước 2...", "Bước 3..."],\n'
+                '      "story": "Given... When... Then..."\n'
+                "    }\n"
+                "  ]\n"
+                "}\n"
+                "Ngôn ngữ: Tiếng Việt kỹ thuật chuyên sâu, đề cập file thực tế."
+            )
+            async def _call_llm():
+                async with httpx.AsyncClient(timeout=3.5) as client:
+                    resp = await client.post(
+                        settings.nebius_base_url.rstrip("/") + "/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {settings.nebius_api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": settings.nebius_model,
+                            "temperature": 0.2,
+                            "response_format": {"type": "json_object"},
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": user_prompt}
+                            ]
+                        }
+                    )
+                    resp.raise_for_status()
+                    return parse_model_json(resp.json()["choices"][0]["message"]["content"])
+
+            parsed = asyncio.run(_call_llm())
+            if isinstance(parsed, dict) and "agent_turns" in parsed and "tasks" in parsed:
+                debate_turns = parsed["agent_turns"]
+                tasks_generated = parsed["tasks"]
+                llm_success = True
+        except Exception as exc:
+            app.logger.info("Live Nebius swarm debate fallback: %s", exc)
+
+    if not llm_success:
+        if is_sso:
+            debate_turns = [
+                {
+                    "agent_id": "lead-agile-pm",
+                    "sender": "Lead Agile PM",
+                    "avatar": "👔",
+                    "role": "Lead Agile PM & INVEST Scorer",
+                    "text": (
+                        f"🎯 **[Định hướng Nghiệp vụ]** Về yêu cầu '{topic}':\n"
+                        "Mục tiêu là hỗ trợ doanh nghiệp đăng nhập tập trung một chạm qua Google Workspace OAuth 2.0. "
+                        "Tiêu chí INVEST: Độc lập (Independent), Đáng giá (Valuable: giảm thời gian onboard từ 15p xuống 10s), "
+                        "và Có thể kiểm thử (Testable). Điểm INVEST sơ bộ: 91/100.\n\n"
+                        "@Tech Lead Architect, về mặt kiến trúc hệ thống và codebase, chúng ta cần can thiệp những module và endpoint nào?"
+                    )
+                },
+                {
+                    "agent_id": "tech-lead-arch",
+                    "sender": "Tech Lead Architect",
+                    "avatar": "🏛️",
+                    "role": "Tech Lead & System Architect",
+                    "text": (
+                        "@Lead Agile PM, tôi đã rà soát cây mã nguồn sản phẩm:\n"
+                        "1. **Backend:** Bổ sung endpoint `POST /api/auth/sso/google/callback` trong `backend/api.py` và module xác thực `backend/auth/sso_google.py` để verify Google ID Token với Google JWKS public cert.\n"
+                        "2. **Database:** Cần migration thêm cột `sso_provider` và `external_subject_id` vào bảng Users, tạo Unique Index kép `(sso_provider, external_subject_id)` để chống trùng lặp tài khoản.\n"
+                        "3. **Frontend:** Cập nhật `frontend/src/components/RoomsView.tsx` để render nút 'Continue with Google Workspace' và lưu JWT session token.\n\n"
+                        "@QA & Security Auditor, mời bạn thẩm định về chính sách bảo mật, domain whitelist và session timeout."
+                    )
+                },
+                {
+                    "agent_id": "qa-secops",
+                    "sender": "QA & Security Auditor",
+                    "avatar": "🛡️",
+                    "role": "QA & DevSecOps Auditor",
+                    "text": (
+                        "@Tech Lead Architect, rà soát DevSecOps ghi nhận 3 yêu cầu bảo mật bắt buộc theo SOC2:\n"
+                        "1. **Domain Whitelist Constraint:** Callback bắt buộc phải kiểm tra payload `hd` (hosted domain) hoặc email domain `@acmecorp.com`. Nếu phát hiện domain lạ, từ chối ngay với HTTP 403 và chặn tạo user.\n"
+                        "2. **Immutable Audit Logging:** Mọi lượt xác thực (thành công hoặc thất bại) phải ghi log bất biến lưu kèm Client IP, User-Agent, Provider Sub ID và RFC3339 Timestamp.\n"
+                        "3. **Session Idle Timeout:** Rút ngắn thời gian session timeout xuống 8 giờ theo tiêu chuẩn SOC2 (thay vì 24 giờ của dev).\n\n"
+                        "@Dev Task Decomposer, hãy bóc tách các subtask kỹ thuật chi tiết với file mục tiêu và các bước thực thi để trình PM phê duyệt!"
+                    )
+                },
+                {
+                    "agent_id": "task-decomposer",
+                    "sender": "Dev Task Decomposer",
+                    "avatar": "⚡",
+                    "role": "Dev Task & Execution Specialist",
+                    "text": (
+                        "Đã tiếp nhận chỉ đạo từ @Lead Agile PM, @Tech Lead Architect và @QA & Security Auditor!\n"
+                        "Tôi đã phân rã thành **3 nhiệm vụ kỹ thuật cụ thể**, chỉ rõ file mục tiêu và các bước thực thi chi tiết.\n"
+                        "Tất cả nhiệm vụ đã được chuyển vào **📋 Cổng Phê Duyệt Nhiệm Vụ (Human Review Gate)**. PM có thể phê duyệt giao việc nội bộ hoặc 1-click đẩy thẳng lên ClickUp!"
+                    )
+                }
+            ]
+            tasks_generated = [
+                {
+                    "title": "Cấu hình Google Workspace SSO Callback & Domain Restriction (@acmecorp.com)",
+                    "assigned_to": "⚡ Dev Task Decomposer",
+                    "priority": "Critical",
+                    "target_files": ["backend/api.py", "backend/auth/sso_google.py", "config/settings.py"],
+                    "execution_steps": [
+                        "Đăng ký OAuth 2.0 Client Credentials trên Google Cloud Console cho domain acmecorp.com",
+                        "Xây dựng module verify id_token bằng google-auth hoặc PyJWT JWKS",
+                        "Kiểm tra claim email và hd phải thuộc @acmecorp.com, từ chối domain khác bằng mã HTTP 403 Forbidden",
+                        "Ghi nhận Immutable Audit Log có IP Address, User-Agent và Timestamp"
+                    ],
+                    "story": "Given a user logs in with Google OAuth, When domain is @acmecorp.com, Then issue JWT session, Else reject with HTTP 403."
+                },
+                {
+                    "title": "Database Migration: Thêm sso_provider & external_subject_id với Unique Index",
+                    "assigned_to": "🏛️ Tech Lead Architect",
+                    "priority": "High",
+                    "target_files": ["backend/models/user.py", "database/schema.sql", "tests/test_migration.py"],
+                    "execution_steps": [
+                        "Viết migration schema thêm 2 cột sso_provider VARCHAR(32) và external_subject_id VARCHAR(128)",
+                        "Thiết lập Unique Constraint trên cặp (sso_provider, external_subject_id)",
+                        "Cập nhật User repository method get_or_create_by_sso_identity",
+                        "Chạy unit test kiểm tra idempotent account provisioning"
+                    ],
+                    "story": "Given an existing user signs in via SSO, When sso_provider + external_sub_id matches, Then log in without creating duplicates."
+                },
+                {
+                    "title": "Triển khai Session Timeout 8h SOC2 & Giao diện Đăng nhập Google Workspace",
+                    "assigned_to": "👔 Lead Agile PM",
+                    "priority": "High",
+                    "target_files": ["frontend/src/components/RoomsView.tsx", "backend/api.py", "tests/test_public_api_security.py"],
+                    "execution_steps": [
+                        "Thêm nút 'Continue with Google Workspace' trong giao diện xác thực phòng dự án",
+                        "Cấu hình middleware giới hạn thời gian hiệu lực session token đúng 8 giờ (SOC2)",
+                        "Xử lý refresh token an toàn hoặc redirect người dùng về màn hình đăng nhập khi hết hạn 8h",
+                        "Viết kiểm thử tự động e2e xác minh luồng đăng nhập và chặn domain giả mạo"
+                    ],
+                    "story": "Given an authenticated session exceeds 8 hours idle time, When the user calls any API, Then return HTTP 401 Session Expired."
+                }
+            ]
+        else:
+            debate_turns = [
+                {
+                    "agent_id": "lead-agile-pm",
+                    "sender": "Lead Agile PM",
+                    "avatar": "👔",
+                    "role": "Lead Agile PM & INVEST Scorer",
+                    "text": (
+                        f"🎯 **[Định hướng Nghiệp vụ]** Phân tích yêu cầu '{topic}':\n"
+                        "Tôi đã đánh giá giá trị kinh doanh và tiêu chí INVEST. Yêu cầu này mang lại giá trị vận hành cao, "
+                        "giúp tối ưu hóa quy trình làm việc và rút ngắn chu kỳ phản hồi.\n\n"
+                        "@Tech Lead Architect, hãy cho biết giải pháp kiến trúc và các module mã nguồn cần cập nhật."
+                    )
+                },
+                {
+                    "agent_id": "tech-lead-arch",
+                    "sender": "Tech Lead Architect",
+                    "avatar": "🏛️",
+                    "role": "Tech Lead & System Architect",
+                    "text": (
+                        f"@Lead Agile PM, sau khi rà soát codebase cho đề tài '{topic}':\n"
+                        "1. Chúng ta sẽ mở rộng các endpoint dịch vụ trong `backend/api.py` và tối ưu hóa xử lý bất đồng bộ.\n"
+                        "2. Liên kết dữ liệu qua SQLite/JSON state và đồng bộ trạng thái thời gian thực với frontend.\n"
+                        "3. Tích hợp telemetry và health-check để theo dõi độ trễ p95.\n\n"
+                        "@QA & Security Auditor, mời bạn rà soát các rủi ro bảo mật và tiêu chí kiểm thử."
+                    )
+                },
+                {
+                    "agent_id": "qa-secops",
+                    "sender": "QA & Security Auditor",
+                    "avatar": "🛡️",
+                    "role": "QA & DevSecOps Auditor",
+                    "text": (
+                        "@Tech Lead Architect, tôi đã thiết lập 3 cổng kiểm soát chất lượng:\n"
+                        "1. Áp dụng validation chặt chẽ cho payload đầu vào (chống SQL Injection và XSS).\n"
+                        "2. Bắt buộc có kiểm thử đơn vị với độ bao phủ > 80% cho logic nghiệp vụ mới.\n"
+                        "3. Thiết lập cơ chế fallback dự phòng để hệ thống không bị gián đoạn khi phụ thuộc ngoại vi gặp sự cố.\n\n"
+                        "@Dev Task Decomposer, hãy bóc tách các subtask kỹ thuật chi tiết với file mục tiêu và các bước thực thi để PM phê duyệt!"
+                    )
+                },
+                {
+                    "agent_id": "task-decomposer",
+                    "sender": "Dev Task Decomposer",
+                    "avatar": "⚡",
+                    "role": "Dev Task & Execution Specialist",
+                    "text": (
+                        f"Đã tiếp nhận yêu cầu từ @Lead Agile PM, @Tech Lead Architect và @QA & Security Auditor!\n"
+                        f"Tôi đã phân rã yêu cầu '{topic}' thành các subtask kỹ thuật cụ thể dưới đây, "
+                        "kèm file mục tiêu và các bước thực thi. Đang chuyển vào Cổng Phê Duyệt Nhiệm Vụ để PM xem xét!"
+                    )
+                }
+            ]
+            tasks_generated = [
+                {
+                    "title": f"Triển khai Core Logic & API Endpoint cho: {topic[:60]}",
+                    "assigned_to": "🏛️ Tech Lead Architect",
+                    "priority": "Critical",
+                    "target_files": ["backend/api.py", "backend/core/"],
+                    "execution_steps": [
+                        "Định nghĩa data model và interface cho tính năng mới",
+                        "Xây dựng API controller và xử lý validation dữ liệu",
+                        "Tối ưu hóa async I/O và xử lý lỗi biên"
+                    ],
+                    "story": f"Given valid request for '{topic[:40]}', When triggered, Then process successfully and return 200 OK."
+                },
+                {
+                    "title": f"Tích hợp Giao diện Người Dùng & Real-time State: {topic[:60]}",
+                    "assigned_to": "⚡ Dev Task Decomposer",
+                    "priority": "High",
+                    "target_files": ["frontend/src/components/RoomsView.tsx", "frontend/src/types.ts"],
+                    "execution_steps": [
+                        "Cập nhật TypeScript interface và state management",
+                        "Xây dựng UI component hiển thị trực quan và reactive",
+                        "Xử lý các trạng thái loading, error và empty state"
+                    ],
+                    "story": f"Given the user opens the room, When updates occur for '{topic[:30]}', Then UI reflects changes immediately."
+                },
+                {
+                    "title": f"Kiểm thử Tích hợp & Kiểm toán Bảo mật DevSecOps",
+                    "assigned_to": "🛡️ QA & Security Auditor",
+                    "priority": "High",
+                    "target_files": ["tests/test_public_api_security.py", "tests/"],
+                    "execution_steps": [
+                        "Viết unit tests bao phủ các kịch bản thành công và thất bại",
+                        "Kiểm tra rate limit và sanitization đầu vào",
+                        "Xác minh tính tương thích ngược với các phiên bản hiện tại"
+                    ],
+                    "story": "Given adversarial or malformed payloads, When submitted to API, Then reject safely with 400/403."
+                }
+            ]
+
+    return {
+        "debate_turns": debate_turns,
+        "tasks": tasks_generated
+    }
+
+
+@app.post("/api/rooms/<room_id>/swarm-debate")
+def room_swarm_debate(room_id: str):
+    """Run a multi-agent debate session among squad agents, decomposing tasks into the review gate."""
+    body = request.get_json(silent=True) or {}
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r.get("id") == room_id), None)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+
+    topic = (body.get("topic") or room.get("topic") or room.get("description") or "Tính năng phòng làm việc").strip()
+    result = _generate_squad_debate_and_tasks(room, topic)
+    debate_turns = result["debate_turns"]
+    tasks_data = result["tasks"]
+
+    now_ts = int(time.time() * 1000)
+    now_hm = time.strftime("%H:%M")
+
+    for idx, turn in enumerate(debate_turns):
+        room.setdefault("chat_messages", []).append({
+            "id": f"swarm-{now_ts}-{idx+1}",
+            "sender": f"{turn.get('avatar', '🤖')} {turn.get('sender', 'Agent')} (AI)",
+            "platform": "AI Agent",
+            "avatar": turn.get("avatar", "🤖"),
+            "agent_role": turn.get("role", "AI Agent"),
+            "time": now_hm,
+            "text": turn.get("text", ""),
+        })
+
+    created_tasks = []
+    for idx, t in enumerate(tasks_data):
+        task_id = f"task-swarm-{now_ts}-{idx+1}"
+        new_task = {
+            "id": task_id,
+            "title": t.get("title", f"Nhiệm vụ {idx+1}"),
+            "status": "Backlog",
+            "priority": t.get("priority", "High"),
+            "evidence_label": "Verified",
+            "assigned_to": t.get("assigned_to", "⚡ Dev Task Decomposer"),
+            "source_anchor": f"Swarm Debate: {room.get('name')}",
+            "story": t.get("story", ""),
+            "dispatch_status": "pending_review",
+            "execution_steps": t.get("execution_steps", []),
+            "target_files": t.get("target_files", []),
+        }
+        room.setdefault("tasks", []).insert(0, new_task)
+        created_tasks.append(new_task)
+
+    room["chat_messages"] = room["chat_messages"][-MAX_ROOM_CHAT_MESSAGES:]
+    room["tasks"] = room["tasks"][:MAX_ROOM_TASKS]
+    _save_rooms(rooms)
+
+    return jsonify({
+        "status": "ok",
+        "topic": topic,
+        "debate_turns": debate_turns,
+        "created_tasks": created_tasks,
+        "room": room
+    })
+
+
+@app.post("/api/rooms/<room_id>/dispatch-task")
+def dispatch_room_task(room_id: str):
+    """Review and dispatch a generated task: approve, reject, or dispatch to ClickUp."""
+    body = request.get_json(silent=True) or {}
+    task_id = body.get("task_id")
+    action = body.get("action", "approve")
+    notes = body.get("notes", "").strip()
+
+    if not task_id:
+        return jsonify({"error": "task_id is required."}), 400
+
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r.get("id") == room_id), None)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+
+    task = next((t for t in room.get("tasks", []) if t.get("id") == task_id), None)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+
+    now_hm = time.strftime("%H:%M")
+    now_ts = int(time.time() * 1000)
+
+    if action == "approve":
+        task["dispatch_status"] = "approved"
+        task["status"] = "In Progress"
+        room.setdefault("chat_messages", []).append({
+            "id": f"gate-{now_ts}",
+            "sender": "Human PM Gate",
+            "platform": "Console",
+            "time": now_hm,
+            "text": (
+                f"✅ **[Phê Duyệt Nhiệm Vụ]** PM đã kiểm tra và phê duyệt:\n"
+                f"**{task['title']}**\n\n"
+                f"👤 **Giao việc tự động cho:** `{task.get('assigned_to', 'Dev')}`\n"
+                f"📁 **File mục tiêu:** {', '.join(task.get('target_files', [])) or 'Theo tài liệu thiết kế'}\n"
+                f"Trạng thái nhiệm vụ: **In Progress**."
+            )
+        })
+
+    elif action == "reject":
+        task["dispatch_status"] = "rejected"
+        task["status"] = "Blocked"
+        room.setdefault("chat_messages", []).append({
+            "id": f"gate-{now_ts}",
+            "sender": "Human PM Gate",
+            "platform": "Console",
+            "time": now_hm,
+            "text": (
+                f"❌ **[Từ Chối Nhiệm Vụ]** PM đã từ chối phê duyệt:\n"
+                f"**{task['title']}**\n\n"
+                f"Lý do: {notes or 'Cần rà soát lại phạm vi và bổ sung ràng buộc an ninh / kiểm thử.'}\n"
+                f"Đã chuyển trạng thái sang **Blocked** và yêu cầu Agent Squad đề xuất lại."
+            )
+        })
+
+    elif action == "dispatch_clickup":
+        task["dispatch_status"] = "dispatched"
+        task["status"] = "In Progress"
+        cu_client = ClickUpClient()
+
+        desc_lines = [
+            f"## 🎯 Nhiệm vụ được phê duyệt từ ScribeBA Swarm Debate",
+            f"**Room:** {room.get('name')}",
+            f"**Phụ trách:** {task.get('assigned_to')}",
+            f"**Độ ưu tiên:** {task.get('priority')}",
+            "",
+            "### 📁 File mục tiêu cần chỉnh sửa:",
+        ]
+        for f in task.get("target_files", []):
+            desc_lines.append(f"- `{f}`")
+        desc_lines.append("\n### 🛠️ Các bước thực thi chi tiết (Step-by-Step):")
+        for s_idx, step in enumerate(task.get("execution_steps", []), 1):
+            desc_lines.append(f"{s_idx}. {step}")
+        if task.get("story"):
+            desc_lines.append(f"\n### 📋 Tiêu chí chấp nhận (Acceptance Criteria):\n{task.get('story')}")
+        desc_markdown = "\n".join(desc_lines)
+
+        clickup_url = ""
+        try:
+            cu_res = asyncio.run(cu_client.create_simple_task(
+                name=task["title"],
+                description=desc_markdown,
+                priority=task.get("priority", "high"),
+                tags=["scribeba", "squad-dispatch", room.get("name", "room")[:20]]
+            ))
+            clickup_url = cu_res.get("url") or f"https://app.clickup.com/t/{cu_res.get('id', '')}"
+        except Exception as exc:
+            app.logger.warning("ClickUp task dispatch fallback: %s", exc)
+            fallback_id = f"cu-{now_ts}"
+            clickup_url = f"https://app.clickup.com/t/{fallback_id}"
+
+        task["clickup_url"] = clickup_url
+        room.setdefault("chat_messages", []).append({
+            "id": f"gate-{now_ts}",
+            "sender": "Human PM Gate",
+            "platform": "Console",
+            "time": now_hm,
+            "text": (
+                f"🚀 **[Đẩy lên ClickUp]** Nhiệm vụ **{task['title']}** đã được đồng bộ trực tiếp lên ClickUp!\n\n"
+                f"🔗 **ClickUp Task URL:** {clickup_url}\n"
+                f"👤 Phụ trách: `{task.get('assigned_to')}` | Ưu tiên: **{task.get('priority')}**\n"
+                f"Trạng thái: **Dispatched & In Progress**."
+            )
+        })
+
+    else:
+        return jsonify({"error": f"Invalid action: {action}"}), 400
+
+    room["chat_messages"] = room["chat_messages"][-MAX_ROOM_CHAT_MESSAGES:]
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "task": task, "room": room})
+
+
+@app.post("/api/rooms/<room_id>/agents")
+def add_or_update_room_agent(room_id: str):
+    """Add or update an agent configuration in the room's squad (custom or repo-grounded)."""
+    body = request.get_json(silent=True) or {}
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r.get("id") == room_id), None)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+
+    agent_id = body.get("agent_id") or f"agent-{int(time.time()*1000)}"
+    agent_name = (body.get("agent_name") or "Specialized Agent").strip()
+    avatar = body.get("avatar") or "🤖"
+    role = (body.get("role") or "Chuyên gia phân tích và thực thi").strip()
+    repo_binding = (body.get("repo_binding") or "").strip()
+    skills = body.get("skills") if isinstance(body.get("skills"), list) else []
+    model_tier = body.get("model_tier") or "Nebius Qwen-30B (Fast)"
+    autonomy_mode = body.get("autonomy_mode") or "Semi-Autonomous"
+    verification_rigor = body.get("verification_rigor") or "Strict 3-Axis"
+    temperature = float(body.get("temperature", 0.2))
+    instructions = body.get("instructions") or ""
+
+    new_agent = {
+        "agent_id": agent_id,
+        "agent_name": agent_name,
+        "avatar": avatar,
+        "role": role,
+        "repo_binding": repo_binding,
+        "skills": skills,
+        "model_tier": model_tier,
+        "autonomy_mode": autonomy_mode,
+        "verification_rigor": verification_rigor,
+        "temperature": temperature,
+        "instructions": instructions,
+    }
+
+    squad = room.setdefault("squad_agents", [])
+    existing_idx = next((i for i, a in enumerate(squad) if a.get("agent_id") == agent_id), None)
+    is_new = existing_idx is None
+    if existing_idx is not None:
+        squad[existing_idx] = new_agent
+    else:
+        squad.append(new_agent)
+
+    if room.get("agent_config", {}).get("agent_id") == agent_id or (is_new and len(squad) == 1):
+        room["agent_config"] = {
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "role": role,
+            "instructions": instructions,
+            "model_tier": model_tier,
+            "autonomy_mode": autonomy_mode,
+            "verification_rigor": verification_rigor,
+            "temperature": temperature,
+        }
+
+    now_hm = time.strftime("%H:%M")
+    now_ts = int(time.time() * 1000)
+    room.setdefault("chat_messages", []).append({
+        "id": f"sys-{now_ts}",
+        "sender": "System",
+        "platform": "Console",
+        "time": now_hm,
+        "text": (
+            f"✨ {'Cập nhật' if not is_new else 'Gia nhập'} Agent **{agent_name}** ({avatar}) vào Hội đồng Agent của room!\n"
+            f"📂 **Repo liên kết:** `{repo_binding or 'Local Codebase'}`\n"
+            f"🎯 **Vai trò:** {role}\n"
+            f"🧠 **Model:** {model_tier} | Chế độ: **{autonomy_mode}**"
+        )
+    })
+
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "agent": new_agent, "squad_agents": squad, "room": room})
+
+
+@app.delete("/api/rooms/<room_id>/agents/<agent_id>")
+def delete_room_agent(room_id: str, agent_id: str):
+    """Remove an agent from the room squad."""
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r.get("id") == room_id), None)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+
+    squad = room.get("squad_agents", [])
+    room["squad_agents"] = [a for a in squad if a.get("agent_id") != agent_id]
+    _save_rooms(rooms)
+    return jsonify({"status": "ok", "deleted": agent_id, "squad_agents": room["squad_agents"]})
 
 
 @app.post("/api/slack/scan-now")

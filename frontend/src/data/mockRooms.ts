@@ -1,5 +1,60 @@
 import { RoomItem, RoomAgentConfig, TreeNode } from '../types';
 
+export const DEFAULT_SQUAD_AGENTS: RoomAgentConfig[] = [
+  {
+    agent_id: 'lead-agile-pm',
+    agent_name: 'Lead Agile PM',
+    avatar: '👔',
+    role: 'Lead Agile PM & INVEST Scorer',
+    repo_binding: 'docs/agile-specs/',
+    skills: ['invest_scoring', 'backlog_grooming', 'sprint_planning'],
+    instructions: 'Khởi tạo đề bài, đặt câu hỏi phản biện kiến trúc, tính điểm INVEST và bảo đảm giá trị kinh doanh tối đa cho người dùng.',
+    model_tier: 'Nebius Qwen-30B (Fast)',
+    autonomy_mode: 'Semi-Autonomous',
+    verification_rigor: 'Strict 3-Axis',
+    temperature: 0.2,
+  },
+  {
+    agent_id: 'tech-lead-arch',
+    agent_name: 'Tech Lead Architect',
+    avatar: '🏛️',
+    role: 'Tech Lead & System Architect',
+    repo_binding: 'backend/api.py,backend/core/',
+    skills: ['architecture_design', 'schema_migration', 'api_design'],
+    instructions: 'Rà soát toàn bộ cây mã nguồn thực tế, đề xuất endpoint, model dữ liệu, xử lý concurrency và chỉ rõ các file cần can thiệp.',
+    model_tier: 'Nebius Qwen-30B (Fast)',
+    autonomy_mode: 'Semi-Autonomous',
+    verification_rigor: 'Strict 3-Axis',
+    temperature: 0.1,
+  },
+  {
+    agent_id: 'qa-secops',
+    agent_name: 'QA & Security Auditor',
+    avatar: '🛡️',
+    role: 'QA & DevSecOps Auditor',
+    repo_binding: 'tests/,config/security.py',
+    skills: ['owasp_check', 'domain_whitelist', 'audit_logging', 'soc2_compliance'],
+    instructions: 'Đánh giá các lỗ hổng tiềm ẩn: giới hạn domain công ty (@acmecorp.com), session timeout 8h vs 24h, ghi log audit bất biến và kịch bản negative test.',
+    model_tier: 'Nebius Qwen-30B (Fast)',
+    autonomy_mode: 'Supervised',
+    verification_rigor: 'Strict 3-Axis',
+    temperature: 0.1,
+  },
+  {
+    agent_id: 'task-decomposer',
+    agent_name: 'Dev Task Decomposer',
+    avatar: '⚡',
+    role: 'Dev Task & Execution Specialist',
+    repo_binding: 'backend/,frontend/src/',
+    skills: ['task_breakdown', 'step_by_step_execution', 'human_gate_dispatch'],
+    instructions: 'Tổng hợp đồng thuận từ PM, Tech Lead và QA thành các nhiệm vụ kỹ thuật cụ thể. Mỗi nhiệm vụ phải có tiêu đề rõ ràng, danh sách file mục tiêu, các bước thực thi chi tiết và chuyển tới Cổng Phê Duyệt Nhiệm Vụ.',
+    model_tier: 'Nebius Qwen-30B (Fast)',
+    autonomy_mode: 'Autonomous',
+    verification_rigor: 'Strict 3-Axis',
+    temperature: 0.2,
+  },
+];
+
 export const SPECIALIZED_PM_AGENTS: RoomAgentConfig[] = [
   {
     agent_id: 'agile-pm',
@@ -222,6 +277,7 @@ export const INITIAL_ROOMS: RoomItem[] = [
       { platform: 'Telegram', channel: 'Not configured', enabled: false, status: 'Disconnected' },
     ],
     agent_config: SPECIALIZED_PM_AGENTS[0],
+    squad_agents: DEFAULT_SQUAD_AGENTS,
     tasks: [
       {
         id: 'task-101',
@@ -283,6 +339,7 @@ export const INITIAL_ROOMS: RoomItem[] = [
       { platform: 'Discord', channel: '#sre-alerts', enabled: false, status: 'Disconnected' },
     ],
     agent_config: SPECIALIZED_PM_AGENTS[4],
+    squad_agents: DEFAULT_SQUAD_AGENTS,
     tasks: [
       {
         id: 'task-201',
