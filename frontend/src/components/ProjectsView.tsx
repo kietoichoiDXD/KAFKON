@@ -52,6 +52,35 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
     success?: boolean;
   } | null>(null);
 
+  // Quick Bring AI via Slack Link State
+  const [quickSlackUrl, setQuickSlackUrl] = useState('');
+  const [quickProjectId, setQuickProjectId] = useState<string>('');
+  const [quickPostAnnouncement, setQuickPostAnnouncement] = useState(true);
+  const [quickAutoAnalyze, setQuickAutoAnalyze] = useState(true);
+  const [bringingAi, setBringingAi] = useState(false);
+  const [bringAiFeedback, setBringAiFeedback] = useState<{
+    ok: boolean;
+    message: string;
+    channel_name?: string;
+    permalink?: string;
+    messages_count?: number;
+    project_name?: string;
+    analysis?: any;
+  } | null>(null);
+
+  // Modal Direct Slack Link State
+  const [channelConnectMode, setChannelConnectMode] = useState<'link' | 'workspace'>('link');
+  const [modalSlackUrl, setModalSlackUrl] = useState('');
+  const [modalPostAnnouncement, setModalPostAnnouncement] = useState(true);
+  const [modalAutoAnalyze, setModalAutoAnalyze] = useState(true);
+  const [modalBringingAi, setModalBringingAi] = useState(false);
+  const [modalBringAiFeedback, setModalBringAiFeedback] = useState<{
+    ok: boolean;
+    message: string;
+    channel_name?: string;
+    permalink?: string;
+  } | null>(null);
+
   const toggleTheme = () => {
     setIsDarkMode(prev => {
       const next = !prev;
@@ -340,6 +369,130 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
     }
   };
 
+  const handleQuickBringAi = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const url = quickSlackUrl.trim();
+    if (!url) return;
+
+    const targetProjId = quickProjectId || activeProject?.id || (projects[0]?.id ?? '');
+    setBringingAi(true);
+    setBringAiFeedback(null);
+
+    try {
+      const res = await safeFetchJson<{
+        status: string;
+        message: string;
+        channel_id: string;
+        channel_name: string;
+        thread_ts?: string;
+        permalink?: string;
+        messages_count?: number;
+        project_id: string;
+        project_name: string;
+        analysis?: any;
+        error?: string;
+      }>(`${API}/api/slack/bring-ai-to-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          project_id: targetProjId,
+          post_announcement: quickPostAnnouncement,
+          auto_analyze: quickAutoAnalyze,
+        }),
+      });
+
+      if (res.ok && res.data) {
+        setBringAiFeedback({
+          ok: true,
+          message: res.data.message || `Đã đưa ScribeBA AI vào kênh #${res.data.channel_name}!`,
+          channel_name: res.data.channel_name,
+          permalink: res.data.permalink,
+          messages_count: res.data.messages_count,
+          project_name: res.data.project_name,
+          analysis: res.data.analysis,
+        });
+        await loadProjects();
+      } else {
+        setBringAiFeedback({
+          ok: false,
+          message: res.error || 'Không thể đưa AI vào kênh Slack.',
+        });
+      }
+    } catch (err: any) {
+      setBringAiFeedback({
+        ok: false,
+        message: err.message || 'Lỗi kết nối máy chủ.',
+      });
+    } finally {
+      setBringingAi(false);
+    }
+  };
+
+  const handleModalBringAi = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!channelModalProject) return;
+    const url = modalSlackUrl.trim();
+    if (!url) return;
+
+    setModalBringingAi(true);
+    setModalBringAiFeedback(null);
+
+    try {
+      const res = await safeFetchJson<{
+        status: string;
+        message: string;
+        channel_id: string;
+        channel_name: string;
+        thread_ts?: string;
+        permalink?: string;
+        messages_count?: number;
+        project_id: string;
+        project_name: string;
+        analysis?: any;
+        error?: string;
+      }>(`${API}/api/slack/bring-ai-to-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          project_id: channelModalProject.id,
+          post_announcement: modalPostAnnouncement,
+          auto_analyze: modalAutoAnalyze,
+        }),
+      });
+
+      if (res.ok && res.data) {
+        setModalBringAiFeedback({
+          ok: true,
+          message: res.data.message || `Đã đưa AI vào kênh #${res.data.channel_name}!`,
+          channel_name: res.data.channel_name,
+          permalink: res.data.permalink,
+        });
+        setModalSlackUrl('');
+        // Reload project data to update modal
+        const refreshed = await safeFetchJson<ProjectItem[]>(`${API}/api/projects`);
+        if (refreshed.ok && Array.isArray(refreshed.data)) {
+          setProjects(refreshed.data);
+          const updated = refreshed.data.find(p => p.id === channelModalProject.id);
+          if (updated) setChannelModalProject(updated);
+        }
+      } else {
+        setModalBringAiFeedback({
+          ok: false,
+          message: res.error || 'Không thể đưa AI vào kênh Slack.',
+        });
+      }
+    } catch (err: any) {
+      setModalBringAiFeedback({
+        ok: false,
+        message: err.message || 'Lỗi kết nối máy chủ.',
+      });
+    } finally {
+      setModalBringingAi(false);
+    }
+  };
+
   const formatDate = (timestamp: number) => {
     if (!timestamp) return 'Gần đây';
     const date = new Date(timestamp * 1000);
@@ -493,6 +646,240 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
 
       {/* Content Area */}
       <main className="mx-auto flex w-full max-w-6xl flex-1 min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain p-8">
+        {/* ⚡ Quick Slack Link: Bring AI directly without API Key */}
+        <section
+          aria-label="Đưa AI vào kênh Slack"
+          className={`rounded-2xl border p-5 transition-all shadow-xs shrink-0 ${
+            isDarkMode
+              ? 'border-purple-800/60 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-900 text-white'
+              : 'border-purple-200 bg-gradient-to-r from-purple-50/80 via-white to-purple-50/40 text-slate-900 shadow-xs'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4 flex-wrap pb-3 border-b border-purple-200/50 dark:border-purple-900/40">
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold shadow-xs ${
+                  isDarkMode ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-600 text-white'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[22px]">link</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-sm font-bold m-0 flex items-center gap-1.5">
+                    <span>Đưa ScribeBA AI vào Kênh / Thread Slack qua Link</span>
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    ⚡ Không cần cấu hình Key
+                  </span>
+                </div>
+                <p className={`text-xs mt-0.5 m-0 ${isDarkMode ? 'text-zinc-400' : 'text-slate-600'}`}>
+                  Dán link bất kỳ từ Slack (kênh hoặc tin nhắn thread). AI sẽ tự tham gia, gửi lời chào và trích xuất task vào ClickUp cho dự án.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Demo Fill Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setQuickSlackUrl('https://ai4l-aio.slack.com/archives/C0CFE9GL4AK/p1795162883105679');
+                if (!quickProjectId && (activeProject?.id || projects[0]?.id)) {
+                  setQuickProjectId(activeProject?.id || projects[0]?.id);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                isDarkMode
+                  ? 'border-purple-800/80 bg-purple-950/50 text-purple-200 hover:bg-purple-900/60'
+                  : 'border-purple-200 bg-purple-100/70 text-purple-800 hover:bg-purple-200/80'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px] text-purple-600">lightbulb</span>
+              <span>Dán link mẫu thực tế (#all-ai4l-aio)</span>
+            </button>
+          </div>
+
+          {/* Form Controls */}
+          <form onSubmit={handleQuickBringAi} className="mt-3.5 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+              {/* Project Target Selector */}
+              <div className="md:col-span-4">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1 text-slate-500 dark:text-zinc-400">
+                  Dự án gắn kết
+                </label>
+                <select
+                  value={quickProjectId || activeProject?.id || (projects[0]?.id ?? '')}
+                  onChange={e => setQuickProjectId(e.target.value)}
+                  className={`w-full rounded-xl border px-3 py-2 text-xs font-medium focus:outline-hidden ${
+                    isDarkMode
+                      ? 'border-zinc-700 bg-zinc-800 text-white focus:border-purple-500'
+                      : 'border-slate-300 bg-white text-slate-900 focus:border-purple-600'
+                  }`}
+                >
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {activeProject?.id === p.id ? '(Active)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Slack URL Input */}
+              <div className="md:col-span-6">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1 text-slate-500 dark:text-zinc-400">
+                  Link Kênh hoặc Link Tin Nhắn / Thread Slack
+                </label>
+                <div className="relative">
+                  <span
+                    className={`material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] ${
+                      isDarkMode ? 'text-zinc-500' : 'text-slate-400'
+                    }`}
+                  >
+                    alternate_email
+                  </span>
+                  <input
+                    type="url"
+                    required
+                    value={quickSlackUrl}
+                    onChange={e => setQuickSlackUrl(e.target.value)}
+                    placeholder="https://workspace.slack.com/archives/C0CFE9GL4AK/p1795162883..."
+                    className={`w-full rounded-xl border pl-9 pr-3 py-2 text-xs focus:outline-hidden ${
+                      isDarkMode
+                        ? 'border-zinc-700 bg-zinc-800 text-white placeholder-zinc-500 focus:border-purple-500'
+                        : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-purple-600'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <div className="md:col-span-2 flex items-end">
+                <button
+                  type="submit"
+                  disabled={bringingAi || !quickSlackUrl.trim()}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 px-4 py-2 text-xs font-bold text-white shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${bringingAi ? 'animate-spin' : ''}`}>
+                    {bringingAi ? 'progress_activity' : 'rocket_launch'}
+                  </span>
+                  <span>{bringingAi ? 'Đang đưa vào...' : 'Đưa AI Vào'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Checkbox Options */}
+            <div className="flex items-center gap-5 flex-wrap pt-1 text-xs">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={quickPostAnnouncement}
+                  onChange={e => setQuickPostAnnouncement(e.target.checked)}
+                  className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className={isDarkMode ? 'text-zinc-300' : 'text-slate-700'}>
+                  Gửi thông báo chào mừng & sự hiện diện của AI vào Slack
+                </span>
+              </label>
+
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={quickAutoAnalyze}
+                  onChange={e => setQuickAutoAnalyze(e.target.checked)}
+                  className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className={isDarkMode ? 'text-zinc-300' : 'text-slate-700'}>
+                  Tự động phân tích hội thoại & tạo task vào Backlog
+                </span>
+              </label>
+            </div>
+          </form>
+
+          {/* Real-time Feedback Banner */}
+          {bringAiFeedback && (
+            <div
+              className={`mt-3.5 p-3.5 rounded-xl border text-xs transition-all ${
+                bringAiFeedback.ok
+                  ? isDarkMode
+                    ? 'border-emerald-800/80 bg-emerald-950/40 text-emerald-200'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  : isDarkMode
+                  ? 'border-rose-800/80 bg-rose-950/40 text-rose-200'
+                  : 'border-rose-200 bg-rose-50 text-rose-900'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span
+                    className={`material-symbols-outlined text-[20px] shrink-0 mt-0.5 ${
+                      bringAiFeedback.ok ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {bringAiFeedback.ok ? 'check_circle' : 'error'}
+                  </span>
+                  <div className="space-y-1">
+                    <p className="font-bold text-xs m-0">{bringAiFeedback.message}</p>
+                    {bringAiFeedback.ok && (
+                      <div className="flex items-center gap-3 flex-wrap text-[11px] opacity-90">
+                        {bringAiFeedback.channel_name && (
+                          <span className="font-semibold">Kênh: #{bringAiFeedback.channel_name}</span>
+                        )}
+                        {bringAiFeedback.messages_count !== undefined && (
+                          <span>· Đã quét: {bringAiFeedback.messages_count} tin nhắn</span>
+                        )}
+                        {bringAiFeedback.project_name && (
+                          <span>· Dự án: {bringAiFeedback.project_name}</span>
+                        )}
+                        {bringAiFeedback.permalink && (
+                          <a
+                            href={bringAiFeedback.permalink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold underline inline-flex items-center gap-0.5 hover:opacity-80"
+                          >
+                            <span>Mở nguồn Slack</span>
+                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {bringAiFeedback.analysis?.decomposed_tasks && bringAiFeedback.analysis.decomposed_tasks.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-800/50 flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold">⚡ Trích xuất {bringAiFeedback.analysis.decomposed_tasks.length} tasks:</span>
+                        {bringAiFeedback.analysis.decomposed_tasks.slice(0, 3).map((t: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-zinc-800 border border-emerald-300 dark:border-emerald-700 text-slate-800 dark:text-zinc-200 text-[11px] font-medium"
+                          >
+                            {safeRender(t.title)}
+                          </span>
+                        ))}
+                        {onSelectView && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectView('tasks')}
+                            className="ml-auto px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+                          >
+                            Xem toàn bộ Task →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setBringAiFeedback(null)}
+                  className="opacity-70 hover:opacity-100 p-1"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
         {loading ? (
           <div
             className={`flex flex-1 items-center justify-center text-xs gap-2 ${
@@ -1257,7 +1644,139 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
               )}
             </div>
 
-            {/* Form: Add New Channel */}
+            {/* Modal Connect Mode Switcher */}
+            <div className="flex items-center gap-2 border-b pb-2 border-slate-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setChannelConnectMode('link')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  channelConnectMode === 'link'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : isDarkMode
+                    ? 'text-zinc-400 hover:text-white bg-zinc-800'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-100'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">link</span>
+                <span>Dán Link Slack (Khuyên dùng - Nhanh nhất)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChannelConnectMode('workspace')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  channelConnectMode === 'workspace'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : isDarkMode
+                    ? 'text-zinc-400 hover:text-white bg-zinc-800'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-100'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+                <span>Chọn Kênh Workspace / Khác</span>
+              </button>
+            </div>
+
+            {channelConnectMode === 'link' ? (
+              <form
+                onSubmit={handleModalBringAi}
+                className={`p-4 rounded-xl border space-y-3.5 ${
+                  isDarkMode ? 'border-purple-900/60 bg-purple-950/20' : 'border-purple-200 bg-purple-50/50'
+                }`}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-purple-600">bolt</span>
+                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300">
+                      Đưa AI vào kênh qua Link (Tự động kết nối dự án)
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalSlackUrl('https://ai4l-aio.slack.com/archives/C0CFE9GL4AK/p1795162883105679')}
+                    className="text-[11px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 font-medium hover:opacity-80 cursor-pointer"
+                  >
+                    💡 Dán link mẫu thực tế
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                    Link Kênh hoặc Thread Slack:
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={modalSlackUrl}
+                    onChange={e => setModalSlackUrl(e.target.value)}
+                    placeholder="https://ai4l-aio.slack.com/archives/C0CFE9GL4AK/p1795162883..."
+                    className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-hidden ${
+                      isDarkMode
+                        ? 'border-zinc-700 bg-zinc-800 text-white focus:border-purple-500'
+                        : 'border-slate-300 bg-white text-slate-900 focus:border-purple-600'
+                    }`}
+                  />
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 m-0">
+                    ScribeBA AI sẽ tự động đọc tin nhắn, gửi lời chào vào Slack và gắn kênh này vào dự án <strong>{channelModalProject.name}</strong>.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap text-xs">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={modalPostAnnouncement}
+                      onChange={e => setModalPostAnnouncement(e.target.checked)}
+                      className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-slate-700 dark:text-zinc-300">Gửi tin nhắn chào mừng AI vào Slack</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={modalAutoAnalyze}
+                      onChange={e => setModalAutoAnalyze(e.target.checked)}
+                      className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-slate-700 dark:text-zinc-300">Tự động phân tích & tạo task</span>
+                  </label>
+                </div>
+
+                {modalBringAiFeedback && (
+                  <div
+                    className={`p-3 rounded-lg text-xs flex items-center justify-between border ${
+                      modalBringAiFeedback.ok
+                        ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                        : 'bg-rose-50 text-rose-900 border-rose-200'
+                    }`}
+                  >
+                    <span>{modalBringAiFeedback.message}</span>
+                    <button
+                      type="button"
+                      onClick={() => setModalBringAiFeedback(null)}
+                      className="text-xs opacity-70 hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={modalBringingAi || !modalSlackUrl.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 shadow-xs cursor-pointer"
+                  >
+                    <span className={`material-symbols-outlined text-[16px] ${modalBringingAi ? 'animate-spin' : ''}`}>
+                      {modalBringingAi ? 'progress_activity' : 'rocket_launch'}
+                    </span>
+                    {modalBringingAi ? 'Đang đưa AI vào...' : '🚀 Đưa AI Vào Kênh & Kết Nối Ngay'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+            /* Form: Add New Channel */
             <form
               onSubmit={handleAddChannelToProject}
               className={`p-4 rounded-xl border space-y-3.5 ${
@@ -1467,6 +1986,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
