@@ -35,6 +35,9 @@ class NoiseFilterAgent:
         "cắt điện", "bảo trì", "server phụ", "tòa nhà", "lưu code", "mất điện",
         "power cut", "outage", "maintenance", "lunch", "đi ăn", "cà phê", "cafe",
         "chào mn", "hello mọi người", "bot", "has been added", "hãy summurize", "summarize",
+        "chuyển sang phòng", "phòng 204", "phòng họp", "họp nhóm", "cuộc họp nhóm",
+        "cuộc họp chiều nay", "trời nóng", "sạc điện thoại", "bình nước", "link ảnh",
+        "đi chơi", "ăn trưa", "đói bụng"
     ]
 
     def __init__(self, router: ModelFallbackRouter):
@@ -55,7 +58,8 @@ class NoiseFilterAgent:
         system_prompt = """You are NoiseFilterAgent, a specialized AI gatekeeper for engineering discussions.
 Your sole job is to audit conversation messages and categorize them into:
 1. RELEVANT: Contains product requirements, user feedback, technical discussion, database schemas, architecture, or task commitments.
-2. NOISE: Off-topic chit-chat, administrative/building announcements (such as power cuts/cắt điện, server maintenance 30 mins, coffee breaks, weather), bot invitations/mentions, or polite filler.
+2. NOISE: Off-topic chit-chat (e.g., weather 'trời nóng', charging phones 'sạc điện thoại', water bottle 'bình nước', outing photos 'link ảnh đi chơi'), administrative/building announcements (power cuts/cắt điện, server maintenance 30 mins, coffee breaks), meeting room changes ('cuộc họp chuyển sang phòng 204'), bot invitations/mentions, or polite filler.
+If a single message contains BOTH off-topic noise AND a valid feature requirement, categorize as requirement and preserve the requirement part.
 
 Return strictly a JSON object:
 {
@@ -130,15 +134,45 @@ Return strictly a JSON object:
             category = "chitchat"
 
             # Check bot summons or system notifications
-            if "has been added to this channel" in text_lower or "@aio hãy summurize" in text_lower or "@aio hãy summarize" in text_lower:
+            if "has been added to this channel" in text_lower or "@aio hãy summurize" in text_lower or "@aio hãy summarize" in text_lower or "has joined the channel" in text_lower:
                 is_noise = True
                 category = "bot_event"
                 reason = "Bot invocation or channel notification"
-            # Check administrative / facility notices
-            elif any(kw in text_lower for kw in ["cắt điện", "bảo trì", "server phụ", "tòa nhà", "power cut", "outage"]):
-                is_noise = True
-                category = "administrative_noise"
-                reason = "Off-topic building/server maintenance announcement"
+            # Check administrative / facility / room change notices
+            elif any(kw in text_lower for kw in [
+                "cắt điện", "bảo trì", "server phụ", "tòa nhà", "power cut", "outage",
+                "chuyển sang phòng", "phòng 204", "phòng họp", "cuộc họp nhóm chiều nay chuyển",
+                "trời nóng", "sạc điện thoại", "bình nước", "link ảnh", "đi chơi"
+            ]):
+                # If message contains both a noise sentence and a feature requirement, split and salvage the feature
+                lines = [l.strip() for l in msg.text.split("\n") if l.strip()]
+                feature_lines = []
+                noise_lines = []
+                for line in lines:
+                    line_lower = line.lower()
+                    if any(kw in line_lower for kw in [
+                        "chuyển sang phòng", "phòng 204", "cắt điện", "bảo trì", "server phụ",
+                        "tòa nhà", "trời nóng", "sạc điện thoại", "bình nước", "link ảnh", "đi chơi"
+                    ]):
+                        noise_lines.append(line)
+                    else:
+                        feature_lines.append(line)
+
+                if noise_lines:
+                    quarantined.append(NoiseAuditItem(
+                        author=msg.author,
+                        timestamp=msg.timestamp,
+                        text="\n".join(noise_lines),
+                        noise_category="administrative_noise",
+                        reason="Off-topic room/facility/meeting logistics or casual chitchat"
+                    ))
+                if feature_lines:
+                    sanitized.append(ChatMessage(
+                        author=msg.author,
+                        timestamp=msg.timestamp,
+                        text="\n".join(feature_lines)
+                    ))
+                continue
             elif len(msg.text.strip()) < 3 and not any(c.isalnum() for c in msg.text):
                 is_noise = True
                 category = "chitchat"

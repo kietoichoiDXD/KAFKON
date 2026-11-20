@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import React, { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   API,
   ClickUpTask,
@@ -36,6 +36,15 @@ export const ConflictGraphView: React.FC = () => {
   const [scan, setScan] = useState<ConflictScan | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<ConflictEdge | null>(null);
+  const [filterQuery, setFilterQuery] = useState('');
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const scanRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scan && scanRef.current) {
+      scanRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [scan]);
 
   const loadTasks = async () => {
     setLoadingTasks(true);
@@ -48,14 +57,23 @@ export const ConflictGraphView: React.FC = () => {
       const nextTasks = result.data?.tasks ?? [];
       setTasks(nextTasks);
       if (nextTasks.length && !nextTasks.some(task => task.id === taskId)) {
-        const preferredTask = nextTasks.find(task => task.description?.trim()) ?? nextTasks[0];
-        setTaskId(preferredTask.id);
-        setTaskName(preferredTask.name);
-        setDescription(preferredTask.description || '');
+        // Prioritize the newest task (first item), or first with description
+        const preferredTask = nextTasks[0] || nextTasks.find(task => task.description?.trim());
+        if (preferredTask) {
+          setTaskId(preferredTask.id);
+          setTaskName(preferredTask.name);
+          setDescription(preferredTask.description || '');
+        }
       }
     }
     setLoadingTasks(false);
   };
+
+  const filteredTasks = useMemo(() => {
+    if (!filterQuery.trim()) return tasks;
+    const q = filterQuery.toLowerCase();
+    return tasks.filter(t => (t.name || '').toLowerCase().includes(q) || (t.status || '').toLowerCase().includes(q));
+  }, [tasks, filterQuery]);
 
   useEffect(() => { void loadTasks(); }, []);
 
@@ -161,16 +179,34 @@ export const ConflictGraphView: React.FC = () => {
           </div>
 
           {tasks.length > 0 && (
-            <label className="block text-xs font-medium text-slate-600 mb-3">
-              ClickUp task
-              <select
-                value={taskId}
-                onChange={event => chooseTask(event.target.value)}
-                className="mt-1.5 w-full border border-slate-300 rounded-md px-3 py-2 text-sm bg-slate-50 text-slate-900 focus-ring"
-              >
-                {tasks.map(task => <option key={task.id} value={task.id}>{task.name} · {task.status}</option>)}
-              </select>
-            </label>
+            <div className="mb-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-medium text-slate-600">
+                <span>Select Task</span>
+                <span className="text-[11px] text-slate-400">
+                  {filteredTasks.length} of {tasks.length} tasks
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-2">
+                <input
+                  type="text"
+                  placeholder="Filter tasks by name..."
+                  value={filterQuery}
+                  onChange={e => setFilterQuery(e.target.value)}
+                  className="border border-slate-300 rounded-md px-3 py-1.5 text-xs bg-white text-slate-900 focus-ring"
+                />
+                <select
+                  value={taskId}
+                  onChange={event => chooseTask(event.target.value)}
+                  className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-xs bg-slate-50 text-slate-900 focus-ring"
+                >
+                  {filteredTasks.map(task => (
+                    <option key={task.id} value={task.id}>
+                      {task.name} · {task.status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           )}
 
           {!tasks.length && !loadingTasks && (
@@ -190,16 +226,25 @@ export const ConflictGraphView: React.FC = () => {
                 className="mt-1.5 w-full border border-slate-300 rounded-md px-3 py-2 text-sm bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-ring"
               />
             </label>
-            <label className="text-xs font-medium text-slate-600">
-              Task description
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">Task description</span>
+                <button
+                  type="button"
+                  onClick={() => setIsDescExpanded(!isDescExpanded)}
+                  className="text-[11px] font-medium text-teal-700 hover:text-teal-800"
+                >
+                  {isDescExpanded ? 'Collapse' : 'Expand description'}
+                </button>
+              </div>
               <textarea
-              rows={3}
+                rows={isDescExpanded ? 10 : 3}
                 value={description}
                 onChange={event => setDescription(event.target.value)}
                 placeholder="Paste task details or acceptance criteria. The comparison uses only this task and the current repository."
-                className="mt-1.5 w-full resize-y border border-slate-300 rounded-md px-3 py-2 text-sm leading-relaxed bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-ring"
+                className="mt-1.5 w-full resize-y border border-slate-300 rounded-md px-3 py-2 text-xs leading-relaxed bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-ring font-mono"
               />
-            </label>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -216,6 +261,7 @@ export const ConflictGraphView: React.FC = () => {
           {scanError && <p role="alert" className="mt-2 mb-0 text-sm text-rose-700">{scanError}</p>}
         </section>
 
+        <div ref={scanRef} />
         {scan ? (
           <section className="flex flex-1 min-h-0 flex-col gap-2 overflow-hidden" aria-label="Task and code comparison results">
             <div aria-label="Conflict summary" className="grid shrink-0 grid-cols-2 lg:grid-cols-4 border border-slate-200 rounded-lg bg-white">

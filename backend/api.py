@@ -79,7 +79,20 @@ def _load_runs() -> list:
 def _record_run(entry: dict) -> None:
     """Keep the last 50 runs so the review screen shows real history, not samples."""
     runs = [entry] + _load_runs()
-    RUNS_FILE.write_text(json.dumps(runs[:50], indent=2))
+    try:
+        RUNS_FILE.write_text(json.dumps(runs[:50], indent=2))
+    except Exception:
+        pass
+    try:
+        _save_telemetry_run(entry)
+        ticket = entry.get("ticket") or {}
+        task_id = ticket.get("id") or str(uuid.uuid4())[:8]
+        task_name = ticket.get("title") or entry.get("title") or "Synthesized Story"
+        task_desc = entry.get("description") or f"### {task_name}\n\n**Channel**: {entry.get('channel')}\n**INVEST Score**: {entry.get('invest')}/100"
+        task_url = ticket.get("url") or ""
+        _save_product_task(task_id, task_name, task_desc, status="to do", url=task_url, source="slack_run")
+    except Exception as exc:
+        logger.warning("Could not persist run/task to SQLite: %s", exc)
 
 
 def _safe_error(exc: Exception, fallback: str) -> str:
@@ -1255,8 +1268,29 @@ def _chat_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
         owner_id TEXT NOT NULL, payload TEXT NOT NULL, created_at REAL NOT NULL
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS product_tasks (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'to do',
+        url TEXT,
+        source TEXT DEFAULT 'analysis',
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS telemetry_runs (
+        id TEXT PRIMARY KEY,
+        channel TEXT,
+        thread_ts TEXT,
+        title TEXT,
+        invest_score INTEGER,
+        payload_json TEXT NOT NULL,
+        created_at REAL NOT NULL
+    )""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_owner ON chat_sessions(owner_id, updated_at DESC)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_chat_turns_session ON chat_turns(owner_id, session_id, id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_product_tasks_updated ON product_tasks(updated_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_runs_created ON telemetry_runs(created_at DESC)")
     try:
         CHAT_HISTORY_DB.chmod(0o600)
     except OSError:
@@ -1302,6 +1336,73 @@ def _save_chat_turn(owner_id: str, session_id: str, turn: dict) -> None:
             title = (first_line[:97] + "…") if len(first_line) > 100 else (first_line or title)
         db.execute("UPDATE chat_sessions SET title=?,updated_at=? WHERE id=? AND owner_id=?",
                    (title, now, session_id, owner_id))
+
+
+def _save_product_task(task_id: str, name: str, description: str, status: str = "to do", url: str = "", source: str = "analysis") -> None:
+    """Persist or update a product task in SQLite database."""
+    safe_name, _ = redact(str(name or "Untitled task"))
+    safe_desc, _ = redact(str(description or ""))
+    now = time.time()
+    with _chat_db() as db:
+        db.execute("""
+            INSERT INTO product_tasks (id, name, description, status, url, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                description=excluded.description,
+                status=excluded.status,
+                url=CASE WHEN excluded.url != '' THEN excluded.url ELSE product_tasks.url END,
+                updated_at=excluded.updated_at
+        """, (str(task_id), safe_name, safe_desc, str(status or "to do"), str(url or ""), str(source or "analysis"), now, now))
+
+
+def _get_product_tasks(limit: int = 100) -> List[dict]:
+    """Retrieve product tasks ordered newest first."""
+    with _chat_db() as db:
+        rows = db.execute(
+            "SELECT id, name, description, status, url, source, created_at, updated_at FROM product_tasks ORDER BY updated_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def _save_telemetry_run(entry: dict) -> None:
+    """Save an analysis or live run into SQLite database."""
+    run_id = str(uuid.uuid4())[:8]
+    now = time.time()
+    safe_entry_json, _ = redact(json.dumps(entry, ensure_ascii=False))
+    safe_entry = json.loads(safe_entry_json)
+    with _chat_db() as db:
+        db.execute("""
+            INSERT INTO telemetry_runs (id, channel, thread_ts, title, invest_score, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            run_id,
+            str(safe_entry.get("channel") or ""),
+            str(safe_entry.get("thread_ts") or safe_entry.get("permalink") or ""),
+            str(safe_entry.get("title") or "Untitled Run"),
+            int(safe_entry.get("invest") or 0),
+            json.dumps(safe_entry, ensure_ascii=False),
+            now
+        ))
+
+
+def _get_telemetry_runs(limit: int = 50) -> List[dict]:
+    """Retrieve telemetry runs from SQLite database."""
+    with _chat_db() as db:
+        rows = db.execute(
+            "SELECT id, channel, thread_ts, title, invest_score, payload_json, created_at FROM telemetry_runs ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        output = []
+        for r in rows:
+            try:
+                data = json.loads(r["payload_json"])
+                data["id"] = r["id"]
+                output.append(data)
+            except Exception:
+                continue
+        return output
 
 
 @app.get("/api/chat/sessions")
@@ -1593,6 +1694,15 @@ def slack_sync_analysis():
                     "url": ticket.clickup_url,
                     "title": ticket.title
                 }
+                if ticket.created_task_id:
+                    _save_product_task(
+                        task_id=ticket.created_task_id,
+                        name=ticket.title,
+                        description=ticket.description_markdown or MessageFormatter.to_markdown(result),
+                        status="to do",
+                        url=ticket.clickup_url or "",
+                        source="slack_sync"
+                    )
             except Exception as e:
                 payload["ticket_error"] = str(e)
 
@@ -1606,14 +1716,34 @@ def slack_sync_analysis():
 
 @app.get("/api/clickup/tasks")
 def clickup_tasks():
-    """Return a bounded page of tasks from the configured ClickUp list."""
+    """Return a unified, bounded list of tasks: local DB tasks merged with live ClickUp list, newest first."""
+    db_tasks = _get_product_tasks(limit=100)
+    existing_ids = {t["id"] for t in db_tasks}
+    live_tasks: List[dict] = []
     try:
-        tasks = asyncio.run(ClickUpClient().list_tasks())
-        return jsonify({"tasks": tasks})
-    except ValueError as e:
-        return jsonify({"error": _safe_error(e, "ClickUp is not configured or unavailable."), "action": "Configure ClickUp credentials and list access, or submit a task directly to /api/conflicts/scan."}), 503
-    except Exception:
-        return jsonify({"error": "Could not load ClickUp tasks. Check ClickUp credentials, list access, and API availability.", "action": "Verify CLICKUP_API_KEY and CLICKUP_LIST_ID and retry."}), 502
+        live_tasks = asyncio.run(ClickUpClient().list_tasks())
+        for t in live_tasks:
+            if t["id"] not in existing_ids:
+                try:
+                    _save_product_task(
+                        task_id=t["id"],
+                        name=t["name"],
+                        description=t.get("description") or "",
+                        status=t.get("status") or "to do",
+                        url=t.get("url") or "",
+                        source="clickup"
+                    )
+                except Exception:
+                    pass
+        db_tasks = _get_product_tasks(limit=100)
+    except Exception as exc:
+        logger.info("ClickUp live fetch skipped or failed: %s", exc)
+
+    if db_tasks:
+        return jsonify({"tasks": db_tasks})
+    elif live_tasks:
+        return jsonify({"tasks": live_tasks})
+    return jsonify({"tasks": []})
 
 
 @app.post("/api/clickup/tasks/summary")
@@ -1770,9 +1900,12 @@ def slack_threads():
             ts = m.get("ts")
             text = (m.get("text") or "").replace("\n", " ").strip()
             reply_count = m.get("reply_count", 0)
+            subtype = m.get("subtype", "")
+            if subtype in ("channel_join", "channel_leave") or "has joined the channel" in text.lower():
+                continue
             threads.append({
                 "ts": ts,
-                "text": text[:80] + ("..." if len(text) > 80 else ""),
+                "text": text[:120] + ("..." if len(text) > 120 else ""),
                 "reply_count": reply_count,
             })
         return jsonify(threads)

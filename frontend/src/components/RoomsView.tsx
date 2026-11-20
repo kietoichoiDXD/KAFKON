@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   RoomItem,
   RoomSocialLink,
@@ -117,6 +117,7 @@ export const RoomsView: React.FC = () => {
   const [newTaskPriority, setNewTaskPriority] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
   const [newTaskEvidence, setNewTaskEvidence] = useState<'Verified' | 'Inferred' | 'Assumed' | 'Blocked'>('Verified');
   const [newTaskStory, setNewTaskStory] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initial sync from backend API if available
   useEffect(() => {
@@ -159,6 +160,10 @@ export const RoomsView: React.FC = () => {
 
   // Current selected room
   const currentRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0] || null;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentRoom?.chat_messages?.length, isAiThinking]);
 
   // Handle Create Room
   const handleCreateRoom = () => {
@@ -744,6 +749,7 @@ export const RoomsView: React.FC = () => {
                         <span>{currentRoom.agent_config.agent_name} is synthesizing requirements...</span>
                       </div>
                     )}
+                    <div ref={messagesEndRef} />
                   </div>
 
                   {/* Input and message label */}

@@ -198,7 +198,14 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const threadRequestId = useRef(0);
   const previewRequestId = useRef(0);
   const selectionRevision = useRef(0);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
+
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [result]);
 
   // Persist form inputs to prevent data loss across navigation and refreshes
   useEffect(() => {
@@ -268,15 +275,16 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
     const queryString = query.toString();
     const suffix = queryString ? `?${queryString}` : '';
     const res = await safeFetchJson<Channel[]>(`${API}/api/slack/channels${suffix}`);
-    if (res.ok && Array.isArray(res.data)) {
+    if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
       setChannels(res.data);
-      if (requestedChannel && res.data.some(item => item.id === requestedChannel)) {
-        setChannel(requestedChannel);
-        return true;
-      }
-      setChannel('');
-      setThreads([]);
-      return false;
+      const chosenChannel = (requestedChannel && res.data.some(item => item.id === requestedChannel))
+        ? requestedChannel
+        : (channel && res.data.some(item => item.id === channel))
+          ? channel
+          : res.data[0].id;
+      setChannel(chosenChannel);
+      void loadThreads(chosenChannel, false, true, teamId);
+      return true;
     }
     setChannels([]);
     setChannel('');
@@ -372,7 +380,9 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
         window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
       } else if (status?.active_team_id) {
         await loadChannels(status.active_team_id);
-      } else if (isDemo) {
+      } else if (!isDemo) {
+        await loadChannels();
+      } else {
         setChannels(MOCK_SLACK_CHANNELS);
         setChannel(MOCK_SLACK_CHANNELS[0].id);
         setThreads(MOCK_SLACK_THREADS);
@@ -757,10 +767,26 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
             </div>
           </div>
 
-          {/* Quick Thread Selector */}
-          {threads.length > 0 && (
-            <div className="pt-1 flex items-center gap-2 text-xs text-slate-500">
-              <span className="shrink-0 font-medium text-slate-700">Select Thread:</span>
+          {/* Quick Thread Selector & Active Discussions Panel */}
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-teal-600">forum</span>
+                Active Discussions in #{channels.find(c => c.id === channel)?.name || channel} ({threads.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadThreads(channel, false, true)}
+                disabled={threadsLoading || !channel}
+                className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 flex items-center gap-1 disabled:opacity-40"
+                title="Refresh threads"
+              >
+                <span className={`material-symbols-outlined text-[14px] ${threadsLoading ? 'animate-spin' : ''}`}>refresh</span>
+                Refresh threads
+              </button>
+            </div>
+
+            {threads.length > 0 && (
               <select
                 onChange={e => {
                   if (e.target.value) {
@@ -777,21 +803,67 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 value={threads.some(t => t.ts === ts) ? ts : ''}
                 className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 text-slate-700 truncate font-mono"
               >
-                <option value="">-- Or choose from existing channel threads --</option>
+                <option value="">-- Quick select from channel threads --</option>
                 {threads.map(t => (
                   <option key={t.ts} value={t.ts}>
                     {t.ts} ({t.reply_count} replies) — {t.text}
                   </option>
                 ))}
               </select>
-            </div>
-          )}
-          {threadsLoading && (
-            <div role="status" className="text-xs text-slate-500">Loading threads for {channel}…</div>
-          )}
-          {!threadsLoading && channel && !threads.length && !error && !ts && (
-            <div className="text-xs text-slate-500">No threads loaded for {channel}. Paste a channel link and choose Use link to retry.</div>
-          )}
+            )}
+
+            {threadsLoading ? (
+              <div role="status" className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-[16px] text-teal-600">progress_activity</span>
+                Loading recent channel discussions…
+              </div>
+            ) : threads.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto overscroll-contain p-1 border border-slate-100 rounded-lg bg-slate-50/50">
+                {threads.map(t => {
+                  const isSelected = t.ts === ts;
+                  return (
+                    <button
+                      key={t.ts}
+                      type="button"
+                      onClick={() => {
+                        previewRequestId.current += 1;
+                        setPreviewLoading(false);
+                        setTs(t.ts);
+                        setSeedStatus(null);
+                        setError(null);
+                        setPreview(null);
+                        setPreviewError(null);
+                        setResult(null);
+                      }}
+                      className={`text-left p-2.5 rounded-lg border transition-all flex flex-col justify-between gap-1.5 ${
+                        isSelected
+                          ? 'border-teal-600 bg-teal-50 shadow-xs ring-1 ring-teal-600'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-medium text-slate-900 line-clamp-2 leading-relaxed">
+                        {t.text || 'Untitled thread'}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 w-full">
+                        <span className="font-mono text-[10px] text-slate-400">{t.ts}</span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] ${
+                          t.reply_count > 0 ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {t.reply_count} replies
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              !error && !ts && (
+                <div className="text-xs text-slate-500 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                  No threads loaded for #{channels.find(c => c.id === channel)?.name || channel}. Paste a channel link or select another channel.
+                </div>
+              )
+            )}
+          </div>
 
           <div className="pt-2 border-t border-slate-100">
             <div className="text-xs font-semibold text-slate-700 mb-2">Preset Extraction Strategies</div>
@@ -897,6 +969,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
         </div>
 
         {/* Execution Result */}
+        <div ref={resultsRef} />
         {result && (
           <div className="border border-slate-200 rounded-xl p-6 bg-white space-y-4">
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
