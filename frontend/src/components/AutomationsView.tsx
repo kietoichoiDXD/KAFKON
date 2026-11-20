@@ -78,7 +78,7 @@ export const AutomationsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto bg-slate-50 flex flex-col font-sans">
+    <div className="flex-1 h-full min-h-0 overflow-y-auto overscroll-contain bg-slate-50 flex flex-col font-sans">
       {/* Top Header */}
       <div className="px-8 py-4 bg-white border-b border-slate-200 shrink-0">
         <div className="flex items-center justify-between">

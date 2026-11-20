@@ -3,7 +3,6 @@ import { API, safeFetchJson, isGitHubPages } from '../api';
 import {
   MOCK_SLACK_CHANNELS,
   MOCK_SLACK_THREADS,
-  MOCK_RUN_RESULT,
 } from '../data/mockOps';
 
 type Health = {
@@ -21,6 +20,10 @@ type Health = {
 };
 
 type Channel = { id: string; name: string };
+type ThreadPreview = {
+  permalink: string;
+  messages: { author: string; timestamp: string; text: string }[];
+};
 type Evidence = {
   label: string;
   field: string;
@@ -45,7 +48,38 @@ type RunResult = {
   evidence: Evidence[];
   clarifying_question?: string | null;
   ticket?: { id: string; url: string; title: string };
+  ticket_error?: string;
 };
+
+function parseSlackTarget(value: string): { channel: string; timestamp?: string } | null {
+  const input = value.trim();
+  if (/^[CDG][A-Z0-9]{6,}$/.test(input)) return { channel: input };
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (host !== 'slack.com' && !host.endsWith('.slack.com')) return null;
+
+  const archive = url.pathname.match(/\/archives\/([CDG][A-Z0-9]+)\/p(\d{10,})/i);
+  if (archive) {
+    const digits = archive[2];
+    return { channel: archive[1], timestamp: `${digits.slice(0, 10)}.${digits.slice(10).padEnd(6, '0').slice(0, 6)}` };
+  }
+
+  const clientThread = url.pathname.match(/\/client\/[^/]+\/([CDG][A-Z0-9]+)\/thread\/[CDG][A-Z0-9]+-(\d{10}\.\d{1,6})/i);
+  if (clientThread) return { channel: clientThread[1], timestamp: clientThread[2] };
+
+  const client = url.pathname.match(/\/client\/[^/]+\/([CDG][A-Z0-9]+)/i);
+  const channel = client?.[1] || url.searchParams.get('channel');
+  const rawTs = url.searchParams.get('thread_ts') || url.searchParams.get('ts') || '';
+  if (channel && /^[CDG][A-Z0-9]+$/i.test(channel)) {
+    return { channel, ...(rawTs ? { timestamp: rawTs } : {}) };
+  }
+  return null;
+}
 
 const LABEL_STYLE: Record<string, string> = {
   Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -82,10 +116,12 @@ function Dot({ on }: { on: boolean }) {
   );
 }
 
-export function LiveRunView() {
+export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => void }) {
   const [health, setHealth] = useState<Health | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channel, setChannel] = useState('');
+  const [channelLink, setChannelLink] = useState('');
+  const [channelLinkError, setChannelLinkError] = useState('');
   const [ts, setTs] = useState('');
   const [skill, setSkill] = useState('startup_lean');
   const [skills, setSkills] = useState<string[]>([]);
@@ -95,16 +131,23 @@ export function LiveRunView() {
   const [threads, setThreads] = useState<{ ts: string; text: string; reply_count: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [preview, setPreview] = useState<ThreadPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState<boolean>(isGitHubPages());
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
   const loadThreads = (ch: string) => {
     if (!ch) return;
     safeFetchJson<any[]>(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`).then(res => {
-      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+      if (res.ok && Array.isArray(res.data)) {
         setThreads(res.data);
-      } else {
+        if (!res.data.length) setError('No threads were returned for this channel. Paste a message permalink or choose another channel.');
+      } else if (isDemo) {
         setThreads(MOCK_SLACK_THREADS);
+      } else {
+        setThreads([]);
+        setError(res.error || 'Could not load Slack threads. Check the integration and channel permissions.');
       }
     });
   };
@@ -113,6 +156,7 @@ export function LiveRunView() {
     safeFetchJson<Health>(`${API}/api/health`).then(res => {
       if (res.ok && res.data) {
         setHealth(res.data);
+        setIsDemo(!res.data.slack);
       } else {
         setIsDemo(true);
         setHealth({
@@ -132,11 +176,15 @@ export function LiveRunView() {
         const defaultCh = res.data.find((x: any) => x.name === 'all-aiops')?.id || res.data[0].id;
         setChannel(defaultCh);
         loadThreads(defaultCh);
-      } else {
+      } else if (isDemo) {
         setChannels(MOCK_SLACK_CHANNELS);
         setChannel(MOCK_SLACK_CHANNELS[0].id);
         setThreads(MOCK_SLACK_THREADS);
         setTs(MOCK_SLACK_THREADS[0].ts);
+      } else {
+        setChannels([]);
+        setThreads([]);
+        setError(res.error || 'No Slack channels are available to this integration. Check channel scopes and bot membership.');
       }
     });
 
@@ -153,11 +201,63 @@ export function LiveRunView() {
     setChannel(newCh);
     setTs('');
     setSeedStatus(null);
+    setError(null);
+    setPreview(null);
+    setPreviewError(null);
+    setResult(null);
     loadThreads(newCh);
+  };
+
+  const useChannelLink = () => {
+    const target = parseSlackTarget(channelLink);
+    if (!target) {
+      setChannelLinkError('Paste a Slack channel/message link or channel ID. The Slack integration must already be authorized and have access.');
+      return;
+    }
+    setChannelLinkError('');
+    setChannel(target.channel);
+    setTs(target.timestamp || '');
+    setResult(null);
+    setPreview(null);
+    setPreviewError(null);
+    setError(null);
+    setSeedStatus(null);
+    loadThreads(target.channel);
+  };
+
+  const readThread = async () => {
+    if (!channel || !ts) {
+      setPreviewError('Paste a message permalink or choose a thread before reading it.');
+      return;
+    }
+    if (isDemo || !health?.slack) {
+      setPreviewError('A live Slack connection is not available in this session. Connect the backend Slack integration before reading a real thread.');
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreview(null);
+    setResult(null);
+    const url = new URL(`${API}/api/slack/thread`, window.location.origin);
+    url.searchParams.set('channel', channel);
+    url.searchParams.set('ts', ts);
+    const response = await safeFetchJson<ThreadPreview>(url.toString());
+    if (!response.ok || !response.data) {
+      setPreviewError(response.error || 'Could not read this Slack thread. Verify the link and bot permissions.');
+    } else if (!response.data.messages?.length) {
+      setPreviewError('Slack returned no messages for this thread. Check that the timestamp points to a thread root and the integration can read its messages.');
+    } else {
+      setPreview(response.data);
+    }
+    setPreviewLoading(false);
   };
 
   const seedThread = async () => {
     if (!channel) return;
+    if (isDemo || !health?.slack) {
+      setError('Sample seeding is unavailable without a live Slack connection.');
+      return;
+    }
     setSeeding(true);
     setError(null);
     setSeedStatus(null);
@@ -176,24 +276,7 @@ export function LiveRunView() {
         );
         loadThreads(channel);
       } else {
-        setIsDemo(true);
-        const mockTs = `179228${Math.floor(1000 + Math.random() * 9000)}.${Math.floor(
-          100000 + Math.random() * 900000
-        )}`;
-        setTs(mockTs);
-        setSeedStatus(
-          `Seeded sample thread (5 msgs) in #${
-            channels.find(c => c.id === channel)?.name || channel
-          }. Thread ts: ${mockTs}`
-        );
-        setThreads(prev => [
-          {
-            ts: mockTs,
-            text: '@alex_lead: Acme Corp requires Google Workspace SSO with @acmecorp.com domain restriction...',
-            reply_count: 5,
-          },
-          ...prev,
-        ]);
+        setError(res.error || 'Could not seed a Slack sample thread. No sample data was substituted.');
       }
     } catch (e: any) {
       setError(e.message);
@@ -210,6 +293,11 @@ export function LiveRunView() {
     setRunning(true);
     setError(null);
     setResult(null);
+    if (!preview) {
+      setError('Read and review the Slack thread before starting analysis.');
+      setRunning(false);
+      return;
+    }
     try {
       const res = await safeFetchJson<RunResult>(`${API}/api/slack-run`, {
         method: 'POST',
@@ -219,12 +307,7 @@ export function LiveRunView() {
       if (res.ok && res.data) {
         setResult(res.data);
       } else {
-        setIsDemo(true);
-        await new Promise(r => setTimeout(r, 800));
-        setResult({
-          ...MOCK_RUN_RESULT,
-          engine: 'Nebius (Qwen-30B) / OpenRouter cascade',
-        });
+        setError(res.error || 'The live Slack analysis failed. No sample result was substituted.');
       }
     } catch (e: any) {
       setError(e.message);
@@ -236,14 +319,24 @@ export function LiveRunView() {
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Live Execution & Telemetry
-          </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Ingest active Slack discussions, synthesize verifiable Agile requirements, and synchronize
-            directly to ClickUp with zero-hallucination guardrails.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              Live Execution & Telemetry
+            </h1>
+            <p className="text-sm text-slate-600 mt-1">
+              Ingest active Slack discussions, synthesize verifiable Agile requirements, and synchronize
+              directly to ClickUp with evidence for review.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenConnections}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:border-teal-700 hover:text-teal-900"
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">cable</span>
+            Configure integrations
+          </button>
         </div>
 
         {isDemo && (
@@ -301,6 +394,9 @@ export function LiveRunView() {
                 onChange={e => handleChannelChange(e.target.value)}
                 className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 text-slate-800 focus-ring"
               >
+                {channel && !channels.some(c => c.id === channel) && (
+                  <option value={channel}>#{channel} · selected from link</option>
+                )}
                 {channels.map(c => (
                   <option key={c.id} value={c.id}>
                     #{c.name}
@@ -310,12 +406,37 @@ export function LiveRunView() {
             </label>
 
             <div className="text-xs font-semibold text-slate-700 md:col-span-2">
+              <label htmlFor="slack-channel-link">Paste Slack channel link</label>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <input
+                  id="slack-channel-link"
+                  value={channelLink}
+                  onChange={e => { setChannelLink(e.target.value); setChannelLinkError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); useChannelLink(); } }}
+                  placeholder="https://app.slack.com/client/T…/C… or channel ID"
+                  className="min-w-[220px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-normal text-slate-800 focus-ring"
+                />
+                <button
+                  type="button"
+                  onClick={useChannelLink}
+                  className="rounded-lg border border-teal-700 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50"
+                >
+                  Use link
+                </button>
+              </div>
+              <p className="mb-0 mt-1.5 font-normal leading-relaxed text-slate-500">
+                A channel link loads its thread list. A message permalink selects its thread directly. Neither link signs in or grants access; a workspace administrator must configure Slack access.
+              </p>
+              {channelLinkError && <p role="alert" className="mb-0 mt-1.5 font-normal text-rose-700">{channelLinkError}</p>}
+            </div>
+
+            <div className="text-xs font-semibold text-slate-700 md:col-span-2">
               <div className="flex items-center justify-between">
                 <span>Thread Timestamp (Target)</span>
                 <button
                   type="button"
                   onClick={seedThread}
-                  disabled={seeding || !channel}
+                  disabled={seeding || !channel || isDemo || !health?.slack}
                   className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-0.5 rounded transition-all disabled:opacity-40 flex items-center gap-1"
                 >
                   <span className="material-symbols-outlined text-[13px]">add_circle</span>
@@ -324,7 +445,7 @@ export function LiveRunView() {
               </div>
               <input
                 value={ts}
-                onChange={e => setTs(e.target.value)}
+                onChange={e => { setTs(e.target.value); setPreview(null); setPreviewError(null); setResult(null); }}
                 placeholder="e.g. 1792281644.225409"
                 className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono bg-white focus-ring"
               />
@@ -336,7 +457,14 @@ export function LiveRunView() {
             <div className="pt-1 flex items-center gap-2 text-xs text-slate-500">
               <span className="shrink-0 font-medium text-slate-700">Select Thread:</span>
               <select
-                onChange={e => e.target.value && setTs(e.target.value)}
+                onChange={e => {
+                  if (e.target.value) {
+                    setTs(e.target.value);
+                    setPreview(null);
+                    setPreviewError(null);
+                    setResult(null);
+                  }
+                }}
                 value={threads.some(t => t.ts === ts) ? ts : ''}
                 className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 text-slate-700 truncate font-mono"
               >
@@ -379,19 +507,57 @@ export function LiveRunView() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
             <button
-              onClick={run}
-              disabled={running || !channel || !ts}
-              className="px-5 py-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold disabled:opacity-40 transition-all flex items-center gap-2"
+              type="button"
+              onClick={readThread}
+              disabled={previewLoading || isDemo || !health?.slack || !channel || !ts}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:border-teal-700 hover:text-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {running && (
-                <span className="animate-spin material-symbols-outlined text-[16px]">
-                  progress_activity
-                </span>
-              )}
-              {running ? 'Extracting Requirements...' : 'Execute Ingestion & Synthesis'}
+              {previewLoading ? 'Reading Slack thread…' : 'Read thread'}
             </button>
+            {!health?.slack && !isDemo && <span className="text-xs text-amber-800">Slack is not connected.</span>}
+            {previewError && <p role="alert" className="mb-0 text-xs text-rose-700">{previewError}</p>}
+          </div>
+
+          {preview && (
+            <section className="rounded-xl border border-teal-200 bg-teal-50/40" aria-label="Slack thread preview">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-100 px-4 py-3">
+                <div>
+                  <h2 className="m-0 text-sm font-semibold text-slate-900">Live Slack thread preview</h2>
+                  <p className="mb-0 mt-1 text-xs text-slate-600">{preview.messages.length} messages · {channel} · {ts}</p>
+                </div>
+                {preview.permalink && <a href={preview.permalink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-teal-800 underline">Open in Slack ↗</a>}
+              </div>
+              <div className="max-h-72 space-y-2 overflow-y-auto p-3" aria-live="polite">
+                {preview.messages.map((message, index) => (
+                  <article key={`${message.timestamp}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <div className="mb-1 flex flex-wrap items-baseline gap-x-2 text-[11px] text-slate-500">
+                      <strong className="text-slate-800">{message.author || 'Unknown speaker'}</strong>
+                      <time>{message.timestamp}</time>
+                    </div>
+                    <p className="mb-0 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-700">{message.text}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="border-t border-teal-100 px-4 py-3">
+                <p className="mb-3 text-xs leading-relaxed text-slate-600">
+                  Review the source before continuing. The next action posts the analysis to this Slack thread and attempts to create a task in the configured ClickUp list.
+                </p>
+                <button
+                  type="button"
+                  onClick={run}
+                  disabled={running || !preview || isDemo || Boolean(result)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {running && <span className="material-symbols-outlined animate-spin text-base" aria-hidden="true">progress_activity</span>}
+                  {running ? 'Analyzing and filing…' : result ? 'Analysis complete' : 'Analyze, reply & create ClickUp task'}
+                </button>
+              </div>
+            </section>
+          )}
+
+          <div className="flex items-center gap-3 pt-2">
             {ts && (
               <span className="text-xs text-slate-500 font-mono">
                 Target: {ts}
@@ -405,6 +571,12 @@ export function LiveRunView() {
                 error
               </span>
               <div>{error}</div>
+            </div>
+          )}
+
+          {result?.ticket_error && (
+            <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Analysis completed, but ClickUp task creation failed: {result.ticket_error}
             </div>
           )}
         </div>

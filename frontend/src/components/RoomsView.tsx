@@ -394,7 +394,7 @@ export const RoomsView: React.FC = () => {
   });
 
   return (
-    <div className="flex-1 h-screen overflow-hidden bg-slate-50 flex flex-col font-sans">
+    <div className="flex-1 h-full min-h-0 overflow-hidden bg-slate-50 flex flex-col font-sans">
       {/* Top Main Header */}
       <header className="px-6 py-3.5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-3">

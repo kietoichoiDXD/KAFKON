@@ -1,4 +1,4 @@
-export type ViewType = 'home' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review' | 'conflicts';
+export type ViewType = 'home' | 'tasks' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review' | 'conflicts';
 
 export type WorkspaceTab =
   | 'General'

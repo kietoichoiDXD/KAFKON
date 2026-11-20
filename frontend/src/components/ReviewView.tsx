@@ -123,7 +123,7 @@ export const ReviewView: React.FC = () => {
   };
 
   return (
-    <div className="review-view flex-1 h-screen overflow-hidden bg-slate-50 flex flex-col font-sans">
+    <div className="review-view flex-1 h-full min-h-0 overflow-hidden bg-slate-50 flex flex-col font-sans">
       <header className="px-6 lg:px-8 py-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div>
           <div className="flex items-center gap-3 flex-wrap">

@@ -49,6 +49,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
     },
     {
+      id: 'tasks' as ViewType,
+      label: 'Product Tasks',
+      mobileLabel: 'Tasks',
+      icon: 'summarize',
+      badge: 'ClickUp',
+    },
+    {
       id: 'live' as ViewType,
       label: 'Live Telemetry',
       mobileLabel: 'Live',

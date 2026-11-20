@@ -82,10 +82,63 @@ export const CURATED_REPOS_SKILLS = [
   },
 ];
 
+const MOBILE_WORKSPACE_TABS: WorkspaceTab[] = [
+  'General', 'Members', 'Branding', 'BYOK', 'Connections', 'Skills', 'Agents',
+  'Knowledge', 'Credentials', 'Artifacts', 'Commands', 'Approval', 'Notifications',
+];
+
 interface WorkspaceModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: WorkspaceTab;
+}
+
+type SocialPlatform = 'Slack' | 'Discord' | 'Telegram';
+type ParsedChannelLink = { platform: SocialPlatform; workspace?: string; channel: string; detail?: string };
+
+function parseSocialChannelLink(platform: SocialPlatform, raw: string): ParsedChannelLink | string {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return 'Paste a complete channel link starting with https://.';
+  }
+  if (url.protocol !== 'https:') return 'For safety, use an HTTPS channel link.';
+
+  const segments = url.pathname.split('/').filter(Boolean);
+  if (platform === 'Slack') {
+    if (!/(^|\.)slack\.com$/i.test(url.hostname)) return 'This does not look like a Slack link.';
+    const archivesAt = segments.indexOf('archives');
+    if (archivesAt >= 0 && segments[archivesAt + 1]) {
+      return { platform, channel: segments[archivesAt + 1], workspace: url.hostname };
+    }
+    const clientAt = segments.indexOf('client');
+    if (clientAt >= 0 && segments[clientAt + 2]) {
+      return { platform, workspace: segments[clientAt + 1], channel: segments[clientAt + 2] };
+    }
+    return 'Slack link found, but no channel ID was recognized. Copy a channel link from Slack (archives/... or client/.../...).';
+  }
+
+  if (platform === 'Discord') {
+    if (!/(^|\.)discord(?:app)?\.com$/i.test(url.hostname)) return 'This does not look like a Discord link.';
+    const channelsAt = segments.indexOf('channels');
+    if (channelsAt >= 0 && segments[channelsAt + 2]) {
+      return { platform, workspace: segments[channelsAt + 1], channel: segments[channelsAt + 2] };
+    }
+    return 'Discord link found, but no server and channel IDs were recognized. Copy a link to a message in the channel.';
+  }
+
+  if (!/^(t\.me|telegram\.me)$/i.test(url.hostname)) return 'This does not look like a Telegram link.';
+  if (!segments.length) return 'The Telegram link does not include a channel or group.';
+  if (segments[0] === 'joinchat' || segments[0].startsWith('+')) {
+    return { platform, channel: segments[0], detail: 'This is an invite link; the channel username/ID is not exposed in the URL.' };
+  }
+  const telegramSegments = segments[0] === 's' ? segments.slice(1) : segments;
+  if (!telegramSegments[0]) return 'Telegram channel link was not recognized.';
+  const identifier = telegramSegments[0] === 'c' && telegramSegments[1]
+    ? `c/${telegramSegments[1]}`
+    : telegramSegments[0];
+  return { platform, channel: identifier, detail: 'For private channels, the share link may not reveal a reusable channel ID.' };
 }
 
 export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
@@ -94,6 +147,10 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   initialTab = 'Skills',
 }) => {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
+
+  useEffect(() => {
+    if (isOpen) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
 
   // Agents State
   const [agents, setAgents] = useState<AgentItem[]>([...CUSTOM_AGENTS, ...CORE_AGENTS]);
@@ -129,6 +186,10 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [selectedConnId, setSelectedConnId] = useState<string>('k8s-demo');
   const [connSearch, setConnSearch] = useState('');
   const [connCategoryFilter, setConnCategoryFilter] = useState<'All' | 'CONNECTED' | 'CLOUD' | 'INFRASTRUCTURE'>('All');
+  const [socialPlatform, setSocialPlatform] = useState<SocialPlatform>('Slack');
+  const [socialChannelLink, setSocialChannelLink] = useState('');
+  const [parsedSocialLink, setParsedSocialLink] = useState<ParsedChannelLink | null>(null);
+  const [socialLinkError, setSocialLinkError] = useState('');
 
   // BYOK State
   const [byokGeminiKey, setByokGeminiKey] = useState('');
@@ -506,12 +567,12 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-6xl h-[88vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 max-[760px]:p-2">
+      <div className="bg-white w-full max-w-6xl h-[88vh] max-[760px]:h-[94vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
         {/* ======================= MODAL HEADER ======================= */}
-        <div className="h-12 border-b border-gray-200 px-5 flex items-center justify-between shrink-0 bg-white">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-gray-900 tracking-tight">
+        <div className="h-12 border-b border-gray-200 px-5 max-[760px]:px-3 flex items-center justify-between shrink-0 bg-white">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-sm font-bold text-gray-900 tracking-tight">
               {activeTab} - nguyen thanh dat's Workspace
             </h2>
           </div>
@@ -524,9 +585,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
         </div>
 
         {/* ======================= MODAL BODY ======================= */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden max-[760px]:flex-col">
           {/* ======================= SIDEBAR (LEFT) ======================= */}
-          <div className="w-56 border-r border-gray-200 bg-gray-50/70 p-3 flex flex-col gap-5 shrink-0 overflow-y-auto select-none text-xs">
+          <div className="w-56 border-r border-gray-200 bg-gray-50/70 p-3 flex flex-col gap-5 shrink-0 overflow-y-auto select-none text-xs max-[760px]:hidden">
             {/* WORKSPACE */}
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
@@ -661,6 +722,20 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
               </div>
             </div>
           </div>
+
+          <nav aria-label="Workspace settings" className="hidden max-[760px]:flex shrink-0 gap-1 overflow-x-auto border-b border-gray-200 bg-gray-50 px-2 py-2">
+            {MOBILE_WORKSPACE_TABS.map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                aria-current={activeTab === tab ? 'page' : undefined}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold ${activeTab === tab ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-transparent bg-white text-gray-600 hover:bg-gray-100'}`}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
 
           {/* ========================================================================= */}
           {/* TAB: SKILLS (MATCHES SCREENSHOT 1 EXACTLY + CATEGORY FILTERS & CATALOG)    */}
@@ -1054,9 +1129,9 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
           {/* TAB: CONNECTIONS (MATCHES SCREENSHOT 2 EXACTLY)                           */}
           {/* ========================================================================= */}
           {activeTab === 'Connections' && (
-            <div className="flex-1 flex flex-col overflow-hidden bg-white">
+            <div className="flex-1 flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
               {/* Top Sub-Bar: Builtin vs MCP and Split vs Grid */}
-              <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between gap-3 max-[760px]:px-3 max-[760px]:py-2">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setConnectionType('Builtin')}
@@ -1109,9 +1184,23 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
               </div>
 
               {/* Main Split/Grid Container */}
-              <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden max-[850px]:flex-col">
+                <div className="hidden max-[850px]:flex shrink-0 gap-1 overflow-x-auto border-b border-gray-200 bg-gray-50 px-2 py-2">
+                  {connections.map(connection => (
+                    <button
+                      key={connection.id}
+                      type="button"
+                      onClick={() => setSelectedConnId(connection.id)}
+                      aria-pressed={connection.id === selectedConnId}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs ${connection.id === selectedConnId ? 'border-teal-200 bg-teal-50 font-semibold text-teal-900' : 'border-transparent bg-white text-gray-700'}`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]" aria-hidden="true">{connection.icon}</span>
+                      {connection.name}
+                    </button>
+                  ))}
+                </div>
                 {/* Column 2: Connections Category Sidebar (Matches Screenshot 2) */}
-                <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0">
+                <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0 max-[850px]:hidden">
                   <div className="p-3 border-b border-gray-100 space-y-2">
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-2.5 top-2 text-gray-400 text-[16px]">
@@ -1261,7 +1350,96 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                 </div>
 
                 {/* Right: Kubernetes / Selected Connection Detail View */}
-                <div className="flex-1 overflow-y-auto bg-white p-6">
+                <div className="flex-1 min-h-0 min-w-0 overflow-y-auto bg-white p-6 max-[760px]:p-3">
+                  {connectionType === 'Builtin' && (
+                    <section className="mb-6 rounded-xl border border-teal-200 bg-teal-50/50 p-4 lg:p-5" aria-labelledby="social-channel-connect-title">
+                      <div className="flex items-start gap-3">
+                        <span className="material-symbols-outlined mt-0.5 text-xl text-teal-800" aria-hidden="true">add_link</span>
+                        <div className="min-w-0 flex-1">
+                          <h3 id="social-channel-connect-title" className="m-0 text-sm font-bold text-gray-900">Connect a social channel</h3>
+                          <p className="mb-0 mt-1 text-xs leading-relaxed text-gray-600">
+                            A channel link identifies where ScribeBA should look. It does not sign in or grant access. The workspace administrator must first configure the platform integration on the backend and invite its bot with the required permissions.
+                          </p>
+                        </div>
+                      </div>
+
+                      <ol className="my-4 grid gap-2 text-xs leading-relaxed text-gray-700 md:grid-cols-3">
+                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">1. Authorize the integration</b><br />Ask your workspace administrator to configure Slack, Discord, or Telegram credentials in the server environment. Never paste a bot token here.</li>
+                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">2. Grant channel access</b><br />Invite the ScribeBA bot to the channel and grant only the read/post permissions your workflow needs.</li>
+                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">3. Identify the channel</b><br />Paste its share link below. This form only extracts a recognizable channel identifier in this browser.</li>
+                      </ol>
+
+                      <div className="grid gap-3 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-end">
+                        <label className="text-xs font-semibold text-gray-700">
+                          Platform
+                          <select
+                            value={socialPlatform}
+                            onChange={event => { setSocialPlatform(event.target.value as SocialPlatform); setParsedSocialLink(null); setSocialLinkError(''); }}
+                            className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/10"
+                          >
+                            <option>Slack</option><option>Discord</option><option>Telegram</option>
+                          </select>
+                        </label>
+                        <label className="min-w-0 text-xs font-semibold text-gray-700">
+                          Channel share link
+                          <input
+                            type="url"
+                            inputMode="url"
+                            autoComplete="url"
+                            value={socialChannelLink}
+                            onChange={event => { setSocialChannelLink(event.target.value); setParsedSocialLink(null); setSocialLinkError(''); }}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                const parsed = parseSocialChannelLink(socialPlatform, socialChannelLink);
+                                if (typeof parsed === 'string') { setSocialLinkError(parsed); setParsedSocialLink(null); }
+                                else { setParsedSocialLink(parsed); setSocialLinkError(''); }
+                              }
+                            }}
+                            placeholder={socialPlatform === 'Slack' ? 'https://app.slack.com/client/…' : socialPlatform === 'Discord' ? 'https://discord.com/channels/…' : 'https://t.me/…'}
+                            className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/10"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const parsed = parseSocialChannelLink(socialPlatform, socialChannelLink);
+                            if (typeof parsed === 'string') { setSocialLinkError(parsed); setParsedSocialLink(null); }
+                            else { setParsedSocialLink(parsed); setSocialLinkError(''); }
+                          }}
+                          className="rounded-lg bg-teal-800 px-4 py-2.5 text-xs font-semibold text-white hover:bg-teal-900"
+                        >
+                          Check link
+                        </button>
+                      </div>
+
+                      {socialLinkError && <p role="alert" className="mb-0 mt-3 text-xs font-medium text-rose-700">{socialLinkError}</p>}
+                      {parsedSocialLink && (
+                        <div role="status" className="mt-3 rounded-lg border border-emerald-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
+                              <span className="material-symbols-outlined text-base" aria-hidden="true">task_alt</span>
+                              {parsedSocialLink.platform} channel link recognized · access is not yet verified
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void navigator.clipboard?.writeText(parsedSocialLink.channel)}
+                              className="text-xs font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-900"
+                            >
+                              Copy channel identifier
+                            </button>
+                          </div>
+                          <div className="mt-2 break-all font-mono text-xs text-gray-700">
+                            {parsedSocialLink.workspace && <span>Workspace/server: {parsedSocialLink.workspace} · </span>}
+                            Channel: {parsedSocialLink.channel}
+                          </div>
+                          {parsedSocialLink.detail && <p className="mb-0 mt-2 text-xs leading-relaxed text-gray-600">{parsedSocialLink.detail}</p>}
+                          <p className="mb-0 mt-2 text-[11px] leading-relaxed text-gray-500">Link and identifier are kept only in this modal session. To finish connecting, the administrator must configure the bot credentials and confirm the bot can access this channel.</p>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
                   {/* Connection Header */}
                   <div className="flex items-start justify-between pb-4 border-b border-gray-100">
                     <div className="flex items-center gap-3">
