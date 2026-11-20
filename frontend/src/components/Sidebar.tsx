@@ -42,6 +42,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems = [
     {
+      id: 'projects' as ViewType,
+      label: 'Projects',
+      mobileLabel: 'Projects',
+      icon: 'folder_open',
+      badge: 'Hub',
+      badgeClass: 'bg-zinc-800 text-zinc-300 border-zinc-700',
+    },
+    {
       id: 'home' as ViewType,
       label: 'Spec Studio',
       mobileLabel: 'Studio',

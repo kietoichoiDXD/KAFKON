@@ -15,8 +15,10 @@ const AutomationsView = lazy(() => import('./components/AutomationsView').then((
 const ReviewView = lazy(() => import('./components/ReviewView').then((module) => ({ default: module.ReviewView })));
 const ConflictGraphView = lazy(() => import('./components/ConflictGraphView').then((module) => ({ default: module.ConflictGraphView })));
 const TaskSummaryView = lazy(() => import('./components/TaskSummaryView').then((module) => ({ default: module.TaskSummaryView })));
+const ProjectsView = lazy(() => import('./components/ProjectsView').then((module) => ({ default: module.ProjectsView })));
 
 const VALID_VIEWS: ViewType[] = [
+  'projects',
   'home',
   'tasks',
   'rooms',
@@ -123,6 +125,8 @@ export function App() {
                     </div>
                   }
                 >
+                  {view === 'projects' && <ProjectsView onSelectView={handleSelectView} />}
+
                   {view === 'home' && (
                     <HomeView
                       onSelectPrompt={handleSelectPrompt}
