@@ -117,6 +117,15 @@ GitHub Pages deployment, set the repository Actions variable `SCRIBEBA_API_URL` 
 reachable backend URL; the Pages site is static and cannot run the Flask API itself. The backend
 also supports a local endpoint override in Workspace settings.
 
+### Chat history persistence
+
+Spec Studio chat sessions and turns are stored in SQLite at `.scribeba/chat-history.sqlite3` by
+default. A separate HttpOnly browser cookie keeps the same chat owner across browser restarts; the
+cookie is scoped to chat API routes and does not contain the chat contents. Existing session-owned
+history is carried forward automatically. To keep history on a container deployment, set
+`SCRIBEBA_CHAT_HISTORY_DB_PATH` to a directory backed by persistent storage. Container-local files
+can disappear when a deployment replaces the container.
+
 ---
 
 ## ✅ What is live, and what is simulated

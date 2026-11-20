@@ -34,7 +34,7 @@ export const TaskSummaryView: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-slate-50 text-slate-900">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
       <header className="shrink-0 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
           <div>
@@ -61,7 +61,7 @@ export const TaskSummaryView: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 p-5 lg:p-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 min-h-0 overflow-y-auto overscroll-contain flex-col gap-5 p-5 lg:p-8">
         {error && (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             <strong className="font-semibold">Summary unavailable.</strong> {error}

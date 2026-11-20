@@ -38,6 +38,27 @@ def run_slack_bot():
             result = await analyzer.analyze_thread(thread)
             await slack_adapter.post_analysis_summary(channel_id, thread_ts, result)
 
+        @app.event("app_mention")
+        async def handle_mention(event, say):
+            channel_id = event["channel"]
+            thread_ts = event.get("thread_ts") or event.get("ts")
+            text = event.get("text", "")
+            
+            # If called in a thread, analyze the thread requirements
+            if event.get("thread_ts"):
+                thread = await slack_adapter.fetch_thread(channel_id, thread_ts)
+                result = await analyzer.analyze_thread(thread)
+                await slack_adapter.post_analysis_summary(channel_id, thread_ts, result)
+            else:
+                from .chat import ChatResponder
+                clean_text = text.replace("<@", "").split(">")[-1].strip() or text
+                responder = ChatResponder(skill_manager)
+                reply = await responder.respond([clean_text], skill=settings.default_skill, tier="low")
+                if reply.get("type") == "analysis":
+                    await slack_adapter.post_analysis_summary(channel_id, thread_ts, reply["result"])
+                else:
+                    await say(text=reply.get("text", "I'm ScribeBA Agent. How can I assist your squad?"), thread_ts=thread_ts)
+
         @app.action("approve_ticket")
         async def handle_approve(ack, body, client):
             await ack()

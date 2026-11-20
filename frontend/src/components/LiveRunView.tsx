@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { API, safeFetchJson, isGitHubPages } from '../api';
+import { API, getApiUrl, safeFetchJson } from '../api';
 import {
   MOCK_SLACK_CHANNELS,
   MOCK_SLACK_THREADS,
@@ -20,14 +20,29 @@ type Health = {
 };
 
 type Channel = { id: string; name: string };
-type SlackConnection = {
-  connected: boolean;
+type PlatformCredentialStatus = {
+  configured: boolean;
+  verified: boolean;
   workspace_id?: string | null;
-  workspace_name?: string | null;
+  workspace?: string | null;
   account?: string | null;
-  enterprise_install?: boolean;
-  scope?: string;
+  error?: string;
 };
+type SocialConnectionStatus = {
+  slack: PlatformCredentialStatus;
+  discord: PlatformCredentialStatus;
+  telegram: PlatformCredentialStatus;
+  note?: string;
+};
+type SlackOAuthStatus = {
+  configured: boolean;
+  verified: boolean;
+  oauth_enabled?: boolean;
+  active_team_id?: string | null;
+  legacy_env_token?: boolean;
+  workspaces?: { team_id: string; team: string; account?: string }[];
+};
+type ConnectionFeedback = { kind: 'checking' | 'success' | 'error'; message: string };
 type ThreadPreview = {
   permalink: string;
   messages: { author: string; timestamp: string; text: string }[];
@@ -59,7 +74,7 @@ type RunResult = {
   ticket_error?: string;
 };
 
-function parseSlackTarget(value: string): { channel: string; timestamp?: string } | null {
+function parseSlackTarget(value: string): { channel: string; timestamp?: string; workspaceId?: string; workspaceSlug?: string } | null {
   const input = value.trim();
   if (/^[CDG][A-Z0-9]{6,}$/.test(input)) return { channel: input };
   let url: URL;
@@ -70,21 +85,23 @@ function parseSlackTarget(value: string): { channel: string; timestamp?: string 
   }
   const host = url.hostname.toLowerCase();
   if (host !== 'slack.com' && !host.endsWith('.slack.com')) return null;
+  const workspaceSlug = host.endsWith('.slack.com') && host !== 'app.slack.com' ? host.slice(0, -'.slack.com'.length) : undefined;
 
   const archive = url.pathname.match(/\/archives\/([CDG][A-Z0-9]+)\/p(\d{10,})/i);
   if (archive) {
     const digits = archive[2];
-    return { channel: archive[1], timestamp: `${digits.slice(0, 10)}.${digits.slice(10).padEnd(6, '0').slice(0, 6)}` };
+    const workspaceId = url.searchParams.get('team') || undefined;
+    return { channel: archive[1], timestamp: `${digits.slice(0, 10)}.${digits.slice(10).padEnd(6, '0').slice(0, 6)}`, ...(workspaceId ? { workspaceId } : {}), ...(workspaceSlug ? { workspaceSlug } : {}) };
   }
 
-  const clientThread = url.pathname.match(/\/client\/[^/]+\/([CDG][A-Z0-9]+)\/thread\/[CDG][A-Z0-9]+-(\d{10}\.\d{1,6})/i);
-  if (clientThread) return { channel: clientThread[1], timestamp: clientThread[2] };
+  const clientThread = url.pathname.match(/\/client\/([^/]+)\/([CDG][A-Z0-9]+)\/thread\/[CDG][A-Z0-9]+-(\d{10}\.\d{1,6})/i);
+  if (clientThread) return { channel: clientThread[2], timestamp: clientThread[3], workspaceId: clientThread[1], ...(workspaceSlug ? { workspaceSlug } : {}) };
 
-  const client = url.pathname.match(/\/client\/[^/]+\/([CDG][A-Z0-9]+)/i);
-  const channel = client?.[1] || url.searchParams.get('channel');
+  const client = url.pathname.match(/\/client\/([^/]+)\/([CDG][A-Z0-9]+)/i);
+  const channel = client?.[2] || url.searchParams.get('channel');
   const rawTs = url.searchParams.get('thread_ts') || url.searchParams.get('ts') || '';
   if (channel && /^[CDG][A-Z0-9]+$/i.test(channel)) {
-    return { channel, ...(rawTs ? { timestamp: rawTs } : {}) };
+    return { channel, ...(rawTs ? { timestamp: rawTs } : {}), ...(client?.[1] ? { workspaceId: client[1] } : {}), ...(workspaceSlug ? { workspaceSlug } : {}) };
   }
   return null;
 }
@@ -126,11 +143,15 @@ function Dot({ on }: { on: boolean }) {
 
 export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => void }) {
   const [health, setHealth] = useState<Health | null>(null);
-  const [slackConnection, setSlackConnection] = useState<SlackConnection | null>(null);
+  const [socialConnections, setSocialConnections] = useState<SocialConnectionStatus | null>(null);
+  const [slackOAuthStatus, setSlackOAuthStatus] = useState<SlackOAuthStatus | null>(null);
+  const [pendingSlackTarget, setPendingSlackTarget] = useState<ReturnType<typeof parseSlackTarget>>(null);
+  const [pendingSlackUrl, setPendingSlackUrl] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channel, setChannel] = useState('');
   const [channelLink, setChannelLink] = useState('');
   const [channelLinkError, setChannelLinkError] = useState('');
+  const [connectionFeedback, setConnectionFeedback] = useState<ConnectionFeedback | null>(null);
   const [ts, setTs] = useState('');
   const [skill, setSkill] = useState('startup_lean');
   const [skills, setSkills] = useState<string[]>([]);
@@ -144,13 +165,13 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const [preview, setPreview] = useState<ThreadPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isDemo, setIsDemo] = useState<boolean>(isGitHubPages());
+  const [isDemo, setIsDemo] = useState<boolean>(() => new URLSearchParams(window.location.search).get('demo') === '1');
   const threadRequestId = useRef(0);
   const previewRequestId = useRef(0);
   const selectionRevision = useRef(0);
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
-  const loadThreads = async (ch: string, directMessageLink = false) => {
+  const loadThreads = async (ch: string, directMessageLink = false, announceConnection = false, teamId?: string) => {
     const requestId = ++threadRequestId.current;
     if (!ch) {
       setThreads([]);
@@ -160,26 +181,82 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
     setThreads([]);
     setThreadsLoading(true);
     setError(null);
-    safeFetchJson<any[]>(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`).then(res => {
+    try {
+      const query = new URLSearchParams({ channel: ch });
+      if (teamId || pendingSlackTarget?.workspaceId) query.set('team_id', teamId || pendingSlackTarget!.workspaceId!);
+      const res = await safeFetchJson<any[]>(`${API}/api/slack/threads?${query.toString()}`);
       if (requestId !== threadRequestId.current) return;
       if (res.ok && Array.isArray(res.data)) {
         setThreads(res.data);
+        if (announceConnection) {
+          const channelName = channels.find(item => item.id === ch)?.name || ch;
+          setConnectionFeedback({
+            kind: 'success',
+            message: `Slack channel #${channelName} is accessible. ${res.data.length} recent thread${res.data.length === 1 ? '' : 's'} loaded.`,
+          });
+        }
         if (!res.data.length && !directMessageLink) {
-          setError(`No readable threads were returned for channel ${ch}. Confirm the Slack app is installed in the correct workspace and has access to this channel.`);
+          setError(`Slack access to ${ch} is working, but no recent thread roots were returned. Paste a message permalink or choose a channel with messages.`);
         }
       } else if (isDemo && MOCK_SLACK_CHANNELS.some(mock => mock.id === ch)) {
         setThreads(MOCK_SLACK_THREADS);
+        if (announceConnection) {
+          setConnectionFeedback({ kind: 'error', message: 'This is a local sample channel; no live Slack connection was checked.' });
+        }
       } else {
         setThreads([]);
-        setError(res.error || `Could not read channel ${ch}. The configured Slack credentials must belong to that workspace, and the app must be a member of the channel.`);
+        const message = res.error || `Could not read channel ${ch}. The configured Slack credentials must belong to that workspace, and the app must be a member of the channel.`;
+        setError(message);
+        if (announceConnection) setConnectionFeedback({ kind: 'error', message });
       }
       setThreadsLoading(false);
-    }).catch((e: any) => {
+    } catch (e: any) {
       if (requestId !== threadRequestId.current) return;
       setThreads([]);
       setThreadsLoading(false);
-      setError(e?.message || `Could not read channel ${ch}. Check the Slack workspace and channel permissions.`);
-    });
+      const message = e?.message || `Could not read channel ${ch}. Check the Slack workspace and channel permissions.`;
+      setError(message);
+      if (announceConnection) setConnectionFeedback({ kind: 'error', message });
+    }
+  };
+
+  const loadChannels = async (teamId?: string, requestedChannel?: string) => {
+    const query = new URLSearchParams();
+    if (teamId) query.set('team_id', teamId);
+    const queryString = query.toString();
+    const suffix = queryString ? `?${queryString}` : '';
+    const res = await safeFetchJson<Channel[]>(`${API}/api/slack/channels${suffix}`);
+    if (res.ok && Array.isArray(res.data)) {
+      setChannels(res.data);
+      if (requestedChannel && res.data.some(item => item.id === requestedChannel)) {
+        setChannel(requestedChannel);
+        return true;
+      }
+      setChannel('');
+      setThreads([]);
+      return false;
+    }
+    setChannels([]);
+    setChannel('');
+    setThreads([]);
+    setError(res.error || 'Could not load channels for this Slack workspace.');
+    return false;
+  };
+
+  const beginSlackOAuth = (target: NonNullable<ReturnType<typeof parseSlackTarget>>, link = '') => {
+    if (!slackOAuthStatus?.oauth_enabled) {
+      setChannelLinkError('Slack OAuth is not enabled on this server yet. Ask an administrator to configure the Slack OAuth app.');
+      return;
+    }
+    sessionStorage.setItem('scribeba.slack.pending-target', JSON.stringify(target));
+    if (link) sessionStorage.setItem('scribeba.slack.pending-link', link);
+    const apiBase = getApiUrl() || window.location.origin;
+    const start = new URL('/api/slack/oauth/start', apiBase);
+    const returnPath = `${window.location.pathname}?view=live`;
+    start.searchParams.set('return_to', apiBase === window.location.origin ? returnPath : `${window.location.origin}${returnPath}`);
+    if (target.workspaceId) start.searchParams.set('team_id', target.workspaceId);
+    if (link && !target.workspaceId && /(^|\.)slack\.com\//i.test(link.replace(/^https?:\/\//i, ''))) start.searchParams.set('link', link);
+    window.location.assign(start.toString());
   };
 
   const clearSelectedThread = () => {
@@ -191,15 +268,16 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
     setPreviewError(null);
     setResult(null);
     setError(null);
+    setConnectionFeedback(null);
   };
 
   useEffect(() => {
     safeFetchJson<Health>(`${API}/api/health`).then(res => {
       if (res.ok && res.data) {
         setHealth(res.data);
-        setIsDemo(!res.data.slack);
+        setIsDemo(new URLSearchParams(window.location.search).get('demo') === '1');
       } else {
-        setIsDemo(true);
+        setIsDemo(new URLSearchParams(window.location.search).get('demo') === '1');
         setHealth({
           mode: 'simulation',
           analysis: 'Sample mode',
@@ -211,31 +289,52 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       }
     });
 
-    safeFetchJson<SlackConnection>(`${API}/api/slack/connection`).then(res => {
-      if (res.ok && res.data) setSlackConnection(res.data);
+    safeFetchJson<SocialConnectionStatus>(`${API}/api/social/connection-status`).then(res => {
+      if (res.ok && res.data) setSocialConnections(res.data);
     });
 
-    safeFetchJson<Channel[]>(`${API}/api/slack/channels`).then(res => {
-      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-        setChannels(res.data);
-        if (selectionRevision.current === 0) {
-          const defaultCh = res.data.find((x: any) => x.name === 'all-aiops')?.id || res.data[0].id;
-          setChannel(defaultCh);
-          void loadThreads(defaultCh);
+    safeFetchJson<SlackOAuthStatus>(`${API}/api/slack/connection-status`).then(async res => {
+      const status = res.ok && res.data ? res.data : null;
+      if (status) setSlackOAuthStatus(status);
+      const params = new URLSearchParams(window.location.search);
+      const connected = params.get('slack_connected') === '1';
+      const oauthError = params.get('slack_error');
+      let target: ReturnType<typeof parseSlackTarget> = null;
+      try { target = JSON.parse(sessionStorage.getItem('scribeba.slack.pending-target') || 'null'); } catch { target = null; }
+      const pendingLink = sessionStorage.getItem('scribeba.slack.pending-link') || '';
+      if (oauthError) {
+        setPendingSlackTarget(target);
+        setPendingSlackUrl(pendingLink);
+        setConnectionFeedback({ kind: 'error', message: `Slack authorization failed (${oauthError}). You can retry connecting the workspace.` });
+      }
+      if (connected) {
+        setConnectionFeedback({ kind: 'success', message: 'Slack workspace connected. Choose a channel, or use the pasted link to open its channel.' });
+        sessionStorage.removeItem('scribeba.slack.pending-target');
+        sessionStorage.removeItem('scribeba.slack.pending-link');
+        if (target) {
+          const targetTeamId = target.workspaceId || status?.active_team_id || undefined;
+          const restoredTarget = { ...target, ...(targetTeamId ? { workspaceId: targetTeamId } : {}) };
+          setPendingSlackTarget(restoredTarget);
+          setPendingSlackUrl(pendingLink);
+          setTs(target.timestamp || '');
+          const loaded = await loadChannels(targetTeamId, target.channel);
+          if (loaded) void loadThreads(target.channel, Boolean(target.timestamp), true, targetTeamId);
+          else setChannelLinkError(`Connected to Slack, but channel ${target.channel} was not returned. Choose a channel from this workspace's list.`);
+        } else {
+          setPendingSlackTarget(null);
+          await loadChannels(status?.active_team_id || undefined);
         }
+        params.delete('slack_connected');
+        params.delete('slack_error');
+        params.set('view', 'live');
+        window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+      } else if (status?.active_team_id) {
+        await loadChannels(status.active_team_id);
       } else if (isDemo) {
         setChannels(MOCK_SLACK_CHANNELS);
-        if (selectionRevision.current === 0) {
-          setChannel(MOCK_SLACK_CHANNELS[0].id);
-          setThreads(MOCK_SLACK_THREADS);
-          setTs(MOCK_SLACK_THREADS[0].ts);
-        }
-      } else {
-        setChannels([]);
-        if (selectionRevision.current === 0) {
-          setThreads([]);
-          setError(res.error || 'No Slack channels are available to this integration. Check channel scopes and bot membership.');
-        }
+        setChannel(MOCK_SLACK_CHANNELS[0].id);
+        setThreads(MOCK_SLACK_THREADS);
+        setTs(MOCK_SLACK_THREADS[0]?.ts || '');
       }
     });
 
@@ -252,21 +351,57 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
     selectionRevision.current += 1;
     clearSelectedThread();
     setChannel(newCh);
-    void loadThreads(newCh);
+    setConnectionFeedback({ kind: 'checking', message: `Checking access to Slack channel ${newCh}…` });
+    void loadThreads(newCh, false, true);
   };
 
   const useChannelLink = () => {
     const target = parseSlackTarget(channelLink);
     if (!target) {
       setChannelLinkError('Paste a Slack channel/message link or channel ID. The Slack integration must already be authorized and have access.');
+      setConnectionFeedback({ kind: 'error', message: 'Slack link format was not recognized.' });
       return;
     }
     setChannelLinkError('');
     selectionRevision.current += 1;
     clearSelectedThread();
+    setThreads([]);
+    const installedWorkspace = target.workspaceSlug
+      ? slackOAuthStatus?.workspaces?.find(item => item.team.toLowerCase().replace(/[^a-z0-9]/g, '') === target.workspaceSlug?.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      : undefined;
+    const resolvedTeamId = target.workspaceId || installedWorkspace?.team_id || slackOAuthStatus?.active_team_id || undefined;
+    const resolvedTarget = { ...target, ...(resolvedTeamId ? { workspaceId: resolvedTeamId } : {}) };
+    const installed = Boolean(
+      resolvedTeamId &&
+      (
+        slackOAuthStatus?.active_team_id === resolvedTeamId ||
+        slackOAuthStatus?.workspaces?.some(item => item.team_id === resolvedTeamId) ||
+        slackOAuthStatus?.verified ||
+        socialConnections?.slack.verified
+      )
+    );
+    const needsWorkspaceSelection = !target.workspaceId && !target.workspaceSlug && !slackOAuthStatus?.active_team_id;
+    if ((target.workspaceId && !installed) || (!installed && !slackOAuthStatus?.verified) || needsWorkspaceSelection) {
+      setChannel('');
+      setPendingSlackTarget(resolvedTarget);
+      setPendingSlackUrl(channelLink.trim());
+      setChannelLinkError(!slackOAuthStatus?.oauth_enabled
+        ? 'This Slack workspace is not authorized, and OAuth is not enabled on the server. Ask an administrator to configure the Slack OAuth app.'
+        : needsWorkspaceSelection
+          ? 'This channel ID does not identify its workspace. Connect Slack and choose the workspace before ScribeBA checks it.'
+          : 'This channel belongs to a workspace that is not authorized in this session. Connect it to continue; Slack will ask you to sign in and approve access.');
+      setConnectionFeedback({ kind: 'checking', message: `Authorization is needed for ${target.workspaceSlug || target.workspaceId || 'a Slack workspace'}.` });
+      return;
+    }
+    setPendingSlackTarget(resolvedTeamId ? resolvedTarget : null);
+    setPendingSlackUrl(resolvedTeamId ? channelLink.trim() : '');
     setChannel(target.channel);
     setTs(target.timestamp || '');
-    void loadThreads(target.channel, Boolean(target.timestamp));
+    setConnectionFeedback({ kind: 'checking', message: `Checking Slack access for channel ${target.channel}…` });
+    void loadChannels(resolvedTeamId, target.channel).then(loaded => {
+      setChannel(target.channel);
+      void loadThreads(target.channel, Boolean(target.timestamp), true, resolvedTeamId);
+    });
   };
 
   const readThread = async () => {
@@ -274,7 +409,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       setPreviewError('Paste a message permalink or choose a thread before reading it.');
       return;
     }
-    if (isDemo || !health?.slack) {
+    if (isDemo || (!health?.slack && !slackOAuthStatus?.active_team_id)) {
       setPreviewError('A live Slack connection is not available in this session. Connect the backend Slack integration before reading a real thread.');
       return;
     }
@@ -288,21 +423,30 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
     const url = new URL(`${API}/api/slack/thread`, window.location.origin);
     url.searchParams.set('channel', requestedChannel);
     url.searchParams.set('ts', requestedTimestamp);
+    if (pendingSlackTarget?.workspaceId) url.searchParams.set('team_id', pendingSlackTarget.workspaceId);
     const response = await safeFetchJson<ThreadPreview>(url.toString());
     if (requestId !== previewRequestId.current) return;
     if (!response.ok || !response.data) {
-      setPreviewError(response.error || `Could not read thread ${requestedTimestamp} in ${requestedChannel}. Confirm this Slack integration can access that workspace and channel.`);
+      const message = response.error || `Could not read thread ${requestedTimestamp} in ${requestedChannel}. Confirm this Slack integration can access that workspace and channel.`;
+      setPreviewError(message);
+      setConnectionFeedback({ kind: 'error', message });
     } else if (!response.data.messages?.length) {
-      setPreviewError('Slack returned no messages for this thread. Check that the timestamp points to a thread root and the integration can read its messages.');
+      const message = 'Slack returned no messages for this thread. Check that the timestamp points to a thread root and the integration can read its messages.';
+      setPreviewError(message);
+      setConnectionFeedback({ kind: 'error', message });
     } else {
       setPreview(response.data);
+      setConnectionFeedback({
+        kind: 'success',
+        message: `Slack connection confirmed: read ${response.data.messages.length} messages from channel ${requestedChannel}.`,
+      });
     }
     setPreviewLoading(false);
   };
 
   const seedThread = async () => {
     if (!channel) return;
-    if (isDemo || !health?.slack) {
+    if (isDemo || (!health?.slack && !slackOAuthStatus?.active_team_id)) {
       setError('Sample seeding is unavailable without a live Slack connection.');
       return;
     }
@@ -313,7 +457,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       const res = await safeFetchJson<any>(`${API}/api/slack/seed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel }),
+        body: JSON.stringify({ channel, ...(pendingSlackTarget?.workspaceId ? { team_id: pendingSlackTarget.workspaceId } : {}) }),
       });
       if (res.ok && res.data && !res.data.error) {
         previewRequestId.current += 1;
@@ -355,7 +499,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       const res = await safeFetchJson<RunResult>(`${API}/api/slack-run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, ts, skill }),
+        body: JSON.stringify({ channel, ts, skill, ...(pendingSlackTarget?.workspaceId ? { team_id: pendingSlackTarget.workspaceId } : {}) }),
       });
       if (res.ok && res.data) {
         setResult(res.data);
@@ -370,7 +514,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
+    <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8 sm:py-6 bg-slate-50">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -409,14 +553,14 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
         {health && (
           <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-700 border border-slate-200 rounded-xl px-4 py-3 bg-white">
             <div className="flex items-center gap-4">
-              <span className="flex items-center gap-1.5 font-medium" title="This reflects configured server credentials, not access to every workspace or channel.">
-                <Dot on={health.slack} /> Slack credentials
+              <span className="flex items-center gap-1.5 font-medium" title="This turns green only for a Slack workspace authorized in this browser session.">
+                <Dot on={Boolean(slackOAuthStatus?.active_team_id && socialConnections?.slack.verified)} /> Slack workspace
               </span>
               <span className="flex items-center gap-1.5 font-medium">
-                <Dot on={health.discord ?? false} /> Discord
+                <Dot on={socialConnections?.discord.verified ?? false} /> Discord bot
               </span>
               <span className="flex items-center gap-1.5 font-medium">
-                <Dot on={health.telegram ?? false} /> Telegram
+                <Dot on={socialConnections?.telegram.verified ?? false} /> Telegram bot
               </span>
               <span className="flex items-center gap-1.5 font-medium">
                 <Dot on={Boolean(health.openrouter || health.openai || health.nebius)} /> AI providers
@@ -436,11 +580,35 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
             </div>
           </div>
         )}
-        {health?.slack && (
+        {(health?.slack || slackOAuthStatus?.active_team_id || slackOAuthStatus?.legacy_env_token) && (
           <p className="-mt-4 mb-0 text-[11px] leading-relaxed text-slate-500">
-            Green means Slack credentials are configured. A channel link does not authorize or switch workspaces; the configured credentials must belong to the same workspace, and the Slack app must be invited to private channels.
-            {slackConnection?.workspace_name && <> Connected workspace: <strong className="font-semibold text-slate-700">{slackConnection.workspace_name}</strong>{slackConnection.account ? ` · ${slackConnection.account}` : ''}.</>}
+            {slackOAuthStatus?.legacy_env_token && !slackOAuthStatus?.active_team_id
+              ? 'A fixed server token exists, but it is not treated as your connected workspace. Connect the workspace you intend to read. '
+              : socialConnections?.slack.verified ? 'Slack workspace verified. ' : 'Connect a Slack workspace to read its channels. '}
+            {slackOAuthStatus?.workspaces?.length ? `Authorized Slack workspaces: ${slackOAuthStatus.workspaces.map(workspace => workspace.team).join(', ')}. ` : ''}
+            Links identify the channel; Slack asks you to sign in and approve access before this app can read it.
+            {socialConnections?.slack.workspace && <> Connected workspace: <strong className="font-semibold text-slate-700">{socialConnections.slack.workspace}</strong>{socialConnections.slack.account ? ` · ${socialConnections.slack.account}` : ''}.</>}
+            {socialConnections && (socialConnections.discord.verified || socialConnections.telegram.verified) && <> Discord/Telegram bot credentials are verified, but their channel reader is not available in this view yet.</>}
           </p>
+        )}
+        {socialConnections?.slack.verified && slackOAuthStatus?.active_team_id && pendingSlackTarget?.workspaceId && pendingSlackTarget.workspaceId !== slackOAuthStatus.active_team_id && (
+          <div role="status" aria-live="polite" className="-mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+            <span className="material-symbols-outlined mt-0.5 text-[16px]" aria-hidden="true">warning</span>
+            <span>The current Slack connection is a different workspace from the pasted link. Authorize the workspace in that link before reading it.</span>
+          </div>
+        )}
+        {socialConnections?.slack.verified && slackOAuthStatus?.active_team_id && (!pendingSlackTarget?.workspaceId || pendingSlackTarget.workspaceId === slackOAuthStatus.active_team_id) && (
+          <div role="status" aria-live="polite" className="-mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-900">
+            <span className="material-symbols-outlined mt-0.5 text-[16px]" aria-hidden="true">check_circle</span>
+            <span>Slack workspace connected: <strong>{socialConnections.slack.workspace || 'your workspace'}</strong>{socialConnections.slack.account ? ` (${socialConnections.slack.account})` : ''}. The selected channel is checked separately.</span>
+          </div>
+        )}
+        {socialConnections && (
+          <div className="-mt-3 grid gap-1 text-[11px] leading-relaxed text-slate-500 sm:grid-cols-3" aria-label="Social integration diagnostics">
+            <span>Slack: {socialConnections.slack.verified && slackOAuthStatus?.active_team_id ? 'workspace verified' : socialConnections.slack.configured ? (socialConnections.slack.error || 'not connected to this browser session') : 'not connected'}</span>
+            <span>Discord: {socialConnections.discord.verified ? 'bot credential verified; channel reader unavailable here' : socialConnections.discord.configured ? (socialConnections.discord.error || 'verification failed') : 'not configured'}</span>
+            <span>Telegram: {socialConnections.telegram.verified ? 'bot credential verified; channel reader unavailable here' : socialConnections.telegram.configured ? (socialConnections.telegram.error || 'verification failed') : 'not configured'}</span>
+          </div>
         )}
 
         {/* Configuration Panel */}
@@ -487,9 +655,37 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 </button>
               </div>
               <p className="mb-0 mt-1.5 font-normal leading-relaxed text-slate-500">
-                A channel link loads its thread list. A message permalink selects its thread directly. Neither link signs in or grants access; a workspace administrator must configure Slack access.
+                A link identifies a channel or thread. Slack sign-in and consent are required to access a workspace; pasting a link alone cannot authorize it.
               </p>
               {channelLinkError && <p role="alert" className="mb-0 mt-1.5 font-normal text-rose-700">{channelLinkError}</p>}
+              {pendingSlackTarget && !channel && (
+                <button
+                  type="button"
+                  onClick={() => beginSlackOAuth(pendingSlackTarget, pendingSlackUrl)}
+                  disabled={!slackOAuthStatus?.oauth_enabled}
+                  className="mt-2 rounded-lg bg-teal-800 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Connect this Slack workspace
+                </button>
+              )}
+              {connectionFeedback && (
+                <div
+                  role={connectionFeedback.kind === 'error' ? 'alert' : 'status'}
+                  aria-live={connectionFeedback.kind === 'error' ? 'assertive' : 'polite'}
+                  className={`mt-2 flex items-start gap-2 rounded-lg border px-3 py-2 font-normal leading-relaxed ${
+                    connectionFeedback.kind === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : connectionFeedback.kind === 'checking'
+                        ? 'border-sky-200 bg-sky-50 text-sky-900'
+                        : 'border-rose-200 bg-rose-50 text-rose-800'
+                  }`}
+                >
+                  <span className="material-symbols-outlined mt-0.5 text-[15px]" aria-hidden="true">
+                    {connectionFeedback.kind === 'success' ? 'check_circle' : connectionFeedback.kind === 'checking' ? 'progress_activity' : 'error'}
+                  </span>
+                  <span>{connectionFeedback.message}</span>
+                </div>
+              )}
             </div>
 
             <div className="text-xs font-semibold text-slate-700 md:col-span-2">
@@ -498,7 +694,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 <button
                   type="button"
                   onClick={seedThread}
-                  disabled={seeding || !channel || isDemo || !health?.slack}
+                  disabled={seeding || !channel || isDemo || (!health?.slack && !slackOAuthStatus?.active_team_id)}
                   title={`Posts sample messages into #${channels.find(c => c.id === channel)?.name || channel}. Use only in a test channel.`}
                   className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-0.5 rounded transition-all disabled:opacity-40 flex items-center gap-1"
                 >
@@ -588,12 +784,12 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
             <button
               type="button"
               onClick={readThread}
-              disabled={previewLoading || isDemo || !health?.slack || !channel || !ts}
+              disabled={previewLoading || isDemo || (!health?.slack && !slackOAuthStatus?.active_team_id) || !channel || !ts}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:border-teal-700 hover:text-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {previewLoading ? 'Reading Slack thread…' : 'Read thread'}
             </button>
-            {!health?.slack && !isDemo && <span className="text-xs text-amber-800">Slack is not connected.</span>}
+            {!health?.slack && !slackOAuthStatus?.active_team_id && !isDemo && <span className="text-xs text-amber-800">Slack is not connected.</span>}
             {previewError && <p role="alert" className="mb-0 text-xs text-rose-700">{previewError}</p>}
           </div>
 
@@ -606,7 +802,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 </div>
                 {preview.permalink && <a href={preview.permalink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-teal-800 underline">Open in Slack ↗</a>}
               </div>
-              <div className="max-h-72 space-y-2 overflow-y-auto p-3" aria-live="polite">
+              <div className="space-y-2 p-3" aria-live="polite">
                 {preview.messages.map((message, index) => (
                   <article key={`${message.timestamp}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                     <div className="mb-1 flex flex-wrap items-baseline gap-x-2 text-[11px] text-slate-500">

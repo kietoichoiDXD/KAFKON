@@ -176,7 +176,7 @@ export const ReviewView: React.FC = () => {
       </div>
 
       <div className="review-matrix flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 overflow-hidden max-lg:block max-lg:overflow-y-auto max-lg:pb-20">
-        <section aria-labelledby="evidence-heading" className="min-h-0 overflow-y-auto border-r border-slate-200 px-5 lg:px-6 py-5 lg:self-start lg:max-h-full max-lg:max-h-[35vh] max-lg:border-r-0 max-lg:border-b">
+        <section aria-labelledby="evidence-heading" className="min-h-0 overflow-y-auto border-r border-slate-200 px-5 lg:px-6 py-5 lg:self-start lg:max-h-full max-lg:overflow-visible max-lg:border-r-0 max-lg:border-b">
           <div className="flex items-baseline justify-between gap-3 mb-3">
             <h2 id="evidence-heading" className="text-base font-semibold text-slate-900">Evidence</h2>
             <span className="text-xs text-slate-500">{filteredItems.length} claims</span>

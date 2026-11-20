@@ -133,8 +133,12 @@ class ModelFallbackRouter:
             })
             return None, audit_trail
 
+        openrouter_auth_failed = False
         async with httpx.AsyncClient(timeout=self.http_timeout) as client:
             for idx, item in enumerate(chain, 1):
+                if item["provider"] == "openrouter" and openrouter_auth_failed:
+                    audit_trail.append({"step": idx, "alias": item["alias"], "model": item["model"], "status": "skipped", "reason": "OpenRouter API key expired/invalid"})
+                    continue
                 alias = item["alias"]
                 model_id = item["model"]
                 provider = item["provider"]
@@ -191,6 +195,8 @@ class ModelFallbackRouter:
 
                 except httpx.HTTPStatusError as e:
                     status = e.response.status_code
+                    if status == 401 and provider == "openrouter":
+                        openrouter_auth_failed = True
                     reason = "Out of tokens (402 Payment Required)" if status == 402 else "Rate limited (429)" if status == 429 else f"HTTP {status}"
                     print(f"⚠️ [Fallback Triggered] {alias} ({model_id}) failed with {reason}. Cascading to next candidate...")
                     audit_trail.append({

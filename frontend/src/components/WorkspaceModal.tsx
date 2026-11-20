@@ -94,7 +94,7 @@ interface WorkspaceModalProps {
 }
 
 type SocialPlatform = 'Slack' | 'Discord' | 'Telegram';
-type ParsedChannelLink = { platform: SocialPlatform; workspace?: string; channel: string; detail?: string };
+type ParsedChannelLink = { platform: SocialPlatform; workspace?: string; workspaceId?: string; workspaceSlug?: string; channel: string; link?: string; detail?: string };
 
 function parseSocialChannelLink(platform: SocialPlatform, raw: string): ParsedChannelLink | string {
   let url: URL;
@@ -108,13 +108,17 @@ function parseSocialChannelLink(platform: SocialPlatform, raw: string): ParsedCh
   const segments = url.pathname.split('/').filter(Boolean);
   if (platform === 'Slack') {
     if (!/(^|\.)slack\.com$/i.test(url.hostname)) return 'This does not look like a Slack link.';
+    const workspaceSlug = url.hostname.toLowerCase().endsWith('.slack.com') && url.hostname.toLowerCase() !== 'app.slack.com'
+      ? url.hostname.slice(0, -'.slack.com'.length)
+      : undefined;
     const archivesAt = segments.indexOf('archives');
     if (archivesAt >= 0 && segments[archivesAt + 1]) {
-      return { platform, channel: segments[archivesAt + 1], workspace: url.hostname };
+      const workspaceId = url.searchParams.get('team') || undefined;
+      return { platform, channel: segments[archivesAt + 1], workspace: workspaceSlug || url.hostname, workspaceId, workspaceSlug, link: url.toString() };
     }
     const clientAt = segments.indexOf('client');
     if (clientAt >= 0 && segments[clientAt + 2]) {
-      return { platform, workspace: segments[clientAt + 1], channel: segments[clientAt + 2] };
+      return { platform, workspace: workspaceSlug || segments[clientAt + 1], workspaceId: segments[clientAt + 1], workspaceSlug, channel: segments[clientAt + 2], link: url.toString() };
     }
     return 'Slack link found, but no channel ID was recognized. Copy a channel link from Slack (archives/... or client/.../...).';
   }
@@ -190,6 +194,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const [socialChannelLink, setSocialChannelLink] = useState('');
   const [parsedSocialLink, setParsedSocialLink] = useState<ParsedChannelLink | null>(null);
   const [socialLinkError, setSocialLinkError] = useState('');
+  const [slackOAuthEnabled, setSlackOAuthEnabled] = useState(false);
 
   // BYOK State
   const [byokGeminiKey, setByokGeminiKey] = useState('');
@@ -243,6 +248,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   // Fetch BYOK on open
   useEffect(() => {
     if (!isOpen) return;
+    safeFetchJson<{ oauth_enabled?: boolean }>(`${API}/api/slack/connection-status`).then(result => {
+      if (result.ok && result.data) setSlackOAuthEnabled(Boolean(result.data.oauth_enabled));
+    });
     get<any>('/api/byok').then(data => {
       if (!data) return;
       if (data.gemini_api_key) setByokGeminiKey(data.gemini_api_key);
@@ -1358,14 +1366,14 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                         <div className="min-w-0 flex-1">
                           <h3 id="social-channel-connect-title" className="m-0 text-sm font-bold text-gray-900">Connect a social channel</h3>
                           <p className="mb-0 mt-1 text-xs leading-relaxed text-gray-600">
-                            A channel link identifies where ScribeBA should look. It does not sign in or grant access. The workspace administrator must first configure the platform integration on the backend and invite its bot with the required permissions.
+                            Slack uses an administrator-configured OAuth app; you sign in and approve the workspace when prompted. Discord and Telegram use server-managed bot credentials. A channel link identifies the destination but does not grant access by itself.
                           </p>
                         </div>
                       </div>
 
                       <ol className="my-4 grid gap-2 text-xs leading-relaxed text-gray-700 md:grid-cols-3">
-                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">1. Authorize the integration</b><br />Ask your workspace administrator to configure Slack, Discord, or Telegram credentials in the server environment. Never paste a bot token here.</li>
-                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">2. Grant channel access</b><br />Invite the ScribeBA bot to the channel and grant only the read/post permissions your workflow needs.</li>
+                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">1. Authorize the integration</b><br />For Slack, use the OAuth button below and approve access. For Discord or Telegram, ask an administrator to configure the server-managed bot. Never paste tokens here.</li>
+                        <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">2. Grant channel access</b><br />Invite the authorized Slack app or bot to the channel and grant only the read/post permissions your workflow needs.</li>
                         <li className="rounded-lg border border-gray-200 bg-white p-3"><b className="text-gray-900">3. Identify the channel</b><br />Paste its share link below. This form only extracts a recognizable channel identifier in this browser.</li>
                       </ol>
 
@@ -1434,7 +1442,39 @@ ${(skill.markdownContent || '').split('\n').map(l => `  ${l}`).join('\n')}
                             Channel: {parsedSocialLink.channel}
                           </div>
                           {parsedSocialLink.detail && <p className="mb-0 mt-2 text-xs leading-relaxed text-gray-600">{parsedSocialLink.detail}</p>}
-                          <p className="mb-0 mt-2 text-[11px] leading-relaxed text-gray-500">Link and identifier are kept only in this modal session. To finish connecting, the administrator must configure the bot credentials and confirm the bot can access this channel.</p>
+                          {parsedSocialLink.platform === 'Slack' ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                              <button
+                                type="button"
+                                disabled={!slackOAuthEnabled}
+                                onClick={() => {
+                                  if (!slackOAuthEnabled) {
+                                    setSocialLinkError('Slack OAuth is not enabled on this server. Ask an administrator to configure the Slack OAuth app.');
+                                    return;
+                                  }
+                                  sessionStorage.setItem('scribeba.slack.pending-target', JSON.stringify({
+                                    channel: parsedSocialLink.channel,
+                                    workspaceId: parsedSocialLink.workspaceId,
+                                    workspaceSlug: parsedSocialLink.workspaceSlug,
+                                  }));
+                                  sessionStorage.setItem('scribeba.slack.pending-link', parsedSocialLink.link || socialChannelLink);
+                                  const apiBase = getApiUrl() || window.location.origin;
+                                  const start = new URL('/api/slack/oauth/start', apiBase);
+                                  const returnPath = `${window.location.pathname}?view=live`;
+                                  start.searchParams.set('return_to', apiBase === window.location.origin ? returnPath : `${window.location.origin}${returnPath}`);
+                                  if (parsedSocialLink.workspaceId) start.searchParams.set('team_id', parsedSocialLink.workspaceId);
+                                  else if (parsedSocialLink.link) start.searchParams.set('link', parsedSocialLink.link);
+                                  window.location.assign(start.toString());
+                                }}
+                                className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Connect this Slack workspace
+                              </button>
+                              <span className="text-[11px] leading-relaxed text-gray-500">Slack will ask you to sign in and approve access, then return to Live Telemetry.</span>
+                            </div>
+                          ) : (
+                            <p className="mb-0 mt-2 text-[11px] leading-relaxed text-gray-500">This link identifies the channel. The platform bot must be configured and granted access by an administrator.</p>
+                          )}
                         </div>
                       )}
                     </section>

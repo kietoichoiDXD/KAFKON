@@ -194,10 +194,11 @@ def create_ticket_cmd(file: str, skill: str):
 
 @cli.command("serve")
 @click.option("--port", default=8000, help="Port for the ScribeBA API (default 8000).")
-def serve_cmd(port: int):
+@click.option("--host", default="127.0.0.1", help="Interface to bind (default loopback only).")
+def serve_cmd(port: int, host: str):
     """Run the HTTP API the Web Studio talks to."""
     from .api import app as api_app
-    api_app.run(host="0.0.0.0", port=port)
+    api_app.run(host=host, port=port)
 
 @cli.command("slack-run")
 @click.option("--channel", "-c", required=True, help="Slack channel ID, e.g. C0BFQCXHM2T.")
@@ -393,17 +394,23 @@ def web_cmd(port: int, open_browser: bool):
     import webbrowser
     import time
     import threading
+    import shutil
 
     frontend_dir = BASE_DIR / "frontend"
     if not frontend_dir.exists():
         raise click.ClickException(f"Frontend directory not found at {frontend_dir}")
+    node = shutil.which("node")
+    vite_entry = frontend_dir / "node_modules" / "vite" / "bin" / "vite.js"
+    if not node or not vite_entry.exists():
+        raise click.ClickException("Frontend dependencies are missing. Run `npm install` in the frontend directory first.")
 
     url = f"http://localhost:{port}"
     if HAS_RICH:
-        console.rule("[bold cyan]🌐 ScribeBA Web Studio[/bold cyan]")
-        console.print(f"🚀 Launching ScribeBA Web Studio at [bold green]{url}[/bold green]...")
-        console.print(f"📁 Directory: [dim]{frontend_dir}[/dim]")
-        console.print("⚡ Press [bold red]Ctrl+C[/bold red] to stop the web server.\n")
+        # Keep the local launcher compatible with legacy Windows console code pages.
+        console.rule("[bold cyan]ScribeBA Web Studio[/bold cyan]")
+        console.print(f"Launching ScribeBA Web Studio at [bold green]{url}[/bold green]...")
+        console.print(f"Directory: [dim]{frontend_dir}[/dim]")
+        console.print("Press [bold red]Ctrl+C[/bold red] to stop the web server.\n")
 
     if open_browser:
         def _open():
@@ -411,14 +418,37 @@ def web_cmd(port: int, open_browser: bool):
             webbrowser.open(url)
         threading.Thread(target=_open, daemon=True).start()
 
-    # The studio calls the API on 8000; start it here so one command brings up both halves.
-    api = subprocess.Popen([sys.executable, "-m", "backend.cli", "serve"], cwd=str(BASE_DIR))
+    # The dev launcher stays on loopback and forces the Vite app through the
+    # local API proxy, even when .env.local contains a hosted API URL.
+    local_env = os.environ.copy()
+    local_env["SCRIBEBA_PUBLIC_MODE"] = "false"
+    frontend_env = local_env.copy()
+    frontend_env["VITE_API_URL"] = ""
+    frontend_env["VITE_API_PROXY_TARGET"] = "http://127.0.0.1:8000"
+    api = subprocess.Popen(
+        [sys.executable, "-m", "backend.cli", "serve", "--host", "127.0.0.1"],
+        cwd=str(BASE_DIR),
+        env=local_env,
+    )
+    vite = None
     try:
-        subprocess.run(["npx", "vite", "--port", str(port), "--host"], cwd=str(frontend_dir))
+        vite = subprocess.Popen(
+            [node, str(vite_entry), "--port", str(port), "--host", "127.0.0.1", "--strictPort"],
+            cwd=str(frontend_dir),
+            env=frontend_env,
+        )
+        vite.wait()
     except KeyboardInterrupt:
         print("\n[Web Server Stopped]")
     finally:
-        api.terminate()
+        for child in (vite, api):
+            if child and child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait(timeout=5)
 
 
 def main():

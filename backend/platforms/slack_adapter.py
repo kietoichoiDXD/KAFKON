@@ -1,3 +1,4 @@
+import re
 from typing import Optional, Dict
 import httpx
 from .base import BasePlatformAdapter
@@ -12,7 +13,10 @@ class SlackAdapter(BasePlatformAdapter):
     """Slack integration over the Slack Web API (bot or user token)."""
 
     def __init__(self, token: Optional[str] = None):
-        self.token = token or settings.slack_user_token or settings.slack_bot_token
+        # None means the legacy CLI may use a server-configured token. An explicit
+        # empty string means a browser request has no authorized workspace and
+        # must not silently fall back to a different workspace's credentials.
+        self.token = (settings.slack_user_token or settings.slack_bot_token) if token is None else token
         self._user_names: Dict[str, str] = {}
 
     @property
@@ -126,3 +130,44 @@ class SlackAdapter(BasePlatformAdapter):
             f"• Linked Source Thread: `{ticket.thread_link}`"
         )
         return await self._post(channel_id, thread_id, text)
+
+
+def parse_slack_link(text: str) -> Optional[Dict[str, Optional[str]]]:
+    """Extract channel ID and optional timestamp (ts) from a Slack link or text containing a link."""
+    if not text:
+        return None
+    # 1. Archives format: /archives/C0CFE9GL4AK/p1795162883105679
+    m = re.search(r"slack\.com/archives/([CDG][A-Z0-9]+)/p(\d{10})(\d{0,6})", text, re.I)
+    if m:
+        usec = m.group(3).ljust(6, "0") if m.group(3) else "000000"
+        return {"channel": m.group(1).upper(), "ts": f"{m.group(2)}.{usec}"}
+
+    # 2. Client thread format: /client/T.../C0CFE9GL4AK/thread/C0CFE9GL4AK-1795162883.105679
+    m = re.search(r"slack\.com/client/[^/]+/([CDG][A-Z0-9]+)/thread/[CDG][A-Z0-9]+-(\d{10}\.\d{1,6})", text, re.I)
+    if m:
+        return {"channel": m.group(1).upper(), "ts": m.group(2)}
+
+    # 3. Client with query params: ?ts=... or ?thread_ts=...
+    m = re.search(r"slack\.com/client/[^/]+/([CDG][A-Z0-9]+).*?[?&](?:thread_)?ts=(\d{10}(?:\.\d{1,6})?)", text, re.I)
+    if m:
+        ts = m.group(2)
+        if "." not in ts:
+            ts = f"{ts}.000000"
+        return {"channel": m.group(1).upper(), "ts": ts}
+
+    # 4. Archive channel without ts: /archives/C0CFE9GL4AK
+    m = re.search(r"slack\.com/archives/([CDG][A-Z0-9]+)", text, re.I)
+    if m:
+        return {"channel": m.group(1).upper(), "ts": None}
+
+    # 5. Client channel without ts: /client/T.../C0CFE9GL4AK
+    m = re.search(r"slack\.com/client/[^/]+/([CDG][A-Z0-9]+)", text, re.I)
+    if m:
+        return {"channel": m.group(1).upper(), "ts": None}
+
+    # 6. Raw Slack channel ID if provided directly
+    m = re.search(r"\b([CDG][A-Z0-9]{8,12})\b", text)
+    if m and not text.startswith("http"):
+        return {"channel": m.group(1).upper(), "ts": None}
+
+    return None

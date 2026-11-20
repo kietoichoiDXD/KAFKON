@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     scribeba_session_secret: Optional[str] = Field(default=None, alias="SCRIBEBA_SESSION_SECRET")
     scribeba_allowed_origin: Optional[str] = Field(default=None, alias="SCRIBEBA_ALLOWED_ORIGIN")
     scribeba_cookie_samesite: str = Field(default="Lax", alias="SCRIBEBA_COOKIE_SAMESITE")
+    scribeba_chat_history_db_path: Optional[Path] = Field(default=None, alias="SCRIBEBA_CHAT_HISTORY_DB_PATH")
 
     # Durable hosted authentication through Amazon Cognito.
     cognito_region: Optional[str] = Field(default=None, alias="COGNITO_REGION")
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
     slack_user_token: Optional[str] = Field(default=None, alias="SLACK_USER_TOKEN")
     slack_app_token: Optional[str] = Field(default=None, alias="SLACK_APP_TOKEN")
     slack_signing_secret: Optional[str] = Field(default=None, alias="SLACK_SIGNING_SECRET")
+    slack_client_id: Optional[str] = Field(default=None, alias="SLACK_CLIENT_ID")
+    slack_client_secret: Optional[str] = Field(default=None, alias="SLACK_CLIENT_SECRET")
+    slack_redirect_uri: Optional[str] = Field(default=None, alias="SLACK_REDIRECT_URI")
+    slack_installation_encryption_key: Optional[str] = Field(default=None, alias="SLACK_INSTALLATION_ENCRYPTION_KEY")
+    slack_installation_db_path: Optional[Path] = Field(default=None, alias="SLACK_INSTALLATION_DB_PATH")
 
     # Discord
     discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
