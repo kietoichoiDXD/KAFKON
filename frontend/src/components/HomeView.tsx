@@ -45,6 +45,45 @@ function EvidencePill({ label }: { label: string }) {
 
 function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tier: string }) {
   const investScore = result.invest?.overall ?? 85;
+  const [slackTarget, setSlackTarget] = useState(result.channel || result.permalink || '');
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ ok: boolean; message: string; url?: string } | null>(null);
+
+  const handleSyncSlack = async () => {
+    if (!slackTarget.trim()) return;
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const resp = await safeFetchJson<any>(`${API}/api/slack/sync-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: slackTarget.trim(),
+          ts: result.ts || '',
+          skill,
+          sync_clickup: true,
+          analysis: result
+        })
+      });
+      if (resp.ok && resp.data) {
+        setSyncStatus({
+          ok: true,
+          message: 'Đã gửi task lên Slack & ClickUp thành công!',
+          url: resp.data.ticket?.url || resp.data.permalink
+        });
+      } else {
+        setSyncStatus({
+          ok: false,
+          message: resp.error || 'Không thể đồng bộ với Slack.'
+        });
+      }
+    } catch (e: any) {
+      setSyncStatus({ ok: false, message: e.message || 'Lỗi kết nối' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
       <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
@@ -222,6 +261,45 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
           </div>
         </div>
       )}
+
+      {/* Slack & ClickUp Sync Section */}
+      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[16px] text-[#4A154B]">forum</span>
+            <span>Liên kết Slack:</span>
+          </span>
+          <input
+            type="text"
+            placeholder="Channel ID hoặc link (vd: C0CFE9GL4AK)"
+            value={slackTarget}
+            onChange={e => setSlackTarget(e.target.value)}
+            className="px-2.5 py-1 text-xs rounded border border-slate-300 w-64 font-mono bg-white focus:outline-none focus:border-teal-600"
+          />
+        </div>
+        <button
+          onClick={handleSyncSlack}
+          disabled={syncing || !slackTarget.trim()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4A154B] text-white font-medium hover:bg-[#3b113c] transition-colors disabled:opacity-50 cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[15px]">send</span>
+          <span>{syncing ? 'Đang gửi...' : 'Gửi Task lên Slack & ClickUp'}</span>
+        </button>
+      </div>
+
+      {syncStatus && (
+        <div className={`p-2.5 rounded-lg text-xs flex items-center justify-between ${syncStatus.ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">{syncStatus.ok ? 'check_circle' : 'error'}</span>
+            <span>{syncStatus.message}</span>
+          </div>
+          {syncStatus.url && (
+            <a href={syncStatus.url} target="_blank" rel="noreferrer" className="underline font-semibold ml-2 hover:text-emerald-950">
+              Mở link liên kết →
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -311,14 +389,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     ].flatMap(m => m.split('\n').filter(l => l.trim()));
 
     try {
-      const resp = await fetch(`${API}/api/chat`, {
+      const resp = await safeFetchJson<any>(`${API}/api/chat`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction, session_id: activeSessionId }),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error ?? 'Request failed');
+      if (!resp.ok || !resp.data) throw new Error(resp.error ?? 'Request failed');
+      const data = resp.data;
       if (data.session_id && data.session_id !== activeSessionId) {
         setActiveSessionId(data.session_id);
         localStorage.setItem('scribeba.chat.active-session', data.session_id);
@@ -433,6 +510,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
             <span>Slack Discussion Link Detected</span>
           </div>
           <span className="font-mono text-[11px] text-teal-700 font-semibold">AI4L - AIO Workspace Connected</span>
+        </div>
+      )}
+
+      {!/https?:\/\/[a-z0-9\-.]*slack\.com\//i.test(promptInput) && /(?:\[\d{1,2}:\d{2}.*?\]|@\w+:)/.test(promptInput) && (
+        <div className="mb-2.5 flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-900">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span className="material-symbols-outlined text-[16px] text-indigo-700">content_paste</span>
+            <span>Đã nhận diện tin nhắn copy từ Slack (Tự động bóc tách Task & lọc nhiễu)</span>
+          </div>
+          <span className="font-mono text-[11px] text-indigo-700 font-semibold">Anti-Noise Multi-Agent</span>
         </div>
       )}
 

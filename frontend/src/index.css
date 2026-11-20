@@ -28,6 +28,7 @@
     min-width: 320px;
     min-height: 100%;
     height: 100%;
+    overscroll-behavior: none;
   }
 
   body {
@@ -170,6 +171,18 @@
   min-height: 0;
 }
 
+/* Keep scroll inside the selected workspace view instead of letting browser
+   viewport rounding create a second, nearly invisible page scrollbar. */
+.app-main,
+.app-main > * {
+  min-height: 0;
+  min-width: 0;
+}
+
+.task-code-content {
+  scrollbar-gutter: stable;
+}
+
 @media (max-width: 760px) {
   .scribeba-sidebar {
     position: fixed;
@@ -267,16 +280,24 @@
   }
 
   .app-main {
+    flex: 1 1 auto;
     height: calc(100dvh - 64px);
+    max-height: calc(100dvh - 64px);
     min-height: 0;
     overflow: hidden;
   }
 
   .app-main > * {
+    flex: 1 1 auto;
     height: calc(100dvh - 64px) !important;
     max-height: calc(100dvh - 64px) !important;
     min-height: 0 !important;
     overflow: hidden !important;
+  }
+
+  .task-code-content {
+    padding-bottom: 1.25rem;
+    -webkit-overflow-scrolling: touch;
   }
 
   .app-main .w-1\/2 {

@@ -16,6 +16,7 @@ from .core.fallback_router import ModelFallbackRouter
 from .core.models import ChatMessage, ThreadContext
 from .core.redaction import redact
 from .core.skills import SkillManager
+from .core.transcript_parser import parse_slack_transcript
 
 SYSTEM = """You are ScribeBA, an AI Business Analyst built by team KAFKON.
 
@@ -205,16 +206,46 @@ class ChatResponder:
                 )}
 
         if looks_like_a_discussion(messages):
+            # Parse real Slack messages if present in the discussion
+            joined_text = "\n".join(messages)
+            parsed_msgs = parse_slack_transcript(joined_text)
+            if not parsed_msgs:
+                parsed_msgs = [ChatMessage(author=f"@speaker{i+1}", timestamp="now", text=m)
+                               for i, m in enumerate(messages)]
             thread = ThreadContext(
                 thread_id="chat", channel="chat", platform="chat",
-                messages=[ChatMessage(author=f"@speaker{i+1}", timestamp="now", text=m)
-                          for i, m in enumerate(messages)],
+                messages=parsed_msgs,
             )
             result = await self.analyzer.analyze_thread(thread, skill_name=skill, tier=tier)
-            # An empty analysis is not an answer; fall through to prose rather than tell someone
-            # their question was routine chatter.
-            if result.evidence_items:
+            
+            # If the result produced decomposed tasks or verified evidence, return analysis!
+            if result.decomposed_tasks or result.evidence_items:
                 return {"type": "analysis", "result": result}
+
+            # If the conversation was filtered as routine chatter / administrative noise:
+            telemetry = getattr(result, "agent_telemetry", None)
+            if telemetry and telemetry.quarantined_noise:
+                quarantine_lines = "\n".join(
+                    f"• **{q.author}** ({q.timestamp}): *{q.text}* — `{q.reason}`"
+                    for q in telemetry.quarantined_noise
+                )
+                return {
+                    "type": "text",
+                    "text": (
+                        "🛡️ **Anti-Noise Gatekeeper: Hội thoại thường ngày (Không có yêu cầu kỹ thuật)**\n\n"
+                        "Hệ thống đã phân tích các tin nhắn dán từ Slack và xác định đây là trao đổi nội bộ / sinh hoạt thường ngày:\n"
+                        f"{quarantine_lines}\n\n"
+                        "💡 **AI Guard**: Đã tự động kích hoạt bộ lọc chống nhiễu (Anti-Distraction). Hệ thống không tạo User Story hay Task giả định từ những nội dung này để tránh làm bẩn backlog dự án."
+                    )
+                }
+            elif result.clarifying_question and "routine chatter" in result.clarifying_question.lower():
+                return {
+                    "type": "text",
+                    "text": (
+                        "🛡️ **Anti-Noise Gatekeeper: Không phát hiện yêu cầu sản phẩm**\n\n"
+                        "Đoạn tin nhắn dán từ Slack không chứa yêu cầu chức năng, bug fix hoặc quyết định kỹ thuật nào để bóc tách thành task."
+                    )
+                }
 
         return {"type": "text", "text": await self._answer(messages, tier)}
 

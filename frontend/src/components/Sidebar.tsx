@@ -110,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`scribeba-sidebar h-screen border-r flex flex-col justify-between transition-all duration-200 z-30 shrink-0 ${
+      className={`scribeba-sidebar h-full border-r flex flex-col justify-between transition-all duration-200 z-30 shrink-0 ${
         isCollapsed ? 'w-16' : 'w-[260px]'
       }`}
     >

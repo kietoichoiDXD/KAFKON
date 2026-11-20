@@ -151,7 +151,7 @@ export const ConflictGraphView: React.FC = () => {
         </button>
       </header>
 
-      <div className="mx-auto flex w-full max-w-[1480px] flex-1 min-h-0 flex-col gap-3 overflow-hidden p-3 lg:p-4">
+      <div className="task-code-content mx-auto flex w-full max-w-[1480px] flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3 lg:p-4">
         <section className="shrink-0 border border-slate-200 rounded-lg bg-white p-3 lg:p-4">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <h2 className="m-0 text-sm font-semibold text-slate-900">Choose a task</h2>
