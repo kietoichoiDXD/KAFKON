@@ -112,6 +112,25 @@ PUBLIC_API_PATHS = {
     "/api/auth/cognito/callback",
 }
 
+ADMIN_ONLY_PATHS = {
+    "/api/ops/trigger",
+    "/api/ops/notify",
+    "/api/ops/apply",
+}
+
+
+def _is_admin_session() -> bool:
+    user = session.get("user")
+    if not isinstance(user, dict):
+        return False
+    allowed_emails = {
+        email.strip().lower()
+        for email in settings.scribeba_admin_emails.split(",")
+        if email.strip()
+    }
+    email = str(user.get("email", "")).strip().lower()
+    return bool(email and email in allowed_emails)
+
 
 @app.before_request
 def require_public_session():
@@ -181,6 +200,11 @@ def require_public_session():
         return None
     if not session.get("authenticated"):
         return jsonify({"error": "Authentication required."}), 401
+    admin_only = request.path in ADMIN_ONLY_PATHS or (
+        request.path == "/api/skills" and request.method == "POST"
+    )
+    if admin_only and not _is_admin_session():
+        return jsonify({"error": "Administrator access is required for this action."}), 403
     return None
 
 
@@ -197,7 +221,8 @@ def auth_session():
         "authenticated": not AUTH_ENABLED or bool(session.get("authenticated")),
         "cognito_enabled": cognito_enabled,
         "google_enabled": cognito_enabled and settings.cognito_google_enabled,
-        "user": session.get("user") if session.get("authenticated") else None,
+        "user": ({**session["user"], "is_admin": _is_admin_session()}
+                 if session.get("authenticated") and isinstance(session.get("user"), dict) else None),
     })
 
 

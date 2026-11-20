@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     cognito_client_id: Optional[str] = Field(default=None, alias="COGNITO_CLIENT_ID")
     cognito_domain: Optional[str] = Field(default=None, alias="COGNITO_DOMAIN")
     cognito_google_enabled: bool = Field(default=False, alias="COGNITO_GOOGLE_ENABLED")
+    scribeba_admin_emails: str = Field(default="", alias="SCRIBEBA_ADMIN_EMAILS")
 
     # Anthropic
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
