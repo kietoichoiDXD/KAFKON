@@ -1933,6 +1933,21 @@ def chat():
             response["channel"] = out["channel"]
         if "ts" in out:
             response["ts"] = out["ts"]
+        # Auto-save decomposed tasks to local backlog
+        try:
+            decomposed = getattr(out["result"], "decomposed_tasks", None)
+            if decomposed:
+                for dt in decomposed:
+                    _save_product_task(
+                        task_id=f"task-{uuid.uuid4().hex[:8]}",
+                        name=dt.title,
+                        description=dt.description or "",
+                        status="to do",
+                        url="",
+                        source="chat_analysis"
+                    )
+        except Exception as dt_err:
+            logger.warning("Could not persist decomposed tasks from chat: %s", dt_err)
         saved_turn = {"role": "agent", "result": response, "skill": body.get("skill", "startup_lean"), "tier": body.get("tier") or settings.fallback_tier}
     elif out["type"] == "ops":
         response = {"type": "ops", **out["diagnosis"]}
@@ -2191,6 +2206,186 @@ def slack_sync_analysis():
         return jsonify(asyncio.run(run()))
     except Exception as e:
         return jsonify({"error": _safe_error(e, "Failed to sync analysis to Slack.")}), 500
+
+
+@app.post("/api/slack/bring-ai-to-link")
+def bring_ai_to_link():
+    """Given any Slack URL (channel or thread), bring the AI agent into it,
+    post an entry greeting, fetch discussion, and run multi-agent analysis."""
+    body = request.get_json(silent=True) or {}
+    url = (body.get("url") or body.get("slack_url") or "").strip()
+    project_id = (body.get("project_id") or _ACTIVE_PROJECT_ID or "proj-library").strip()
+    post_announcement = bool(body.get("post_announcement", True))
+    auto_analyze = bool(body.get("auto_analyze", True))
+    skill_name = body.get("skill", "startup_lean")
+    tier = body.get("tier", "low")
+
+    if not url:
+        return jsonify({"error": "Vui lòng dán link kênh hoặc thread Slack."}), 400
+
+    from .platforms.slack_adapter import parse_slack_link
+    parsed = parse_slack_link(url)
+    if not parsed or not parsed.get("channel"):
+        return jsonify({
+            "error": "Không thể nhận diện link Slack. Vui lòng dán link dạng https://workspace.slack.com/archives/... hoặc link tin nhắn."
+        }), 400
+
+    channel_id = parsed["channel"]
+    ts = parsed.get("ts")
+
+    try:
+        slack = _slack_adapter_for_request()
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    if not slack.is_live:
+        return jsonify({
+            "error": "Slack chưa được kết nối trên server. Vui lòng kiểm tra lại cấu hình Slack."
+        }), 503
+
+    async def _execute():
+        # 1. Inspect channel
+        info = await slack._call("conversations.info", {"channel": channel_id})
+        ch_data = info.get("channel", {})
+        channel_name = ch_data.get("name", channel_id)
+        is_member = bool(ch_data.get("is_member"))
+
+        # 2. Join channel if not yet a member
+        if not is_member:
+            try:
+                await slack._call("conversations.join", {"channel": channel_id})
+                is_member = True
+            except Exception:
+                pass
+
+        # 3. Resolve thread timestamp or latest active thread
+        actual_ts = ts
+        if not actual_ts:
+            hist = await slack._call("conversations.history", {"channel": channel_id, "limit": 20})
+            hist_messages = hist.get("messages", [])
+            for m in hist_messages:
+                if m.get("reply_count", 0) > 0:
+                    actual_ts = m.get("ts")
+                    break
+            if not actual_ts and hist_messages:
+                actual_ts = hist_messages[0].get("ts")
+
+        # 4. Fetch discussion messages
+        thread_messages = []
+        thread = None
+        if actual_ts:
+            try:
+                thread = await slack.fetch_thread(channel_id, actual_ts)
+                thread_messages = thread.messages
+            except Exception:
+                pass
+
+        if not thread_messages:
+            hist = await slack._call("conversations.history", {"channel": channel_id, "limit": 20})
+            from .core.models import ChatMessage, ThreadContext
+            msgs = []
+            for m in reversed(hist.get("messages", [])):
+                user_id = m.get("user", "user")
+                text = m.get("text", "")
+                if text.strip():
+                    msgs.append(ChatMessage(author=f"@{user_id}", timestamp=m.get("ts", "now"), text=text))
+            thread = ThreadContext(thread_id=actual_ts or channel_id, channel=channel_id, platform="slack", messages=msgs)
+            thread_messages = thread.messages
+
+        # 5. Post AI Agent announcement in Slack
+        announcement_ts = None
+        if post_announcement:
+            try:
+                post_payload = {
+                    "channel": channel_id,
+                    "text": (
+                        f"🤖 *[ScribeBA AI Agent]* Đã tham gia luồng thảo luận qua liên kết trực tiếp!\n"
+                        f"• *Kênh:* `#{channel_name}`\n"
+                        f"• *Nhiệm vụ:* Đang phân tích hội thoại ({len(thread_messages)} tin nhắn), lọc nhiễu và trích xuất task vào ClickUp."
+                    )
+                }
+                if actual_ts:
+                    post_payload["thread_ts"] = actual_ts
+                post_res = await slack._call("chat.postMessage", post_payload)
+                announcement_ts = post_res.get("ts")
+            except Exception as e:
+                logger.warning("Could not post entry announcement: %s", e)
+
+        # 6. Auto-connect channel to active project
+        project_name = "Project"
+        with _chat_db() as db:
+            p_row = db.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            if p_row:
+                project_name = p_row["name"]
+                raw_json = p_row["social_channels_json"] if "social_channels_json" in p_row.keys() else "[]"
+                try:
+                    channels = json.loads(raw_json or "[]")
+                except Exception:
+                    channels = []
+                found = False
+                for c in channels:
+                    if c.get("id") == channel_id and c.get("platform") == "slack":
+                        c["name"] = channel_name
+                        found = True
+                        break
+                if not found:
+                    channels.append({
+                        "id": channel_id,
+                        "name": channel_name,
+                        "platform": "slack",
+                        "is_primary": True,
+                        "purpose": "Hội thoại kỹ thuật & Task extraction (Kết nối qua Link)"
+                    })
+                for c in channels:
+                    if c.get("platform") == "slack":
+                        c["is_primary"] = (c.get("id") == channel_id)
+                db.execute(
+                    "UPDATE projects SET social_channels_json=?, slack_channel=?, updated_at=? WHERE id=?",
+                    (json.dumps(channels, ensure_ascii=False), f"{channel_id} (#{channel_name})", time.time(), project_id)
+                )
+
+        # 7. Run AI Multi-Agent analysis if requested
+        analysis_data = None
+        if auto_analyze and thread and thread.messages:
+            try:
+                result = await analyzer.analyze_thread(thread, skill_name=skill_name, tier=tier, force_live=True)
+                analysis_data = _serialize(result)
+                if result.decomposed_tasks:
+                    for task in result.decomposed_tasks:
+                        task_id = f"task-{uuid.uuid4().hex[:8]}"
+                        _save_product_task(
+                            task_id=task_id,
+                            name=task.title,
+                            description=task.description or "",
+                            status="to do",
+                            url="",
+                            source="slack_link_agent"
+                        )
+            except Exception as exc:
+                logger.warning("AI analysis error on brought slack link: %s", exc)
+
+        permalink = await slack.get_permalink(channel_id, actual_ts) if actual_ts else ""
+        return {
+            "channel_id": channel_id,
+            "channel_name": channel_name,
+            "thread_ts": actual_ts,
+            "permalink": permalink,
+            "messages_count": len(thread_messages),
+            "announcement_ts": announcement_ts,
+            "project_id": project_id,
+            "project_name": project_name,
+            "analysis": analysis_data
+        }
+
+    try:
+        out = asyncio.run(_execute())
+        return jsonify({
+            "status": "ok",
+            "message": f"Đã đưa ScribeBA AI vào kênh #{out['channel_name']} thành công!",
+            **out
+        })
+    except Exception as exc:
+        logger.exception("Error bringing AI to Slack link: %s", exc)
+        return jsonify({"error": f"Lỗi khi đưa AI vào Slack: {str(exc)}"}), 500
 
 
 @app.get("/api/clickup/tasks")
