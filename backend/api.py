@@ -122,15 +122,15 @@ def allow_cors(response):
     if request.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     chat_owner_cookie = getattr(g, "chat_owner_cookie", None)
-    if chat_owner_cookie and request.path.startswith("/api/chat"):
+    if chat_owner_cookie:
         response.set_cookie(
             CHAT_OWNER_COOKIE,
             chat_owner_cookie,
             max_age=CHAT_OWNER_COOKIE_MAX_AGE,
             httponly=True,
             secure=AUTH_ENABLED,
-            samesite=settings.scribeba_cookie_samesite,
-            path="/api/chat",
+            samesite=settings.scribeba_cookie_samesite if AUTH_ENABLED else "Lax",
+            path="/",
         )
     return response
 
@@ -1269,10 +1269,31 @@ def database_status():
 
 
 def _create_chat_session(owner_id: str, title: str = "New conversation", project_id: str = "") -> str:
-    session_id = str(uuid.uuid4())
-    now = time.time()
     effective_project_id = project_id or _ACTIVE_PROJECT_ID or ""
+    now = time.time()
     with _chat_db() as db:
+        # If this project already has an empty session (0 turns) with default title, reuse it
+        if effective_project_id:
+            try:
+                empty_row = db.execute(
+                    """
+                    SELECT cs.id FROM chat_sessions cs
+                    LEFT JOIN chat_turns ct ON cs.id = ct.session_id
+                    WHERE cs.project_id = ?
+                    GROUP BY cs.id
+                    HAVING count(ct.id) = 0
+                    ORDER BY cs.created_at DESC LIMIT 1
+                    """,
+                    (effective_project_id,)
+                ).fetchone()
+                if empty_row:
+                    session_id = empty_row["id"]
+                    db.execute("UPDATE chat_sessions SET owner_id=?, updated_at=? WHERE id=?", (owner_id, now, session_id))
+                    return session_id
+            except Exception:
+                pass
+
+        session_id = str(uuid.uuid4())
         try:
             db.execute("INSERT INTO chat_sessions(id,owner_id,title,created_at,updated_at,project_id) VALUES(?,?,?,?,?,?)",
                        (session_id, owner_id, title[:100], now, now, effective_project_id))
@@ -1284,7 +1305,18 @@ def _create_chat_session(owner_id: str, title: str = "New conversation", project
 
 def _chat_session_exists(owner_id: str, session_id: str) -> bool:
     with _chat_db() as db:
-        return db.execute("SELECT 1 FROM chat_sessions WHERE id=? AND owner_id=?", (session_id, owner_id)).fetchone() is not None
+        if db.execute("SELECT 1 FROM chat_sessions WHERE id=? AND owner_id=?", (session_id, owner_id)).fetchone() is not None:
+            return True
+        if not AUTH_ENABLED:
+            row = db.execute("SELECT 1 FROM chat_sessions WHERE id=?", (session_id,)).fetchone()
+            if row is not None:
+                try:
+                    db.execute("UPDATE chat_sessions SET owner_id=? WHERE id=?", (owner_id, session_id))
+                    db.execute("UPDATE chat_turns SET owner_id=? WHERE session_id=?", (owner_id, session_id))
+                except Exception:
+                    pass
+                return True
+        return False
 
 
 def _save_chat_turn(owner_id: str, session_id: str, turn: dict) -> None:
@@ -1295,15 +1327,23 @@ def _save_chat_turn(owner_id: str, session_id: str, turn: dict) -> None:
     with _chat_db() as db:
         row = db.execute("SELECT title FROM chat_sessions WHERE id=? AND owner_id=?", (session_id, owner_id)).fetchone()
         if row is None:
-            raise ValueError("Chat session is unavailable.")
+            if not AUTH_ENABLED:
+                row = db.execute("SELECT title FROM chat_sessions WHERE id=?", (session_id,)).fetchone()
+                if row is not None:
+                    try:
+                        db.execute("UPDATE chat_sessions SET owner_id=? WHERE id=?", (owner_id, session_id))
+                    except Exception:
+                        pass
+            if row is None:
+                raise ValueError("Chat session is unavailable.")
         db.execute("INSERT INTO chat_turns(session_id,owner_id,payload,created_at) VALUES(?,?,?,?)",
                    (session_id, owner_id, json.dumps(safe_turn, ensure_ascii=False), now))
         title = row["title"]
         if title == "New conversation" and safe_turn.get("role") == "you":
             first_line = str(safe_turn.get("text") or "").splitlines()[0].strip()
             title = (first_line[:97] + "…") if len(first_line) > 100 else (first_line or title)
-        db.execute("UPDATE chat_sessions SET title=?,updated_at=? WHERE id=? AND owner_id=?",
-                   (title, now, session_id, owner_id))
+        db.execute("UPDATE chat_sessions SET title=?,updated_at=? WHERE id=?",
+                   (title, now, session_id))
 
 
 def _save_product_task(task_id: str, name: str, description: str, status: str = "to do", url: str = "", source: str = "analysis") -> None:
@@ -1880,14 +1920,37 @@ def list_chat_sessions():
         cols = [d[1] for d in db.execute("PRAGMA table_info(chat_sessions)").fetchall()]
         has_proj = "project_id" in cols
         if project_id and has_proj:
+            if not AUTH_ENABLED:
+                try:
+                    db.execute("UPDATE chat_sessions SET owner_id=? WHERE project_id=? AND (owner_id IS NULL OR owner_id != ?)", (owner_id, project_id, owner_id))
+                    db.execute("UPDATE chat_turns SET owner_id=? WHERE session_id IN (SELECT id FROM chat_sessions WHERE project_id=?)", (owner_id, project_id))
+                except Exception:
+                    pass
+
             rows = db.execute(
-                "SELECT id,title,created_at,updated_at,project_id FROM chat_sessions WHERE owner_id=? AND project_id=? ORDER BY updated_at DESC",
-                (owner_id, project_id)
+                """
+                SELECT cs.id, cs.title, cs.created_at, cs.updated_at, cs.project_id,
+                       count(ct.id) as turns_count
+                FROM chat_sessions cs
+                LEFT JOIN chat_turns ct ON cs.id = ct.session_id
+                WHERE cs.project_id = ? AND (cs.owner_id = ? OR ? = '')
+                GROUP BY cs.id
+                ORDER BY (count(ct.id) > 0) DESC, cs.updated_at DESC
+                """,
+                (project_id, owner_id, "" if not AUTH_ENABLED else owner_id)
             ).fetchall()
         elif has_proj:
             rows = db.execute(
-                "SELECT id,title,created_at,updated_at,project_id FROM chat_sessions WHERE owner_id=? ORDER BY updated_at DESC",
-                (owner_id,)
+                """
+                SELECT cs.id, cs.title, cs.created_at, cs.updated_at, cs.project_id,
+                       count(ct.id) as turns_count
+                FROM chat_sessions cs
+                LEFT JOIN chat_turns ct ON cs.id = ct.session_id
+                WHERE cs.owner_id = ? OR ? = ''
+                GROUP BY cs.id
+                ORDER BY (count(ct.id) > 0) DESC, cs.updated_at DESC
+                """,
+                (owner_id, "" if not AUTH_ENABLED else owner_id)
             ).fetchall()
         else:
             rows = db.execute(
@@ -1927,10 +1990,10 @@ def get_chat_session(session_id: str):
         cols = [d[1] for d in db.execute("PRAGMA table_info(chat_sessions)").fetchall()]
         has_proj = "project_id" in cols
         select_cols = "id,title,created_at,updated_at,project_id" if has_proj else "id,title,created_at,updated_at"
-        session_row = db.execute(f"SELECT {select_cols} FROM chat_sessions WHERE id=? AND owner_id=?",
-                                 (session_id, owner_id)).fetchone()
-        turns = db.execute("SELECT payload FROM chat_turns WHERE session_id=? AND owner_id=? ORDER BY id",
-                           (session_id, owner_id)).fetchall()
+        session_row = db.execute(f"SELECT {select_cols} FROM chat_sessions WHERE id=?",
+                                 (session_id,)).fetchone()
+        turns = db.execute("SELECT payload FROM chat_turns WHERE session_id=? ORDER BY id",
+                           (session_id,)).fetchall()
     return jsonify({**dict(session_row), "turns": [json.loads(row["payload"]) for row in turns]})
 
 

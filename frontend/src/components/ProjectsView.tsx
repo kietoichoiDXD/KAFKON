@@ -197,7 +197,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
       setActiveProject(act);
       setFeedback({ type: 'success', text: `Đã chuyển sang không gian làm việc của project: ${project.name}` });
       localStorage.setItem('scribeba.active_project_id', project.id);
-      window.dispatchEvent(new CustomEvent('project-changed', { detail: { project: act } }));
+      const savedSessionId = localStorage.getItem(`scribeba.chat.active-session.${project.id}`);
+      window.dispatchEvent(new CustomEvent('project-changed', { detail: { project: act, sessionId: savedSessionId || undefined } }));
       if (onSelectView) {
         setTimeout(() => onSelectView('home'), 400);
       }
@@ -209,13 +210,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ onSelectView }) => {
     setActiveProject(project);
     localStorage.setItem('scribeba.active_project_id', project.id);
 
-    // Create fresh clean session specifically for this project
-    const sessRes = await safeFetchJson<{ id: string }>(`${API}/api/projects/${project.id}/new-session`, {
-      method: 'POST',
-    });
-    const sessionId = sessRes.ok ? sessRes.data?.id : undefined;
+    // Retrieve active session for this project if one exists so chat history continues seamlessly
+    const projectKey = `scribeba.chat.active-session.${project.id}`;
+    const savedSessionId = localStorage.getItem(projectKey);
 
-    window.dispatchEvent(new CustomEvent('project-changed', { detail: { project, sessionId } }));
+    window.dispatchEvent(new CustomEvent('project-changed', { detail: { project, sessionId: savedSessionId || undefined } }));
     if (onSelectView) {
       onSelectView('home');
     }
