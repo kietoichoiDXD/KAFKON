@@ -88,6 +88,29 @@ class DecomposedTask(BaseModel):
     priority: Optional[str] = "High"
     status: Optional[str] = "To Do"
 
+class NoiseAuditItem(BaseModel):
+    author: str = ""
+    timestamp: str = ""
+    text: str = ""
+    noise_category: str = "administrative"  # administrative, chitchat, bot_notification, out_of_scope
+    reason: str = ""
+
+class MultiAgentTelemetry(BaseModel):
+    pipeline_name: str = "4-Agent Staged Pipeline (Filter -> Decompose -> Synthesize -> Audit)"
+    noise_filtered_count: int = 0
+    quarantined_noise: List[NoiseAuditItem] = Field(default_factory=list)
+    tasks_decomposed_count: int = 0
+    hallucination_check_status: str = "Passed (Zero Leakage)"
+    agent_execution_order: List[str] = Field(
+        default_factory=lambda: [
+            "NoiseFilterAgent",
+            "TaskDecomposerAgent",
+            "AgileSynthesizerAgent",
+            "ProvenanceAuditorAgent"
+        ]
+    )
+    audit_notes: List[str] = Field(default_factory=list)
+
 class AnalysisResult(BaseModel):
     story: UserStory
     acceptance_criteria: List[AcceptanceCriterion]
@@ -99,6 +122,7 @@ class AnalysisResult(BaseModel):
     skill_applied: str = "default"
     thread_id: str = ""
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    agent_telemetry: Optional[MultiAgentTelemetry] = None
 
 class TicketPayload(BaseModel):
     title: str

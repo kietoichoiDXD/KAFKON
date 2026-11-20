@@ -410,8 +410,9 @@ def _serialize(result) -> dict:
         "evidence": [e.model_dump(mode="json") for e in result.evidence_items],
         "clarifying_question": result.clarifying_question,
         "metadata": result.metadata,
+        "agent_telemetry": result.agent_telemetry.model_dump(mode="json") if getattr(result, "agent_telemetry", None) else None,
         # Which engine actually answered. /api/health reports configuration; this reports the run.
-        "engine": (result.metadata.get("fallback_trail") or [{"alias": "local_engine"}])[-1]["alias"],
+        "engine": (result.metadata.get("fallback_trail") or [{"alias": "multi_agent_pipeline"}])[-1]["alias"],
     }
 
 

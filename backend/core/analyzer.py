@@ -17,6 +17,7 @@ from .skills import SkillManager
 from .scorer import InvestScorer
 from .redaction import redact
 from .fallback_router import ModelFallbackRouter, FallbackTier
+from .multi_agent import MultiAgentPipeline, NoiseFilterAgent, TaskDecompositionAgent
 from ..config import settings
 
 class ScribeBAAnalyzer:
@@ -119,10 +120,13 @@ class ScribeBAAnalyzer:
                 evidence.source_message = SourceMessageEvidence(match_status="unmatched")
 
     def _is_decision_relevant(self, transcript: str) -> bool:
-        """Two-tier quick filter (Haiku level) for decision intent."""
+        """Two-tier quick filter for decision intent (supports English and Vietnamese engineering discussions)."""
         keywords = [
             "sso", "oauth", "require", "must", "implement", "database",
-            "migration", "scope", "acceptance", "feature", "/ba-summarize"
+            "migration", "scope", "acceptance", "feature", "/ba-summarize",
+            "search", "tìm kiếm", "tính năng", "nâng cấp", "gợi ý", "lọc",
+            "product", "sản phẩm", "task", "chức năng", "sprint", "bug", "lỗi",
+            "api", "ui", "ux", "hệ thống", "yêu cầu", "triển khai", "auto-complete"
         ]
         return any(k in transcript.lower() for k in keywords)
 
@@ -348,7 +352,17 @@ class ScribeBAAnalyzer:
         transcript: str,
         tier: str = "medium"
     ) -> AnalysisResult:
-        """Execute story generation across multi-tier fallback cascade (OpenRouter -> GPT -> LUNA -> SONET -> 5 -> SOL)."""
+        """Execute multi-agent staged analysis across fallback cascade."""
+        # Priority 1: 4-Agent Staged Pipeline (Filter -> Decompose -> Synthesize -> Audit)
+        try:
+            pipeline = MultiAgentPipeline(self.fallback_router)
+            agent_result = await pipeline.run(thread, skill, tier=tier)
+            if agent_result and agent_result.decomposed_tasks:
+                return agent_result
+        except Exception as e:
+            print(f"[MultiAgentPipeline] Staged agent pipeline error: {e}. Falling back to single-prompt cascade...")
+
+        # Priority 2: Direct Single-Prompt Fallback Cascade
         system_prompt = f"""You are ScribeBA, an expert AI Business Analyst.
 Analyze multi-person engineering conversations and produce a structured User Story with INVEST scoring, decomposed actionable tasks, and Evidence Labels.
 

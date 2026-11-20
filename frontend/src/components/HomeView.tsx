@@ -88,6 +88,33 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
         </div>
       )}
 
+      {/* Multi-Agent Anti-Noise & Decomposition Telemetry */}
+      {result.agent_telemetry && (
+        <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg text-xs space-y-2">
+          <div className="flex items-center justify-between font-semibold text-indigo-950">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-indigo-700">psychology</span>
+              <span>Multi-Agent Architecture (4 Staged Agents)</span>
+            </div>
+            <span className="font-mono text-[11px] text-indigo-850 bg-white px-2 py-0.5 rounded border border-indigo-200">
+              {result.agent_telemetry.noise_filtered_count ?? 0} Quarantined · {result.agent_telemetry.tasks_decomposed_count ?? 0} Tasks
+            </span>
+          </div>
+          {result.agent_telemetry.quarantined_noise && result.agent_telemetry.quarantined_noise.length > 0 && (
+            <div className="text-[11px] text-indigo-900 bg-white/90 p-2.5 rounded border border-indigo-100">
+              <span className="font-bold text-amber-800">🛡️ Anti-Noise Gatekeeper Quarantined:</span>
+              <ul className="mt-1 list-disc pl-4 space-y-0.5 text-slate-700">
+                {result.agent_telemetry.quarantined_noise.map((item: any, qIdx: number) => (
+                  <li key={qIdx}>
+                    <span className="font-mono font-semibold text-slate-800">{item.author || 'User'}</span>: "{item.text}" — <em className="text-amber-800">{item.reason}</em>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Decomposed Actionable Tasks */}
       {result.decomposed_tasks && result.decomposed_tasks.length > 0 && (
         <div className="space-y-2">

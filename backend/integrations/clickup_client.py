@@ -148,11 +148,13 @@ class ClickUpClient:
             ])
 
         verified_count = sum(1 for e in result.evidence_items if e.label.value == "Verified")
+        telemetry = getattr(result, "agent_telemetry", None)
+        noise_note = f" · Anti-Noise: `{telemetry.noise_filtered_count} items quarantined`" if telemetry and telemetry.noise_filtered_count > 0 else ""
         sections.extend([
             "",
             "---",
             f"📌 **Source Thread**: [{thread_url or 'Slack Link'}]({thread_url or '#'})",
-            f"🛡️ **3-Axis Provenance**: `{verified_count}/{len(result.evidence_items)} Claims Verified`",
+            f"🛡️ **3-Axis Provenance**: `{verified_count}/{len(result.evidence_items)} Claims Verified`{noise_note}",
         ])
 
         body = "\n".join(sections)

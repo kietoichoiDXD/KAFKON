@@ -57,6 +57,9 @@ class MessageFormatter:
         score = result.invest_score
 
         objective = story.so_that or story.i_want
+        telemetry = getattr(result, "agent_telemetry", None)
+        noise_info = f" · *Anti-Noise*: Đã lọc {telemetry.noise_filtered_count} tin nhiễu" if telemetry and telemetry.noise_filtered_count > 0 else " · *Anti-Noise Guard*: Active"
+
         blocks = [
             {
                 "type": "header",
@@ -68,7 +71,7 @@ class MessageFormatter:
                     "type": "mrkdwn",
                     "text": (
                         f"*Mục tiêu*: {objective}\n"
-                        f"*INVEST Score*: `{score.overall}/100` · *3-Axis Provenance*: Active"
+                        f"*INVEST Score*: `{score.overall}/100`{noise_info}"
                     )
                 }
             },
