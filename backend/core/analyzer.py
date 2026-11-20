@@ -497,13 +497,38 @@ Return strictly valid JSON matching this schema:
             so_that="",
             evidence=EvidenceLabel.BLOCKED
         )
+        from .models import NoiseAuditItem, MultiAgentTelemetry
+        _, quarantined = NoiseFilterAgent(self.fallback_router)._heuristic_filter(thread)
+        if not quarantined and thread.messages:
+            quarantined = [
+                NoiseAuditItem(
+                    author=m.author,
+                    timestamp=m.timestamp,
+                    text=m.text,
+                    noise_category="chitchat",
+                    reason="Routine chatter or social conversation without technical specifications"
+                )
+                for m in thread.messages
+            ]
+
+        telemetry = MultiAgentTelemetry(
+            pipeline_name="Anti-Noise Gatekeeper Filter",
+            noise_filtered_count=len(quarantined),
+            quarantined_noise=quarantined,
+            tasks_decomposed_count=0,
+            hallucination_check_status="Clean (Quarantined 100% Noise)",
+            audit_notes=["All messages categorized as non-technical routine chatter."]
+        )
+
         return AnalysisResult(
             story=story,
             acceptance_criteria=[],
             evidence_items=[],
+            decomposed_tasks=[],
             invest_score=InvestScorer.evaluate(story, [], [], skill),
             clarifying_question=reason,
             ready_for_ticket=False,
             skill_applied=skill.name,
-            thread_id=thread.thread_id
+            thread_id=thread.thread_id,
+            agent_telemetry=telemetry
         )

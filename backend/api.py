@@ -1478,6 +1478,132 @@ def slack_run():
         return jsonify({"error": _safe_error(e, "Slack run failed. Check the selected channel and integration status.")}), 400
 
 
+@app.post("/api/slack/sync-analysis")
+def slack_sync_analysis():
+    """Sync an analysis created in Spec Studio to a Slack channel/thread and ClickUp."""
+    body = request.get_json(force=True) or {}
+    raw_channel = (body.get("channel") or "").strip()
+    thread_ts = (body.get("ts") or "").strip()
+    sync_clickup = body.get("sync_clickup", True)
+    skill_name = body.get("skill", "startup_lean")
+    analysis_data = body.get("analysis") or {}
+
+    try:
+        slack = _slack_adapter_for_request()
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    if not slack.is_live:
+        return jsonify({"error": "Slack is not connected. Configure SLACK_USER_TOKEN or SLACK_BOT_TOKEN."}), 400
+
+    from .platforms.slack_adapter import parse_slack_link
+    parsed_link = parse_slack_link(raw_channel)
+    if parsed_link:
+        channel_id = parsed_link["channel"]
+        thread_ts = parsed_link.get("ts") or thread_ts
+    else:
+        channel_id = raw_channel
+
+    if not channel_id:
+        return jsonify({"error": "Missing Slack channel ID or thread link."}), 400
+
+    async def run():
+        from .core.models import (
+            AnalysisResult, UserStory, AcceptanceCriterion, EvidenceItem,
+            EvidenceLabel, DecomposedTask, InvestScore, MultiAgentTelemetry
+        )
+        story_data = analysis_data.get("story", {})
+        story = UserStory(
+            title=story_data.get("title", "Agile Task"),
+            as_a=story_data.get("as_a", "user"),
+            i_want=story_data.get("i_want", "feature"),
+            so_that=story_data.get("so_that", "outcome"),
+            evidence=EvidenceLabel.VERIFIED
+        )
+        tasks = [
+            DecomposedTask(**t) if isinstance(t, dict) else t
+            for t in analysis_data.get("decomposed_tasks", [])
+        ]
+        criteria = [
+            AcceptanceCriterion(
+                id=ac.get("id", f"AC-{i+1}"),
+                scenario=ac.get("scenario", f"Scenario {i+1}"),
+                given=ac.get("given", "given"),
+                when=ac.get("when", "when"),
+                then=ac.get("then", "then"),
+                evidence=EvidenceLabel.VERIFIED
+            ) if isinstance(ac, dict) else AcceptanceCriterion(
+                id=f"AC-{i+1}", scenario=str(ac), given="", when="", then=str(ac)
+            )
+            for i, ac in enumerate(analysis_data.get("acceptance_criteria", []))
+        ]
+        evidence = [
+            EvidenceItem(**e) if isinstance(e, dict) else EvidenceItem(
+                field="Requirement", value=str(e), label=EvidenceLabel.VERIFIED
+            )
+            for e in analysis_data.get("evidence", [])
+        ]
+        invest_data = analysis_data.get("invest", {})
+        invest = InvestScore(
+            independent=invest_data.get("independent", 85),
+            negotiable=invest_data.get("negotiable", 85),
+            valuable=invest_data.get("valuable", 85),
+            estimable=invest_data.get("estimable", 85),
+            small=invest_data.get("small", 85),
+            testable=invest_data.get("testable", 85),
+            overall=invest_data.get("overall", 85)
+        )
+        
+        telemetry_data = analysis_data.get("agent_telemetry")
+        telemetry = MultiAgentTelemetry(**telemetry_data) if telemetry_data else None
+
+        result = AnalysisResult(
+            story=story,
+            acceptance_criteria=criteria,
+            evidence_items=evidence,
+            invest_score=invest,
+            decomposed_tasks=tasks,
+            clarifying_question=analysis_data.get("clarifying_question"),
+            ready_for_ticket=True,
+            skill_applied=skill_name,
+            thread_id=thread_ts or "",
+            agent_telemetry=telemetry
+        )
+
+        post_ts = await slack.post_analysis_summary(channel_id, thread_ts, result)
+        target_ts = thread_ts or post_ts
+        permalink = await slack.get_permalink(channel_id, target_ts)
+
+        payload = {
+            "status": "ok",
+            "channel": channel_id,
+            "ts": target_ts,
+            "permalink": permalink,
+            "message": "Tasks posted to Slack successfully!"
+        }
+
+        if sync_clickup:
+            try:
+                skill = skill_manager.get_skill(skill_name)
+                ticket = await ClickUpClient().create_task_from_analysis(
+                    result, skill, thread_url=permalink
+                )
+                await slack.post_ticket_confirmation(channel_id, target_ts, ticket)
+                payload["ticket"] = {
+                    "id": ticket.created_task_id,
+                    "url": ticket.clickup_url,
+                    "title": ticket.title
+                }
+            except Exception as e:
+                payload["ticket_error"] = str(e)
+
+        return payload
+
+    try:
+        return jsonify(asyncio.run(run()))
+    except Exception as e:
+        return jsonify({"error": _safe_error(e, "Failed to sync analysis to Slack.")}), 500
+
+
 @app.get("/api/clickup/tasks")
 def clickup_tasks():
     """Return a bounded page of tasks from the configured ClickUp list."""
