@@ -402,6 +402,10 @@ def _serialize(result) -> dict:
     return {
         "story": result.story.model_dump(),
         "invest": result.invest_score.model_dump(),
+        "decomposed_tasks": [
+            t.model_dump(mode="json") if hasattr(t, "model_dump") else t
+            for t in getattr(result, "decomposed_tasks", [])
+        ],
         "acceptance_criteria": [a.model_dump(mode="json") for a in result.acceptance_criteria],
         "evidence": [e.model_dump(mode="json") for e in result.evidence_items],
         "clarifying_question": result.clarifying_question,
@@ -1437,8 +1441,6 @@ def slack_run():
                         (m.timestamp for m in thread.messages if m.timestamp == evidence.source_message.timestamp), ""
                     )
         await slack.post_analysis_summary(channel, ts, result)
-        if result.clarifying_question:
-            await slack.post_clarification_question(channel, ts, result.clarifying_question)
 
         payload = {"permalink": permalink, "messages_read": len(thread.messages), **_serialize(result)}
 

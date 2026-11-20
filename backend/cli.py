@@ -227,10 +227,6 @@ def slack_run_cmd(channel: str, ts: str, skill: str, tier):
         print(f"→ Engine: {trail[-1]['alias']} ({trail[-1].get('model', 'deterministic')})")
         print(f"→ Posted analysis in-thread (INVEST {result.invest_score.overall}/100)")
 
-        if result.clarifying_question:
-            await slack.post_clarification_question(channel, ts, result.clarifying_question)
-            print("→ Asked the clarifying question in-thread instead of guessing")
-
         ticket = await ClickUpClient().create_task_from_analysis(result, active_skill, thread_url=permalink)
         await slack.post_ticket_confirmation(channel, ts, ticket)
         print(f"→ ClickUp task {ticket.created_task_id}: {ticket.clickup_url}")
