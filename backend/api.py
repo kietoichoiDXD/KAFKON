@@ -41,6 +41,7 @@ from .platforms.slack_adapter import SlackAdapter
 from .platforms.discord_adapter import DiscordAdapter
 from .platforms.telegram_adapter import TelegramAdapter
 from .core.conflict_service import scan_task_against_repository
+from .core.cloud_db import cloud_db
 from . import slack_oauth
 
 app = Flask(__name__)
@@ -1256,53 +1257,14 @@ def _chat_owner_id() -> str:
 
 @contextmanager
 def _chat_db():
-    CHAT_HISTORY_DB.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(str(CHAT_HISTORY_DB), timeout=10)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA journal_mode=WAL")
-    db.execute("""CREATE TABLE IF NOT EXISTS chat_sessions (
-        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, title TEXT NOT NULL,
-        created_at REAL NOT NULL, updated_at REAL NOT NULL
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS chat_turns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
-        owner_id TEXT NOT NULL, payload TEXT NOT NULL, created_at REAL NOT NULL
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS product_tasks (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'to do',
-        url TEXT,
-        source TEXT DEFAULT 'analysis',
-        created_at REAL NOT NULL,
-        updated_at REAL NOT NULL
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS telemetry_runs (
-        id TEXT PRIMARY KEY,
-        channel TEXT,
-        thread_ts TEXT,
-        title TEXT,
-        invest_score INTEGER,
-        payload_json TEXT NOT NULL,
-        created_at REAL NOT NULL
-    )""")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_owner ON chat_sessions(owner_id, updated_at DESC)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_chat_turns_session ON chat_turns(owner_id, session_id, id)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_product_tasks_updated ON product_tasks(updated_at DESC)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_runs_created ON telemetry_runs(created_at DESC)")
-    try:
-        CHAT_HISTORY_DB.chmod(0o600)
-    except OSError:
-        pass
-    try:
+    with cloud_db.get_connection() as db:
         yield db
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+
+
+@app.get("/api/database/status")
+def database_status():
+    """Return database provider mode and connection status."""
+    return jsonify(cloud_db.get_status())
 
 
 def _create_chat_session(owner_id: str, title: str = "New conversation") -> str:

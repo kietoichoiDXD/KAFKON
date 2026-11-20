@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     scribeba_allowed_origin: Optional[str] = Field(default=None, alias="SCRIBEBA_ALLOWED_ORIGIN")
     scribeba_cookie_samesite: str = Field(default="Lax", alias="SCRIBEBA_COOKIE_SAMESITE")
     scribeba_chat_history_db_path: Optional[Path] = Field(default=None, alias="SCRIBEBA_CHAT_HISTORY_DB_PATH")
+    database_url: Optional[str] = Field(default=None, alias="DATABASE_URL")
+    supabase_database_url: Optional[str] = Field(default=None, alias="SUPABASE_DATABASE_URL")
 
     # Durable hosted authentication through Amazon Cognito.
     cognito_region: Optional[str] = Field(default=None, alias="COGNITO_REGION")
