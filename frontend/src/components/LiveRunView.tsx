@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { API, safeFetchJson, isGitHubPages } from '../api';
 import {
   MOCK_SLACK_CHANNELS,
@@ -20,6 +20,14 @@ type Health = {
 };
 
 type Channel = { id: string; name: string };
+type SlackConnection = {
+  connected: boolean;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  account?: string | null;
+  enterprise_install?: boolean;
+  scope?: string;
+};
 type ThreadPreview = {
   permalink: string;
   messages: { author: string; timestamp: string; text: string }[];
@@ -118,6 +126,7 @@ function Dot({ on }: { on: boolean }) {
 
 export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => void }) {
   const [health, setHealth] = useState<Health | null>(null);
+  const [slackConnection, setSlackConnection] = useState<SlackConnection | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channel, setChannel] = useState('');
   const [channelLink, setChannelLink] = useState('');
@@ -129,27 +138,59 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const [seeding, setSeeding] = useState(false);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [threads, setThreads] = useState<{ ts: string; text: string; reply_count: number }[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [preview, setPreview] = useState<ThreadPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState<boolean>(isGitHubPages());
+  const threadRequestId = useRef(0);
+  const previewRequestId = useRef(0);
+  const selectionRevision = useRef(0);
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
 
-  const loadThreads = (ch: string) => {
-    if (!ch) return;
+  const loadThreads = async (ch: string, directMessageLink = false) => {
+    const requestId = ++threadRequestId.current;
+    if (!ch) {
+      setThreads([]);
+      setThreadsLoading(false);
+      return;
+    }
+    setThreads([]);
+    setThreadsLoading(true);
+    setError(null);
     safeFetchJson<any[]>(`${API}/api/slack/threads?channel=${encodeURIComponent(ch)}`).then(res => {
+      if (requestId !== threadRequestId.current) return;
       if (res.ok && Array.isArray(res.data)) {
         setThreads(res.data);
-        if (!res.data.length) setError('No threads were returned for this channel. Paste a message permalink or choose another channel.');
-      } else if (isDemo) {
+        if (!res.data.length && !directMessageLink) {
+          setError(`No readable threads were returned for channel ${ch}. Confirm the Slack app is installed in the correct workspace and has access to this channel.`);
+        }
+      } else if (isDemo && MOCK_SLACK_CHANNELS.some(mock => mock.id === ch)) {
         setThreads(MOCK_SLACK_THREADS);
       } else {
         setThreads([]);
-        setError(res.error || 'Could not load Slack threads. Check the integration and channel permissions.');
+        setError(res.error || `Could not read channel ${ch}. The configured Slack credentials must belong to that workspace, and the app must be a member of the channel.`);
       }
+      setThreadsLoading(false);
+    }).catch((e: any) => {
+      if (requestId !== threadRequestId.current) return;
+      setThreads([]);
+      setThreadsLoading(false);
+      setError(e?.message || `Could not read channel ${ch}. Check the Slack workspace and channel permissions.`);
     });
+  };
+
+  const clearSelectedThread = () => {
+    previewRequestId.current += 1;
+    setTs('');
+    setSeedStatus(null);
+    setPreview(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+    setResult(null);
+    setError(null);
   };
 
   useEffect(() => {
@@ -170,21 +211,31 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       }
     });
 
+    safeFetchJson<SlackConnection>(`${API}/api/slack/connection`).then(res => {
+      if (res.ok && res.data) setSlackConnection(res.data);
+    });
+
     safeFetchJson<Channel[]>(`${API}/api/slack/channels`).then(res => {
       if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
         setChannels(res.data);
-        const defaultCh = res.data.find((x: any) => x.name === 'all-aiops')?.id || res.data[0].id;
-        setChannel(defaultCh);
-        loadThreads(defaultCh);
+        if (selectionRevision.current === 0) {
+          const defaultCh = res.data.find((x: any) => x.name === 'all-aiops')?.id || res.data[0].id;
+          setChannel(defaultCh);
+          void loadThreads(defaultCh);
+        }
       } else if (isDemo) {
         setChannels(MOCK_SLACK_CHANNELS);
-        setChannel(MOCK_SLACK_CHANNELS[0].id);
-        setThreads(MOCK_SLACK_THREADS);
-        setTs(MOCK_SLACK_THREADS[0].ts);
+        if (selectionRevision.current === 0) {
+          setChannel(MOCK_SLACK_CHANNELS[0].id);
+          setThreads(MOCK_SLACK_THREADS);
+          setTs(MOCK_SLACK_THREADS[0].ts);
+        }
       } else {
         setChannels([]);
-        setThreads([]);
-        setError(res.error || 'No Slack channels are available to this integration. Check channel scopes and bot membership.');
+        if (selectionRevision.current === 0) {
+          setThreads([]);
+          setError(res.error || 'No Slack channels are available to this integration. Check channel scopes and bot membership.');
+        }
       }
     });
 
@@ -198,14 +249,10 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   }, []);
 
   const handleChannelChange = (newCh: string) => {
+    selectionRevision.current += 1;
+    clearSelectedThread();
     setChannel(newCh);
-    setTs('');
-    setSeedStatus(null);
-    setError(null);
-    setPreview(null);
-    setPreviewError(null);
-    setResult(null);
-    loadThreads(newCh);
+    void loadThreads(newCh);
   };
 
   const useChannelLink = () => {
@@ -215,14 +262,11 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       return;
     }
     setChannelLinkError('');
+    selectionRevision.current += 1;
+    clearSelectedThread();
     setChannel(target.channel);
     setTs(target.timestamp || '');
-    setResult(null);
-    setPreview(null);
-    setPreviewError(null);
-    setError(null);
-    setSeedStatus(null);
-    loadThreads(target.channel);
+    void loadThreads(target.channel, Boolean(target.timestamp));
   };
 
   const readThread = async () => {
@@ -234,16 +278,20 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       setPreviewError('A live Slack connection is not available in this session. Connect the backend Slack integration before reading a real thread.');
       return;
     }
+    const requestId = ++previewRequestId.current;
+    const requestedChannel = channel;
+    const requestedTimestamp = ts;
     setPreviewLoading(true);
     setPreviewError(null);
     setPreview(null);
     setResult(null);
     const url = new URL(`${API}/api/slack/thread`, window.location.origin);
-    url.searchParams.set('channel', channel);
-    url.searchParams.set('ts', ts);
+    url.searchParams.set('channel', requestedChannel);
+    url.searchParams.set('ts', requestedTimestamp);
     const response = await safeFetchJson<ThreadPreview>(url.toString());
+    if (requestId !== previewRequestId.current) return;
     if (!response.ok || !response.data) {
-      setPreviewError(response.error || 'Could not read this Slack thread. Verify the link and bot permissions.');
+      setPreviewError(response.error || `Could not read thread ${requestedTimestamp} in ${requestedChannel}. Confirm this Slack integration can access that workspace and channel.`);
     } else if (!response.data.messages?.length) {
       setPreviewError('Slack returned no messages for this thread. Check that the timestamp points to a thread root and the integration can read its messages.');
     } else {
@@ -268,7 +316,12 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
         body: JSON.stringify({ channel }),
       });
       if (res.ok && res.data && !res.data.error) {
+        previewRequestId.current += 1;
+        setPreviewLoading(false);
         setTs(res.data.ts);
+        setPreview(null);
+        setPreviewError(null);
+        setResult(null);
         setSeedStatus(
           `Seeded sample thread (${res.data.messages_count} msgs) in #${
             channels.find(c => c.id === channel)?.name || channel
@@ -356,8 +409,8 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
         {health && (
           <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-700 border border-slate-200 rounded-xl px-4 py-3 bg-white">
             <div className="flex items-center gap-4">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Dot on={health.slack} /> Slack Bolt
+              <span className="flex items-center gap-1.5 font-medium" title="This reflects configured server credentials, not access to every workspace or channel.">
+                <Dot on={health.slack} /> Slack credentials
               </span>
               <span className="flex items-center gap-1.5 font-medium">
                 <Dot on={health.discord ?? false} /> Discord
@@ -383,6 +436,12 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
             </div>
           </div>
         )}
+        {health?.slack && (
+          <p className="-mt-4 mb-0 text-[11px] leading-relaxed text-slate-500">
+            Green means Slack credentials are configured. A channel link does not authorize or switch workspaces; the configured credentials must belong to the same workspace, and the Slack app must be invited to private channels.
+            {slackConnection?.workspace_name && <> Connected workspace: <strong className="font-semibold text-slate-700">{slackConnection.workspace_name}</strong>{slackConnection.account ? ` · ${slackConnection.account}` : ''}.</>}
+          </p>
+        )}
 
         {/* Configuration Panel */}
         <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4">
@@ -392,6 +451,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
               <select
                 value={channel}
                 onChange={e => handleChannelChange(e.target.value)}
+                disabled={seeding}
                 className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 text-slate-800 focus-ring"
               >
                 {channel && !channels.some(c => c.id === channel) && (
@@ -413,12 +473,14 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                   value={channelLink}
                   onChange={e => { setChannelLink(e.target.value); setChannelLinkError(''); }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); useChannelLink(); } }}
+                  disabled={seeding}
                   placeholder="https://app.slack.com/client/T…/C… or channel ID"
                   className="min-w-[220px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-normal text-slate-800 focus-ring"
                 />
                 <button
                   type="button"
                   onClick={useChannelLink}
+                  disabled={seeding}
                   className="rounded-lg border border-teal-700 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50"
                 >
                   Use link
@@ -437,15 +499,20 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                   type="button"
                   onClick={seedThread}
                   disabled={seeding || !channel || isDemo || !health?.slack}
+                  title={`Posts sample messages into #${channels.find(c => c.id === channel)?.name || channel}. Use only in a test channel.`}
                   className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-0.5 rounded transition-all disabled:opacity-40 flex items-center gap-1"
                 >
                   <span className="material-symbols-outlined text-[13px]">add_circle</span>
-                  {seeding ? 'Seeding...' : 'Seed Sample Thread (1-Click)'}
+                  {seeding ? 'Posting sample…' : `Post sample to #${channels.find(c => c.id === channel)?.name || channel}`}
                 </button>
               </div>
+              <p className="mb-0 mt-1 text-[11px] font-normal leading-relaxed text-amber-800">
+                This posts sample messages into the selected Slack channel. It does not import or read existing messages; use a test channel.
+              </p>
               <input
                 value={ts}
-                onChange={e => { setTs(e.target.value); setPreview(null); setPreviewError(null); setResult(null); }}
+                onChange={e => { previewRequestId.current += 1; setPreviewLoading(false); setTs(e.target.value); setSeedStatus(null); setError(null); setPreview(null); setPreviewError(null); setResult(null); }}
+                disabled={seeding}
                 placeholder="e.g. 1792281644.225409"
                 className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono bg-white focus-ring"
               />
@@ -459,7 +526,11 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
               <select
                 onChange={e => {
                   if (e.target.value) {
+                    previewRequestId.current += 1;
+                    setPreviewLoading(false);
                     setTs(e.target.value);
+                    setSeedStatus(null);
+                    setError(null);
                     setPreview(null);
                     setPreviewError(null);
                     setResult(null);
@@ -476,6 +547,12 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 ))}
               </select>
             </div>
+          )}
+          {threadsLoading && (
+            <div role="status" className="text-xs text-slate-500">Loading threads for {channel}…</div>
+          )}
+          {!threadsLoading && channel && !threads.length && !error && !ts && (
+            <div className="text-xs text-slate-500">No threads loaded for {channel}. Paste a channel link and choose Use link to retry.</div>
           )}
 
           <div className="pt-2 border-t border-slate-100">
@@ -524,7 +601,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
             <section className="rounded-xl border border-teal-200 bg-teal-50/40" aria-label="Slack thread preview">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-100 px-4 py-3">
                 <div>
-                  <h2 className="m-0 text-sm font-semibold text-slate-900">Live Slack thread preview</h2>
+                  <h2 className="m-0 text-sm font-semibold text-slate-900">{seedStatus ? 'Seeded sample thread preview' : 'Live Slack thread preview'}</h2>
                   <p className="mb-0 mt-1 text-xs text-slate-600">{preview.messages.length} messages · {channel} · {ts}</p>
                 </div>
                 {preview.permalink && <a href={preview.permalink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-teal-800 underline">Open in Slack ↗</a>}

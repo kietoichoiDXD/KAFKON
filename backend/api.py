@@ -725,21 +725,88 @@ def create_skill():
 
 
 
+def _slack_access_error(exc: Exception, action: str):
+    """Return actionable Slack permission guidance without exposing credentials."""
+    import re
+
+    match = re.search(r"Slack [^ ]+ failed: ([a-z_]+)", str(exc))
+    code = match.group(1) if match else "slack_api_error"
+    guidance = {
+        "not_in_channel": "Invite the ScribeBA Slack app/bot to this channel, then retry.",
+        "missing_scope": "The Slack app needs channel read/history scopes (channels:read and channels:history; groups:read and groups:history for private channels). Reinstall the app after changing scopes.",
+        "channel_not_found": "This channel is unavailable to the configured Slack workspace/token. Check the channel ID, workspace, and private-channel membership.",
+        "invalid_auth": "The configured Slack token is invalid. Ask the workspace administrator to reconnect the Slack app.",
+        "token_revoked": "The configured Slack token was revoked. Ask the workspace administrator to reconnect the Slack app.",
+    }.get(code, "Check that the configured Slack token belongs to this workspace and has permission to read this channel.")
+    return jsonify({
+        "error": f"Could not {action}: {guidance}",
+        "slack_error": code,
+    }), 502
+
+
+@app.get("/api/slack/connection")
+def slack_connection():
+    """Verify which single Slack workspace the server-side token is connected to."""
+    slack = SlackAdapter()
+    if not slack.is_live:
+        return jsonify({"connected": False, "error": "No Slack token is configured on the server."}), 503
+    try:
+        identity = asyncio.run(slack._call("auth.test", {}))
+        return jsonify({
+            "connected": True,
+            "workspace_id": identity.get("team_id"),
+            "workspace_name": identity.get("team"),
+            "account": identity.get("user"),
+            "enterprise_install": bool(identity.get("is_enterprise_install")),
+            "scope": "server_configured_workspace",
+        })
+    except Exception as exc:
+        return _slack_access_error(exc, "verify the configured Slack connection")
+
+
 @app.get("/api/slack/channels")
 def slack_channels():
     slack = SlackAdapter()
     if not slack.is_live:
-        return jsonify({"error": "No Slack token configured"}), 400
-    data = asyncio.run(slack._call("conversations.list", {"types": "public_channel", "limit": 100}))
-    return jsonify([{"id": c["id"], "name": c["name"]} for c in data.get("channels", [])])
+        return jsonify({"error": "No Slack token is configured on the server. Ask the workspace administrator to connect Slack."}), 503
+
+    async def list_channels():
+        channels = []
+        cursor = None
+        # Page through the single workspace authorized by this server token.
+        for _ in range(50):
+            params = {
+                "types": "public_channel,private_channel",
+                "exclude_archived": "true",
+                "limit": 200,
+            }
+            if cursor:
+                params["cursor"] = cursor
+            page = await slack._call("conversations.list", params)
+            channels.extend(page.get("channels", []))
+            cursor = (page.get("response_metadata") or {}).get("next_cursor") or None
+            if not cursor:
+                break
+        return channels
+
+    try:
+        channels = asyncio.run(list_channels())
+        return jsonify([
+            {"id": c["id"], "name": c["name"], "is_private": bool(c.get("is_private")), "is_member": bool(c.get("is_member"))}
+            for c in channels
+        ])
+    except Exception as exc:
+        return _slack_access_error(exc, "list Slack channels")
 
 
 @app.get("/api/slack/thread")
 def slack_thread():
     channel, ts = request.args.get("channel", ""), request.args.get("ts", "")
+    if not channel or not ts:
+        return jsonify({"error": "A Slack channel ID and root message timestamp are required."}), 400
     slack = SlackAdapter()
     if not slack.is_live:
-        return jsonify({"error": "No Slack token configured"}), 400
+        return jsonify({"error": "No Slack token is configured on the server. Ask the workspace administrator to connect Slack."}), 503
 
     async def run():
         thread = await slack.fetch_thread(channel, ts)
@@ -748,7 +815,10 @@ def slack_thread():
             "messages": [{"author": m.author, "timestamp": m.timestamp, "text": m.text} for m in thread.messages],
         }
 
-    return jsonify(asyncio.run(run()))
+    try:
+        return jsonify(asyncio.run(run()))
+    except Exception as exc:
+        return _slack_access_error(exc, "read this Slack thread")
 
 
 @app.post("/api/chat")
@@ -1021,7 +1091,7 @@ def slack_threads():
         return jsonify([])
     slack = SlackAdapter()
     if not slack.is_live:
-        return jsonify([])
+        return jsonify({"error": "No Slack token is configured on the server. Ask the workspace administrator to connect Slack."}), 503
     try:
         data = asyncio.run(slack._call("conversations.history", {"channel": channel, "limit": 15}))
         messages = data.get("messages", [])
@@ -1036,8 +1106,8 @@ def slack_threads():
                 "reply_count": reply_count,
             })
         return jsonify(threads)
-    except Exception as e:
-        return jsonify([])
+    except Exception as exc:
+        return _slack_access_error(exc, "list threads in this channel")
 
 
 ROOMS_FILE = Path(__file__).resolve().parent.parent / ".rooms.json"
