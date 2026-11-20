@@ -1,4 +1,30 @@
-export type ViewType = 'home' | 'tasks' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review' | 'conflicts';
+export type ViewType = 'projects' | 'home' | 'tasks' | 'live' | 'ops' | 'rooms' | 'artifacts' | 'automations' | 'review' | 'conflicts';
+
+export interface SocialChannelItem {
+  id: string;
+  name: string;
+  platform: 'slack' | 'discord' | 'telegram' | string;
+  is_primary?: boolean;
+  purpose?: string;
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description: string;
+  repo_url: string;
+  repo_branch?: string;
+  local_path?: string;
+  slack_channel?: string;
+  clickup_list_id?: string;
+  discord_channel?: string;
+  telegram_chat?: string;
+  ai_instructions?: string;
+  status: 'active' | 'example' | 'archived' | string;
+  social_channels?: SocialChannelItem[];
+  created_at: number;
+  updated_at: number;
+}
 
 export type WorkspaceTab =
   | 'General'
