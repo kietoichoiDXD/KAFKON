@@ -66,9 +66,16 @@ class TestLiveAnalysisPath(unittest.TestCase):
             ],
         )
         # Pretend a key is present; the HTTP call itself is replaced below.
+        self._previous_mode = settings.scribeba_mode
         self._previous_key = settings.openrouter_api_key
+        self._previous_nebius = settings.nebius_api_key
+        settings.scribeba_mode = "live"
         settings.openrouter_api_key = "test-key"
+        settings.nebius_api_key = None
+        self.sent_prompt = ""
+        self.addCleanup(setattr, settings, "scribeba_mode", self._previous_mode)
         self.addCleanup(setattr, settings, "openrouter_api_key", self._previous_key)
+        self.addCleanup(setattr, settings, "nebius_api_key", self._previous_nebius)
 
         async def fake_call(client, model, system, user):
             self.sent_prompt = user

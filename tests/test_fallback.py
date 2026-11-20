@@ -31,7 +31,8 @@ class TestModelFallbackRouter(unittest.TestCase):
         for tier in [FallbackTier.LOW, FallbackTier.MEDIUM, FallbackTier.HIGH]:
             chain = self.router.get_chain_for_tier(tier.value)
             aliases = [item["alias"] for item in chain]
-            self.assertEqual(aliases[0], "openrouter_primary")
+            self.assertIn("nebius", aliases)
+            self.assertIn("openrouter_primary", aliases)
             self.assertIn("anthropic_direct", aliases)
 
     def test_openrouter_ids_are_namespaced(self):
@@ -43,7 +44,7 @@ class TestModelFallbackRouter(unittest.TestCase):
 
     def test_low_tier_uses_cost_effective_models(self):
         low_chain = self.router.get_chain_for_tier("low")
-        primary = low_chain[0]
+        primary = next(item for item in low_chain if item["alias"] == "openrouter_primary")
         self.assertEqual(primary["model"], "anthropic/claude-haiku-4.5")
 
     def test_high_tier_uses_advanced_reasoners(self):

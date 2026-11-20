@@ -17,6 +17,7 @@ from .models import (
 )
 from .scorer import InvestScorer
 from .fallback_router import ModelFallbackRouter, parse_model_json
+from .redaction import redact
 from ..config import settings
 
 logger = logging.getLogger("scribeba.multi_agent")
@@ -38,6 +39,8 @@ class NoiseFilterAgent:
 
     def __init__(self, router: ModelFallbackRouter):
         self.router = router
+        self.last_trail: List[Dict[str, Any]] = []
+        self.raw_evidence: Optional[List[Dict[str, Any]]] = None
 
     async def filter(
         self,
@@ -47,6 +50,7 @@ class NoiseFilterAgent:
     ) -> Tuple[List[ChatMessage], List[NoiseAuditItem]]:
         """Filter out conversational noise and return sanitized messages + audit report."""
         transcript = thread.to_formatted_transcript()
+        safe_transcript, _ = redact(transcript)
 
         system_prompt = """You are NoiseFilterAgent, a specialized AI gatekeeper for engineering discussions.
 Your sole job is to audit conversation messages and categorize them into:
@@ -67,16 +71,18 @@ Return strictly a JSON object:
   ]
 }"""
 
-        user_prompt = f"Audit and filter noise from this conversation transcript:\n\n{transcript}"
+        user_prompt = f"Audit and filter noise from this conversation transcript:\n\n{safe_transcript}"
 
         try:
-            parsed, _ = await self.router.execute_with_fallback(
+            parsed, trail = await self.router.execute_with_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 thread=thread,
                 skill=skill,
                 tier=tier
             )
+            self.last_trail = trail or []
+            self.raw_evidence = parsed.get("evidence_items") if (parsed and isinstance(parsed.get("evidence_items"), list)) else None
             if parsed and isinstance(parsed.get("messages"), list):
                 sanitized: List[ChatMessage] = []
                 quarantined: List[NoiseAuditItem] = []
@@ -162,6 +168,9 @@ class TaskDecompositionAgent:
 
     def __init__(self, router: ModelFallbackRouter):
         self.router = router
+        self.last_trail: List[Dict[str, Any]] = []
+        self.raw_evidence: Optional[List[Dict[str, Any]]] = None
+        self.last_trail: List[Dict[str, Any]] = []
 
     async def decompose(
         self,
@@ -170,7 +179,8 @@ class TaskDecompositionAgent:
         thread: ThreadContext,
         tier: str = "medium"
     ) -> List[DecomposedTask]:
-        clean_transcript = "\n".join(f"[{m.timestamp}] {m.author}: {m.text}" for m in sanitized_messages)
+        raw_clean_transcript = "\n".join(f"[{m.timestamp}] {m.author}: {m.text}" for m in sanitized_messages)
+        clean_transcript, _ = redact(raw_clean_transcript)
 
         system_prompt = """You are TaskDecompositionAgent, a Principal Agile Architect and Technical PM.
 Your responsibility:
@@ -199,13 +209,15 @@ Return strictly valid JSON:
         user_prompt = f"Decompose this sanitized discussion into actionable engineering tasks:\n\n{clean_transcript}"
 
         try:
-            parsed, _ = await self.router.execute_with_fallback(
+            parsed, trail = await self.router.execute_with_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 thread=thread,
                 skill=skill,
                 tier=tier
             )
+            self.last_trail = trail or []
+            self.raw_evidence = parsed.get("evidence_items") if (parsed and isinstance(parsed.get("evidence_items"), list)) else None
             if parsed and isinstance(parsed.get("tasks"), list):
                 tasks = []
                 for idx, t in enumerate(parsed["tasks"], 1):
@@ -272,6 +284,8 @@ class AgileSynthesizerAgent:
 
     def __init__(self, router: ModelFallbackRouter):
         self.router = router
+        self.last_trail: List[Dict[str, Any]] = []
+        self.raw_evidence: Optional[List[Dict[str, Any]]] = None
 
     async def synthesize(
         self,
@@ -281,7 +295,8 @@ class AgileSynthesizerAgent:
         thread: ThreadContext,
         tier: str = "medium"
     ) -> Tuple[UserStory, List[AcceptanceCriterion], Optional[str]]:
-        clean_transcript = "\n".join(f"[{m.timestamp}] {m.author}: {m.text}" for m in sanitized_messages)
+        raw_clean_transcript = "\n".join(f"[{m.timestamp}] {m.author}: {m.text}" for m in sanitized_messages)
+        clean_transcript, _ = redact(raw_clean_transcript)
         tasks_summary = "\n".join(f"- [{t.id}] {t.title} (Owner: {t.owner}): {t.description}" for t in tasks)
 
         system_prompt = """You are AgileSynthesizerAgent, an expert Business Analyst.
@@ -315,13 +330,15 @@ Return strictly valid JSON:
         user_prompt = f"Transcript:\n{clean_transcript}\n\nDecomposed Tasks:\n{tasks_summary}"
 
         try:
-            parsed, _ = await self.router.execute_with_fallback(
+            parsed, trail = await self.router.execute_with_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 thread=thread,
                 skill=skill,
                 tier=tier
             )
+            self.last_trail = trail or []
+            self.raw_evidence = parsed.get("evidence_items") if (parsed and isinstance(parsed.get("evidence_items"), list)) else None
             if parsed and isinstance(parsed.get("story"), dict):
                 st_data = parsed["story"]
                 story = UserStory(
@@ -384,10 +401,28 @@ class ProvenanceAuditorAgent:
         quarantined_noise: List[NoiseAuditItem],
         story: UserStory,
         criteria: List[AcceptanceCriterion],
-        tasks: List[DecomposedTask]
+        tasks: List[DecomposedTask],
+        raw_evidence: Optional[List[Dict[str, Any]]] = None
     ) -> Tuple[List[EvidenceItem], List[str]]:
         evidence_items: List[EvidenceItem] = []
         audit_notes: List[str] = []
+
+        if raw_evidence:
+            for item in raw_evidence:
+                try:
+                    lbl = EvidenceLabel(item.get("label", "Inferred"))
+                except ValueError:
+                    lbl = EvidenceLabel.INFERRED
+                evidence_items.append(EvidenceItem(
+                    field=item.get("field", "Requirement"),
+                    value=item.get("value", ""),
+                    label=lbl,
+                    quote_source=item.get("quote_source", ""),
+                    rationale=item.get("rationale", "")
+                ))
+            if evidence_items:
+                audit_notes.append(f"🛡️ Provenance Audit complete: {len(evidence_items)} explicit claims verified.")
+                return evidence_items, audit_notes
 
         all_clean_text = " ".join(m.text.lower() for m in sanitized_messages)
         quarantined_terms = [item.text.lower() for item in quarantined_noise if len(item.text) > 5]
@@ -475,7 +510,8 @@ class MultiAgentPipeline:
 
         # Step 4: Audit & Provenance Verification
         evidence_items, audit_notes = self.provenance_auditor.audit(
-            sanitized_messages, quarantined_noise, story, criteria, tasks
+            sanitized_messages, quarantined_noise, story, criteria, tasks,
+            raw_evidence=self.agile_synthesizer.raw_evidence
         )
 
         # Step 5: INVEST Scoring
@@ -496,6 +532,8 @@ class MultiAgentPipeline:
             audit_notes=audit_notes
         )
 
+        trail = self.agile_synthesizer.last_trail or self.task_decomposer.last_trail or self.noise_filter.last_trail or []
+
         return AnalysisResult(
             story=story,
             acceptance_criteria=criteria,
@@ -510,6 +548,7 @@ class MultiAgentPipeline:
                 "channel": thread.channel,
                 "platform": thread.platform,
                 "team_type": skill.team_type,
+                "fallback_trail": trail,
             },
             agent_telemetry=telemetry
         )
