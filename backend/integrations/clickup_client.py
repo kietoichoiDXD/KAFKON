@@ -37,12 +37,24 @@ class ClickUpClient:
             for task in tasks:
                 status = task.get("status") or {}
                 status_name = status.get("status") if isinstance(status, dict) else status
+                raw_priority = task.get("priority")
+                priority_name = raw_priority.get("priority") if isinstance(raw_priority, dict) else (raw_priority or "normal")
+                assignees = [
+                    u.get("username") or u.get("email") or str(u.get("id"))
+                    for u in task.get("assignees", [])
+                    if isinstance(u, dict)
+                ]
+                tags = [t.get("name") for t in task.get("tags", []) if isinstance(t, dict)]
                 output.append({
                     "id": str(task.get("id") or ""),
                     "name": str(task.get("name") or "Untitled task"),
                     "description": str(task.get("description") or ""),
                     "url": str(task.get("url") or ""),
                     "status": str(status_name or "Open"),
+                    "priority": str(priority_name or "normal"),
+                    "assignees": assignees,
+                    "tags": tags,
+                    "date_updated": str(task.get("date_updated") or ""),
                 })
             if len(tasks) < page_size:
                 break
@@ -188,3 +200,30 @@ class ClickUpClient:
     def _priority_to_clickup_int(self, p: str) -> int:
         mapping = {"urgent": 1, "high": 2, "normal": 3, "low": 4}
         return mapping.get(p.lower(), 3)
+
+    async def create_simple_task(
+        self,
+        name: str,
+        description: str = "",
+        priority: str = "high",
+        tags: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Create a single task in ClickUp list with specified priority and tags."""
+        if not self.api_key or not self.list_id:
+            raise ValueError("ClickUp is not configured. Set CLICKUP_API_KEY and CLICKUP_LIST_ID.")
+        
+        priority_int = self._priority_to_clickup_int(priority)
+        clean_tags = tags or ["agent-priority", "scribeba"]
+        res = await self._create_task_live(
+            title=name,
+            description=description or f"Created via ScribeBA Task Prioritizer on {name}",
+            priority=priority_int,
+            tags=clean_tags,
+            custom_fields={}
+        )
+        return {
+            "id": res.get("id", ""),
+            "name": res.get("name", name),
+            "url": res.get("url", f"https://app.clickup.com/t/{res.get('id', '')}"),
+            "status": "to do"
+        }
