@@ -79,11 +79,21 @@ class SkillConfig(BaseModel):
     clarification_policy: Dict[str, Any] = Field(default_factory=dict)
     clickup_mapping: Dict[str, Any] = Field(default_factory=dict)
 
+class DecomposedTask(BaseModel):
+    id: str = "TASK-1"
+    title: str
+    owner: Optional[str] = None
+    description: str = ""
+    category: Optional[str] = "Feature"
+    priority: Optional[str] = "High"
+    status: Optional[str] = "To Do"
+
 class AnalysisResult(BaseModel):
     story: UserStory
     acceptance_criteria: List[AcceptanceCriterion]
     evidence_items: List[EvidenceItem]
     invest_score: InvestScore
+    decomposed_tasks: List[DecomposedTask] = Field(default_factory=list)
     clarifying_question: Optional[str] = None
     ready_for_ticket: bool = False
     skill_applied: str = "default"
