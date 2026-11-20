@@ -198,12 +198,43 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
             Acceptance Criteria (Gherkin / Verifiable)
           </div>
           <div className="space-y-1.5">
-            {result.acceptance_criteria.map((ac: string, idx: number) => (
-              <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
-                <span className="font-mono text-teal-700 font-bold shrink-0">{idx + 1}.</span>
-                <span className="leading-relaxed">{ac}</span>
-              </div>
-            ))}
+            {result.acceptance_criteria.map((ac: any, idx: number) => {
+              const isObj = ac && typeof ac === 'object';
+              return (
+                <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-mono text-teal-700 font-bold shrink-0">
+                    {isObj && ac.id ? ac.id : `${idx + 1}.`}
+                  </span>
+                  <div className="leading-relaxed flex-1 min-w-0">
+                    {isObj ? (
+                      <div className="space-y-1">
+                        {ac.scenario && <div className="font-semibold text-slate-900">{ac.scenario}</div>}
+                        {ac.given && (
+                          <div className="text-slate-600">
+                            <span className="font-mono font-medium text-slate-700">Given</span> {ac.given}
+                          </div>
+                        )}
+                        {ac.when && (
+                          <div className="text-slate-600">
+                            <span className="font-mono font-medium text-slate-700">When</span> {ac.when}
+                          </div>
+                        )}
+                        {ac.then && (
+                          <div className="text-slate-700">
+                            <span className="font-mono font-semibold text-teal-800">Then</span> {ac.then}
+                          </div>
+                        )}
+                        {!ac.scenario && !ac.given && !ac.when && !ac.then && (
+                          <div>{typeof ac === 'object' ? JSON.stringify(ac) : String(ac)}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span>{String(ac)}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -221,7 +252,8 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
             >
               <EvidencePill label={e.label} />
               <div className="flex-1 text-slate-800">
-                <span className="font-semibold text-slate-900">{e.field}:</span> {e.value}
+                <span className="font-semibold text-slate-900">{e.field}:</span>{' '}
+                {typeof e.value === 'object' ? (e.value?.scenario || e.value?.title || e.value?.id || JSON.stringify(e.value)) : e.value}
                 {e.quote_source && (
                   e.source_message?.match_status === 'matched' ? (
                     <blockquote className="mt-1 m-0 bg-white p-2 rounded border border-slate-200">
@@ -257,7 +289,7 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
           </span>
           <div>
             <div className="font-bold text-rose-800 mb-0.5">Unresolved Blocker Detected</div>
-            <div>Channel inquiry generated: "{result.clarifying_question}"</div>
+            <div>Channel inquiry generated: "{typeof result.clarifying_question === 'object' ? JSON.stringify(result.clarifying_question) : result.clarifying_question}"</div>
           </div>
         </div>
       )}
