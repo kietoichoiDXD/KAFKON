@@ -323,7 +323,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
 
   if (started) {
     return (
-      <div className="flex-1 h-screen flex flex-col bg-slate-50">
+      <div className="flex-1 h-full min-h-0 flex flex-col bg-slate-50">
         <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200">
           <span className="text-sm font-semibold text-slate-900">Specification session</span>
           <button
@@ -333,7 +333,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
             New session
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 pt-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pt-6">
           <div className="w-full max-w-3xl mx-auto space-y-4 pb-6">
             {turns.map((t, i) =>
               t.role === 'you' ? (
@@ -450,7 +450,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   }
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto flex flex-col items-center justify-start p-6 bg-slate-50">
+    <div className="flex-1 h-full min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-start p-6 bg-slate-50">
       <div className="w-full max-w-5xl pt-8 pb-6 flex flex-col items-center">
         <div className="w-full flex flex-col items-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-slate-900 text-teal-400 flex items-center justify-center mb-3">

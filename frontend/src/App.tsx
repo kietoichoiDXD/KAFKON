@@ -13,12 +13,13 @@ const ArtifactsView = lazy(() => import('./components/ArtifactsView').then((modu
 const AutomationsView = lazy(() => import('./components/AutomationsView').then((module) => ({ default: module.AutomationsView })));
 const ReviewView = lazy(() => import('./components/ReviewView').then((module) => ({ default: module.ReviewView })));
 const ConflictGraphView = lazy(() => import('./components/ConflictGraphView').then((module) => ({ default: module.ConflictGraphView })));
+const TaskSummaryView = lazy(() => import('./components/TaskSummaryView').then((module) => ({ default: module.TaskSummaryView })));
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewType>(() => {
     const params = new URLSearchParams(window.location.search);
     const viewParam = params.get('view') as ViewType;
-    const validViews: ViewType[] = ['home', 'rooms', 'live', 'ops', 'review', 'artifacts', 'automations', 'conflicts'];
+    const validViews: ViewType[] = ['home', 'tasks', 'rooms', 'live', 'ops', 'review', 'artifacts', 'automations', 'conflicts'];
     if (validViews.includes(viewParam)) return viewParam;
     const hash = window.location.hash.replace('#', '') as ViewType;
     if (validViews.includes(hash)) return hash;
@@ -72,7 +73,9 @@ export function App() {
           />
         )}
 
-        {currentView === 'live' && <LiveRunView />}
+        {currentView === 'tasks' && <TaskSummaryView />}
+
+        {currentView === 'live' && <LiveRunView onOpenConnections={() => handleOpenModal('Connections')} />}
 
         {currentView === 'ops' && <OpsView />}
 
