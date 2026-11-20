@@ -1,9 +1,10 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { ViewType, WorkspaceTab } from './types';
 import { Sidebar } from './components/Sidebar';
 import { WorkspaceModal } from './components/WorkspaceModal';
 import { AuthGate } from './components/AuthGate';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const HomeView = lazy(() => import('./components/HomeView').then((module) => ({ default: module.HomeView })));
 const RoomsView = lazy(() => import('./components/RoomsView').then((module) => ({ default: module.RoomsView })));
@@ -15,20 +16,55 @@ const ReviewView = lazy(() => import('./components/ReviewView').then((module) =>
 const ConflictGraphView = lazy(() => import('./components/ConflictGraphView').then((module) => ({ default: module.ConflictGraphView })));
 const TaskSummaryView = lazy(() => import('./components/TaskSummaryView').then((module) => ({ default: module.TaskSummaryView })));
 
+const VALID_VIEWS: ViewType[] = [
+  'home',
+  'tasks',
+  'rooms',
+  'live',
+  'ops',
+  'review',
+  'artifacts',
+  'automations',
+  'conflicts'
+];
+
+function getViewFromUrl(): ViewType {
+  const hash = window.location.hash.replace('#', '').trim() as ViewType;
+  if (VALID_VIEWS.includes(hash)) return hash;
+  const params = new URLSearchParams(window.location.search);
+  const viewParam = params.get('view') as ViewType;
+  if (VALID_VIEWS.includes(viewParam)) return viewParam;
+  return 'rooms';
+}
+
 export function App() {
-  const [currentView, setCurrentView] = useState<ViewType>(() => {
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view') as ViewType;
-    const validViews: ViewType[] = ['home', 'tasks', 'rooms', 'live', 'ops', 'review', 'artifacts', 'automations', 'conflicts'];
-    if (validViews.includes(viewParam)) return viewParam;
-    const hash = window.location.hash.replace('#', '') as ViewType;
-    if (validViews.includes(hash)) return hash;
-    return 'rooms';
-  });
+  const [currentView, setCurrentView] = useState<ViewType>(() => getViewFromUrl());
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<WorkspaceTab>('Agents');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [chatResetKey, setChatResetKey] = useState(0);
+
+  // Sync state with URL hash and browser back/forward history
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const view = getViewFromUrl();
+      setCurrentView(view);
+    };
+
+    window.addEventListener('hashchange', handleUrlChange);
+    window.addEventListener('popstate', handleUrlChange);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlChange);
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, []);
+
+  const handleSelectView = (view: ViewType) => {
+    setCurrentView(view);
+    if (window.location.hash !== `#${view}`) {
+      window.location.hash = `#${view}`;
+    }
+  };
 
   const handleSelectPrompt = (_prompt: string) => {};
 
@@ -44,9 +80,9 @@ export function App() {
       {/* Main Command Sidebar */}
       <Sidebar
         currentView={currentView}
-        onSelectView={setCurrentView}
+        onSelectView={handleSelectView}
         onOpenCustomize={(tab) => handleOpenModal(tab ?? 'Agents')}
-        onNewChat={() => { setCurrentView('home'); setChatResetKey(k => k + 1); }}
+        onNewChat={() => { handleSelectView('home'); setChatResetKey(k => k + 1); }}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
@@ -62,11 +98,12 @@ export function App() {
           exit={{ opacity: 0, y: -2 }}
           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
         >
+        <ErrorBoundary key={currentView} onReset={() => setCurrentView(currentView)}>
         <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500" role="status">Loading workspace…</div>}>
         {currentView === 'home' && (
           <HomeView
             onSelectPrompt={handleSelectPrompt}
-            onNavigateToAutomations={() => setCurrentView('automations')}
+            onNavigateToAutomations={() => handleSelectView('automations')}
             onOpenSkills={() => handleOpenModal('Skills')}
             resetKey={chatResetKey}
           />
@@ -88,6 +125,7 @@ export function App() {
 
         {currentView === 'conflicts' && <ConflictGraphView />}
         </Suspense>
+        </ErrorBoundary>
         </motion.div>
         </AnimatePresence>
       </main>
