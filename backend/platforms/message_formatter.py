@@ -39,7 +39,16 @@ class MessageFormatter:
 
         for ac in result.acceptance_criteria:
             badge = cls._badge_emoji(ac.evidence)
-            lines.append(f"- {badge} **{ac.id}**: {ac.scenario} (`{ac.then}`)")
+            lines.append(f"- [ ] {badge} **{ac.id}: {ac.scenario}**")
+            if getattr(ac, "given", None) or getattr(ac, "when", None) or getattr(ac, "then", None):
+                if getattr(ac, "given", None):
+                    lines.append(f"    - **Given:** {ac.given}")
+                if getattr(ac, "when", None):
+                    lines.append(f"    - **When:** {ac.when}")
+                if getattr(ac, "then", None):
+                    lines.append(f"    - **Then:** {ac.then}")
+            elif getattr(ac, "then", None):
+                lines.append(f"    - **Outcome:** `{ac.then}`")
 
         if result.clarifying_question:
             lines.extend([

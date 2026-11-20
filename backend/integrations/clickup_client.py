@@ -146,10 +146,20 @@ class ClickUpClient:
         sections.extend([
             "",
             "---",
-            "## ✅ Acceptance Checklist",
+            "## ✅ Acceptance Checklist (Gherkin Scenarios)",
         ])
         for ac in result.acceptance_criteria:
-            sections.append(f"- [ ] **{ac.id}**: {ac.scenario} (`{ac.then}`)")
+            badge = "🟢" if getattr(ac.evidence, "value", str(ac.evidence)) == "Verified" else "🟡" if getattr(ac.evidence, "value", str(ac.evidence)) == "Inferred" else "🟣" if getattr(ac.evidence, "value", str(ac.evidence)) == "Assumed" else "🔴"
+            sections.append(f"- [ ] {badge} **{ac.id}: {ac.scenario}**")
+            if getattr(ac, "given", None) or getattr(ac, "when", None) or getattr(ac, "then", None):
+                if getattr(ac, "given", None):
+                    sections.append(f"    - **Given:** {ac.given}")
+                if getattr(ac, "when", None):
+                    sections.append(f"    - **When:** {ac.when}")
+                if getattr(ac, "then", None):
+                    sections.append(f"    - **Then:** {ac.then}")
+            elif getattr(ac, "then", None):
+                sections.append(f"    - **Outcome:** `{ac.then}`")
 
         if result.clarifying_question:
             sections.extend([
@@ -189,11 +199,30 @@ class ClickUpClient:
         payload = {
             "name": title,
             "description": description,
+            "markdown_content": description,
             "priority": priority,
             "tags": tags
         }
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
+    async def update_task_markdown(self, task_id: str, markdown_content: str) -> Dict[str, Any]:
+        """Update an existing task with parsed rich markdown formatting."""
+        if not self.api_key:
+            raise ValueError("ClickUp is not configured.")
+        url = f"https://api.clickup.com/api/v2/task/{task_id}"
+        headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "description": markdown_content,
+            "markdown_content": markdown_content
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.put(url, headers=headers, json=payload)
             resp.raise_for_status()
             return resp.json()
 
