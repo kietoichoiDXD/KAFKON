@@ -56,7 +56,7 @@ export function App() {
         <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={currentView}
-          className="flex-1 min-w-0 h-full min-h-0 overflow-hidden"
+          className="flex-1 min-w-0 h-full min-h-0 flex flex-col overflow-hidden"
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -2 }}
@@ -68,7 +68,6 @@ export function App() {
             onSelectPrompt={handleSelectPrompt}
             onNavigateToAutomations={() => setCurrentView('automations')}
             onOpenSkills={() => handleOpenModal('Skills')}
-            onNewChat={() => { setCurrentView('home'); setChatResetKey(k => k + 1); }}
             resetKey={chatResetKey}
           />
         )}

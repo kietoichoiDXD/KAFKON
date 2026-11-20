@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { get, Health, Run, LABEL_COLOR, API } from '../api';
+import { get, Health, Run, LABEL_COLOR, API, safeFetchJson } from '../api';
 
 interface HomeViewProps {
   onSelectPrompt: (prompt: string) => void;
   onNavigateToAutomations: () => void;
   onOpenSkills: () => void;
-  onNewChat: () => void;
   resetKey?: number;
 }
 
@@ -17,11 +16,13 @@ type Turn =
   | { role: 'approve'; proposal: any; applied?: any; error?: string }
   | { role: 'error'; text: string };
 
+type ChatSessionSummary = { id: string; title: string; updated_at: number };
+
 const SUGGESTIONS = [
+  'Summarise Smart Product Search thread: https://ai4l-aio.slack.com/archives/C0CFE9GL4AK/p1795162883105679',
   'Summarise the SSO thread in #proj-auth-federation and label every requirement.',
   'Which decisions in this thread are still Assumed? Ask the channel about them.',
   'Draft the ClickUp ticket from this thread using the agency_detailed skill.',
-  'Compare what startup_lean and agency_detailed would file for the same thread.',
 ];
 
 function EvidencePill({ label }: { label: string }) {
@@ -58,6 +59,19 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
             <span>·</span>
             <span>Deterministic Provenance</span>
           </div>
+          {result.permalink && (
+            <div className="mt-2">
+              <a
+                href={result.permalink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                <span>Source Slack Thread {result.channel ? `(#${result.channel})` : ''}</span>
+              </a>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 shrink-0">
@@ -71,6 +85,23 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
           <span className="font-semibold text-slate-900">As a</span> {result.story.as_a},{' '}
           <span className="font-semibold text-slate-900">I want</span> {result.story.i_want},{' '}
           <span className="font-semibold text-slate-900">So that</span> {result.story.so_that}
+        </div>
+      )}
+
+      {/* Acceptance Criteria */}
+      {result.acceptance_criteria && result.acceptance_criteria.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+            Acceptance Criteria (Gherkin / Verifiable)
+          </div>
+          <div className="space-y-1.5">
+            {result.acceptance_criteria.map((ac: string, idx: number) => (
+              <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
+                <span className="font-mono text-teal-700 font-bold shrink-0">{idx + 1}.</span>
+                <span className="leading-relaxed">{ac}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -131,7 +162,7 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
   );
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills, onNewChat, resetKey = 0 }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills, resetKey = 0 }) => {
   const [promptInput, setPromptInput] = useState('');
   const [skill, setSkill] = useState('startup_lean');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -141,16 +172,52 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
   const [modelMode, setModelMode] = useState('Nebius Qwen-30B (Fast)');
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState('');
+
+  const persistNewSession = async () => {
+    const result = await safeFetchJson<{ id: string; title: string }>(`${API}/api/chat/sessions`, { method: 'POST' });
+    if (!result.ok || !result.data) return;
+    setActiveSessionId(result.data.id);
+    localStorage.setItem('scribeba.chat.active-session', result.data.id);
+    setChatSessions(items => [
+      { id: result.data!.id, title: result.data!.title, updated_at: Date.now() / 1000 },
+      ...items,
+    ].slice(0, 100));
+  };
+
+  const openSession = async (sessionId: string) => {
+    if (!sessionId) return;
+    const result = await safeFetchJson<{ id: string; turns: Turn[] }>(`${API}/api/chat/sessions/${sessionId}`);
+    if (!result.ok || !result.data) return;
+    setActiveSessionId(sessionId);
+    localStorage.setItem('scribeba.chat.active-session', sessionId);
+    setTurns(result.data.turns ?? []);
+    setPendingAction(null);
+    setPromptInput('');
+  };
 
   useEffect(() => {
     get<Health>('/api/health').then(setHealth);
     get<Run[]>('/api/runs').then(setRuns);
+    let cancelled = false;
+    void (async () => {
+      const result = await safeFetchJson<ChatSessionSummary[]>(`${API}/api/chat/sessions`);
+      if (!result.ok || !Array.isArray(result.data) || cancelled) return;
+      setChatSessions(result.data);
+      const savedId = localStorage.getItem('scribeba.chat.active-session') || '';
+      const selected = result.data.find(item => item.id === savedId) || result.data[0];
+      if (selected) await openSession(selected.id);
+      else await persistNewSession();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (resetKey) {
       setTurns([]);
       setPromptInput('');
+      void persistNewSession();
     }
   }, [resetKey]);
 
@@ -184,10 +251,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction }),
+        body: JSON.stringify({ messages: history, skill, tier, pending_action: pendingAction, session_id: activeSessionId }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error ?? 'Request failed');
+      if (data.session_id && data.session_id !== activeSessionId) {
+        setActiveSessionId(data.session_id);
+        localStorage.setItem('scribeba.chat.active-session', data.session_id);
+      }
 
       if (data.type === 'ops' && data.proposal) setPendingAction(data.proposal.action_id);
       setTurns(t => [
@@ -200,6 +271,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
           ? { role: 'approve', proposal: data.proposal }
           : { role: 'agent', result: data, skill, tier },
       ]);
+      const refreshed = await safeFetchJson<ChatSessionSummary[]>(`${API}/api/chat/sessions`);
+      if (refreshed.ok && Array.isArray(refreshed.data)) setChatSessions(refreshed.data);
     } catch (e: any) {
       setTurns(t => [
         ...t,
@@ -251,6 +324,26 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
 
   const started = turns.length > 0 || analyzing;
 
+  const sessionControls = (
+    <div className="flex items-center gap-2">
+      <label className="sr-only" htmlFor="chat-history-select">Saved chats</label>
+      <select
+        id="chat-history-select"
+        value={activeSessionId}
+        onChange={e => void openSession(e.target.value)}
+        className="max-w-[min(52vw,320px)] px-2.5 py-2 rounded-md border border-slate-300 bg-white text-slate-800 text-xs"
+        aria-label="Saved chat history"
+      >
+        {chatSessions.map(item => <option key={item.id} value={item.id}>{item.title || 'New conversation'}</option>)}
+        {!chatSessions.length && <option value={activeSessionId}>Current conversation</option>}
+      </select>
+      <button
+        onClick={() => { setTurns([]); setPromptInput(''); setPendingAction(null); void persistNewSession(); }}
+        className="px-3 py-2 rounded-md border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100"
+      >New session</button>
+    </div>
+  );
+
   const composer = (
     <div className="w-full bg-white rounded-xl border border-slate-200 p-4 transition-all focus-within:border-teal-700 focus-within:ring-2 focus-within:ring-teal-700/10">
       <div className="flex items-center gap-3 text-xs text-slate-600 font-mono mb-2 overflow-x-auto pb-1">
@@ -268,6 +361,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
           </button>
         ))}
       </div>
+
+      {/https?:\/\/[a-z0-9\-.]*slack\.com\//i.test(promptInput) && (
+        <div className="mb-2.5 flex items-center justify-between rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs text-teal-900">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span className="material-symbols-outlined text-[16px] text-teal-700">link</span>
+            <span>Slack Discussion Link Detected</span>
+          </div>
+          <span className="font-mono text-[11px] text-teal-700 font-semibold">AI4L - AIO Workspace Connected</span>
+        </div>
+      )}
 
       <textarea
         value={promptInput}
@@ -326,12 +429,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       <div className="flex-1 h-full min-h-0 flex flex-col bg-slate-50">
         <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200">
           <span className="text-sm font-semibold text-slate-900">Specification session</span>
-          <button
-            onClick={onNewChat}
-            className="px-3 py-2 rounded-md border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100"
-          >
-            New session
-          </button>
+          {sessionControls}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pt-6">
           <div className="w-full max-w-3xl mx-auto space-y-4 pb-6">
@@ -451,6 +549,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
 
   return (
     <div className="flex-1 h-full min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-start p-6 bg-slate-50">
+      <div className="w-full max-w-5xl flex justify-end mb-2">{sessionControls}</div>
       <div className="w-full max-w-5xl pt-8 pb-6 flex flex-col items-center">
         <div className="w-full flex flex-col items-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-slate-900 text-teal-400 flex items-center justify-center mb-3">
@@ -469,7 +568,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
 
         {/* Suggestion Chips */}
         <div className="w-full mt-4 space-y-1.5">
-          <div className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <div className="text-[13px] font-semibold text-slate-600 px-1">
             Recommended Prompts
           </div>
           {SUGGESTIONS.map((s, idx) => (
@@ -489,14 +588,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       </div>
 
       {/* Overview Cards Row */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-4 mt-auto mb-6">
+      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-4 mt-auto mb-6">
         <section className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col min-h-[160px]">
-          <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            Action Items Needed
+          <h2 className="text-[13px] font-semibold text-slate-600 mb-2">
+            Action items needed
           </h2>
           {open.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
-              {runs === null ? 'Backend idle' : 'No unresolved blockers.'}
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-500 leading-relaxed">
+              {runs === null
+                ? 'Backend idle. Connect the service to load follow-up items.'
+                : 'No blockers. Follow-up items from future runs will appear here when the analysis finds an unanswered decision or assumption.'}
             </div>
           ) : (
             <ul className="flex-1 space-y-2 list-none p-0 m-0">
@@ -511,10 +612,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
         </section>
 
         <section className="bg-white rounded-xl border border-slate-200 p-4 min-h-[160px] flex flex-col">
-          <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            Connection Mesh
+          <h2 className="text-[13px] font-semibold text-slate-600 mb-2">
+            Connection mesh
           </h2>
-          <div className="space-y-2 flex-1">
+          <div className="space-y-2">
             {(health
               ? [
                   ['Slack Ingestion', health.slack, health.slack ? 'Live Socket Mode' : 'Offline'],
@@ -540,10 +641,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
         </section>
 
         <section className="bg-white rounded-xl border border-slate-200 p-4 min-h-[160px] flex flex-col">
-          <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            Engine Telemetry
+          <h2 className="text-[13px] font-semibold text-slate-600 mb-2">
+            Engine telemetry
           </h2>
-          <div className="space-y-1.5 flex-1 text-xs">
+          <div className="space-y-1.5 text-xs">
             <div className="flex justify-between text-slate-700">
               <span>Primary LLM:</span>
               <span className="font-mono font-semibold text-teal-800">Nebius Qwen-30B</span>

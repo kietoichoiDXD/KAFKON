@@ -46,13 +46,17 @@ dist/
 .idea/
 *.swp
 *.swo
+.edge_temp/
 
 # ScribeBA Local storage
 .scribeba_cache/
 *.log
 .runs.json
 .rooms.json
+.scribeba/
 ScribeBA-Submission.zip
+demo_assets/*.wav
+demo_assets/*.mp4
 
 # Local agent skill installations and editor workspace state
 .agents/skills/
@@ -63,3 +67,5 @@ ScribeBA-Submission.zip
 # Local AWS credential exports; never commit provider access keys.
 /Kietran_credentials.csv
 /Kietran_accessKeys.csv
+xoxb-*.txt
+xoxp-*.txt

@@ -16,6 +16,9 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "click>=8.1.7",
     "rich>=13.7.0",
+    "flask>=3.0.0",
+    "PyJWT[crypto]>=2.10.1",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

@@ -133,6 +133,66 @@ class ChatResponder:
             if action:
                 return {"type": "approve", "proposal": action}
 
+        # Check if the user pasted a Slack link or channel
+        latest_message = messages[-1] if messages else ""
+        all_text = "\n".join(messages)
+        from .platforms.slack_adapter import parse_slack_link, SlackAdapter
+        slack_target = parse_slack_link(latest_message) or parse_slack_link(all_text)
+        if slack_target:
+            slack = SlackAdapter()
+            if not slack.is_live:
+                return {
+                    "type": "text",
+                    "text": "🔗 Đã phát hiện link Slack nhưng server chưa được kết nối Slack Token. Vui lòng kiểm tra lại cấu hình SLACK_USER_TOKEN hoặc SLACK_BOT_TOKEN trong .env."
+                }
+            
+            channel_id = slack_target["channel"]
+            ts = slack_target.get("ts")
+            try:
+                if not ts:
+                    hist = await slack._call("conversations.history", {"channel": channel_id, "limit": 15})
+                    hist_messages = hist.get("messages", [])
+                    for m in hist_messages:
+                        if m.get("reply_count", 0) > 0:
+                            ts = m.get("ts")
+                            break
+                    if not ts and hist_messages:
+                        ts = hist_messages[0].get("ts")
+
+                if not ts:
+                    return {
+                        "type": "text",
+                        "text": f"Không tìm thấy tin nhắn hoặc thread thảo luận nào trong kênh Slack `{channel_id}`."
+                    }
+
+                thread = await slack.fetch_thread(channel_id, ts)
+                if not thread.messages:
+                    return {
+                        "type": "text",
+                        "text": f"Kênh Slack `{channel_id}` (ts: `{ts}`) không có nội dung thảo luận để phân tích."
+                    }
+
+                permalink = await slack.get_permalink(channel_id, ts)
+                result = await self.analyzer.analyze_thread(
+                    thread, skill_name=skill, tier=tier, force_live=True
+                )
+                for evidence in result.evidence_items:
+                    if evidence.source_message and evidence.source_message.match_status == "matched":
+                        evidence.source_message.thread_url = permalink or None
+
+                return {
+                    "type": "analysis",
+                    "result": result,
+                    "permalink": permalink,
+                    "channel": channel_id,
+                    "ts": ts,
+                }
+            except Exception as e:
+                return {
+                    "type": "text",
+                    "text": f"❌ Lỗi khi đọc hội thoại từ Slack `{channel_id}`: {e}\nHãy đảm bảo Bot/User token đã có quyền truy cập kênh này."
+                }
+
         if wants_an_infra_check(messages):
             try:
                 return {"type": "ops", "diagnosis": ops.diagnose(environment)}

@@ -223,7 +223,7 @@ export function OpsView() {
   const isElevated5xx = (m?.error_rate ?? 0) > 0.02;
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
+    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6 bg-slate-50">
       <div className="w-full max-w-[1440px] mx-auto space-y-6">
         {/* Header */}
         <div>

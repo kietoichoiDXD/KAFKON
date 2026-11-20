@@ -219,8 +219,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Recent Runs History */}
         {!isCollapsed && (
           <div className="sidebar-recent-runs flex-1 flex flex-col min-h-0 px-2 mt-1">
-            <div className="flex items-center justify-between px-2.5 py-1 text-slate-700 text-xs font-semibold uppercase tracking-wider">
-              <span>Recent Runs</span>
+            <div className="flex items-center justify-between px-2.5 py-1 text-slate-700 text-[13px] font-semibold">
+              <span>Recent runs</span>
               <button
                 onClick={() => setSearchQuery(q => (q ? '' : ' '))}
                 className="hover:text-slate-900 text-slate-600"

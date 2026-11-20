@@ -8,8 +8,11 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 3000,
-      host: true,
-      proxy: { '/api': env.VITE_API_PROXY_TARGET || process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8008' }
+      host: '127.0.0.1',
+      proxy: {
+        '/api': env.VITE_API_PROXY_TARGET || process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
+        '/slack/oauth_redirect': env.VITE_API_PROXY_TARGET || process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
+      }
     }
   };
 });

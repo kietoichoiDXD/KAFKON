@@ -19,14 +19,14 @@ import { API } from '../api';
 type RoomTab = 'chat' | 'tree' | 'tasks' | 'channels' | 'agent' | 'repos';
 
 // Older browser snapshots contained demo webhook URLs and Telegram chat IDs.
-// Strip those fields and reset sample connections before they reach the UI.
+// Strip sensitive credentials while preserving legitimate server connection state.
 const sanitizeRoomConnections = (source: RoomItem[]): RoomItem[] =>
   source.map(room => ({
     ...room,
     social_links: (room.social_links || []).map(({ webhook_url: _webhook, chat_id: _chatId, ...link }) => ({
       ...link,
-      enabled: false,
-      status: 'Disconnected',
+      enabled: link.enabled ?? false,
+      status: link.status ?? (link.enabled ? 'Connected' : 'Disconnected'),
     })),
   }));
 
@@ -119,6 +119,28 @@ export const RoomsView: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('scribeba_rooms_v3', JSON.stringify(rooms));
   }, [rooms]);
+
+  // Realtime polling for room conversation updates
+  useEffect(() => {
+    if (!selectedRoomId && !rooms[0]?.id) return;
+    const targetRoomId = selectedRoomId || rooms[0]?.id;
+    if (activeTab !== 'chat') return;
+
+    const interval = setInterval(() => {
+      fetch(`${API}/api/rooms/${targetRoomId}`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(data => {
+          if (data && Array.isArray(data.chat_messages)) {
+            setRooms(prev =>
+              prev.map(r => (r.id === targetRoomId ? { ...r, chat_messages: data.chat_messages } : r))
+            );
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [selectedRoomId, activeTab, rooms]);
 
   // Current selected room
   const currentRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0] || null;
@@ -404,14 +426,11 @@ export const RoomsView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold text-slate-900 tracking-tight m-0">
-                PM Autonomous Room Studio
+                Project Rooms
               </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-100 text-teal-800 border border-teal-200">
-                Multi-Channel Mesh
-              </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Link Slack, Discord & Telegram to specialized PM AI agents with live production codebase tree visualization.
+              Keep each project’s conversation, tasks, repository view, and channel setup together.
             </p>
           </div>
         </div>
@@ -438,10 +457,10 @@ export const RoomsView: React.FC = () => {
       </header>
 
       {/* Main Workspace Body */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 min-h-0 overflow-hidden flex">
         {/* ROOM STUDIO VIEW (Single Room Focused) */}
         {selectedRoomId && currentRoom ? (
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-50">
             {/* Room Studio Navigation Bar */}
             <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
@@ -467,11 +486,11 @@ export const RoomsView: React.FC = () => {
                           className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
                             l.enabled
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold'
-                              : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
                           }`}
-                          title={`${l.platform}: ${l.channel}`}
+                          title={`${l.platform} channel reference: ${l.channel}. ${l.enabled ? 'Connected' : 'Not connected'}.`}
                         >
-                          {l.platform}
+                          {l.platform}{l.enabled ? '' : ' · Not connected'}
                         </span>
                       ))}
                     </div>
@@ -480,9 +499,10 @@ export const RoomsView: React.FC = () => {
               </div>
 
               {/* Sub-tabs inside Studio */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <div className="flex flex-wrap items-center justify-end gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button
                   onClick={() => setActiveTab('chat')}
+                  title="Read and write messages in this room"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'chat'
                       ? 'bg-white text-slate-900 shadow-xs'
@@ -490,11 +510,12 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">chat</span>
-                  <span>Social Chat Bridge</span>
+                  <span>Chat</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('tree')}
+                  title="Browse the repository structure"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'tree'
                       ? 'bg-white text-teal-800 shadow-xs'
@@ -502,11 +523,12 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px] text-teal-600">account_tree</span>
-                  <span>Production Tree</span>
+                  <span>Code</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('tasks')}
+                  title="View and update this room’s tasks"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'tasks'
                       ? 'bg-white text-slate-900 shadow-xs'
@@ -514,11 +536,12 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">view_kanban</span>
-                  <span>Task Board ({currentRoom.tasks.length})</span>
+                  <span>Tasks ({currentRoom.tasks.length})</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('channels')}
+                  title="Manage channel references and connection status"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'channels'
                       ? 'bg-white text-slate-900 shadow-xs'
@@ -526,11 +549,12 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">sensors</span>
-                  <span>Social Channels</span>
+                  <span>Channels</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('agent')}
+                  title="Choose the AI role for this room"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'agent'
                       ? 'bg-white text-slate-900 shadow-xs'
@@ -538,11 +562,12 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">tune</span>
-                  <span>Agent Config</span>
+                  <span>Agent</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('repos')}
+                  title="View repositories available to this room"
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     activeTab === 'repos'
                       ? 'bg-white text-slate-900 shadow-xs'
@@ -550,53 +575,57 @@ export const RoomsView: React.FC = () => {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">source</span>
-                  <span>Curated OSS</span>
+                  <span>Repositories</span>
                 </button>
               </div>
             </div>
 
             {/* TAB CONTENT */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {/* TAB 1: SOCIAL CHAT BRIDGE */}
+            <div className={`${activeTab === 'chat' ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto overscroll-contain'} p-6`}>
+              {/* TAB 1: ROOM CHAT */}
               {activeTab === 'chat' && (
                 <div className="max-w-5xl mx-auto h-full flex flex-col bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                  {/* Chat Sub-header with Slash Commands */}
-                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                        Unified Multi-Channel Stream
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        (Slack + Discord + Telegram + ScribeBA Agent)
-                      </span>
+                  {/* Room chat and shortcuts */}
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Room conversation</span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Messages here stay in this room. Connect a channel in Channels to import or send social messages.</p>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-semibold text-slate-500 mr-1">Quick Commands:</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-semibold text-slate-500 mr-1">Shortcuts:</span>
                       <button
                         onClick={() => handleSendMessage('/tree')}
                         className="px-2.5 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
-                        title="Render live production directory hierarchy in chat"
+                        title="Show the repository tree in the conversation"
                       >
-                        <span>🌲 /tree</span>
+                        <span>Code tree</span>
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage('/sync')}
+                        className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
+                        title="Sync latest discussion from Slack channel"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">sync</span>
+                        <span>Sync Slack</span>
                       </button>
                       <button
                         onClick={() => handleSendMessage('/tasks')}
                         className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors flex items-center gap-1"
                       >
-                        <span>📋 /tasks</span>
+                        <span>Room tasks</span>
                       </button>
                       <button
                         onClick={() => handleSendMessage('Check for any unverified claims or blocked requirements')}
                         className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-mono font-semibold transition-colors"
                       >
-                        <span>🛡️ /audit</span>
+                        <span>Review open questions</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Messages Feed */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 bg-slate-50/50">
                     {currentRoom.chat_messages.map(msg => {
                       const isAi = msg.platform === 'AI Agent';
                       return (
@@ -660,7 +689,7 @@ export const RoomsView: React.FC = () => {
                             {msg.has_tasks && (
                               <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
                                 <span className="text-xs font-bold text-slate-900 block font-mono">
-                                  Active Room Stories ({currentRoom.tasks.length}):
+                                  Room tasks ({currentRoom.tasks.length}):
                                 </span>
                                 {currentRoom.tasks.map(t => (
                                   <div
@@ -701,10 +730,10 @@ export const RoomsView: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Input & Sender Toolbar */}
+                  {/* Input and message label */}
                   <div className="p-3 bg-white border-t border-slate-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[11px] font-semibold text-slate-500">Send message as:</span>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Label this message:</span>
                       {(['Slack', 'Discord', 'Telegram', 'PM Lead'] as const).map(p => (
                         <button
                           key={p}
@@ -719,11 +748,12 @@ export const RoomsView: React.FC = () => {
                         </button>
                       ))}
                     </div>
+                    <p className="text-[11px] text-slate-500 mb-2">This label identifies the message source in the room. It does not post to Slack, Discord, or Telegram.</p>
 
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder="Type a team message or '/tree' to render codebase visualizer..."
+                        placeholder="Write a message for this room…"
                         value={chatInput}
                         onChange={e => setChatInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
@@ -848,10 +878,10 @@ export const RoomsView: React.FC = () => {
                     <div>
                       <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                         <span className="material-symbols-outlined text-[18px] text-teal-600">view_kanban</span>
-                        <span>Zero-Blocker Task Board ({currentRoom.tasks.length} Stories)</span>
+                        <span>Room tasks ({currentRoom.tasks.length})</span>
                       </h2>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Enforces INVEST criteria and 3-axis verification. Managed by {currentRoom.agent_config.agent_name}.
+                        Track work discussed in this room. The {currentRoom.agent_config.agent_name} role can help organize it.
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
                         Drag cards between columns, or use each card’s status menu with a keyboard.
@@ -1059,7 +1089,7 @@ export const RoomsView: React.FC = () => {
                             <div className="text-xs text-slate-600 font-mono mt-0.5">
                               Channel / Handle: <strong className="text-slate-900">{link.channel}</strong>
                             </div>
-                            <div className="text-[11px] text-slate-500 mt-0.5">Credentials are not configured for this channel.</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">This is a saved channel address. It is not connected yet; a workspace admin must authorize the integration and grant access.</div>
                           </div>
                         </div>
 
@@ -1260,54 +1290,54 @@ export const RoomsView: React.FC = () => {
           </div>
         ) : (
           /* ALL ROOMS OVERVIEW (When no room is selected or browsing all) */
-          <div className="flex-1 overflow-y-auto p-6 max-w-6xl mx-auto w-full space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 max-w-6xl mx-auto w-full space-y-6">
             {/* Metric KPI cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Active Rooms
+                  Project rooms
                 </div>
                 <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
                   {rooms.length}
                 </div>
                 <div className="text-[11px] text-teal-700 font-medium mt-0.5">
-                  PM Autonomous Squads
+                  Workspaces for team projects
                 </div>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Social Channels Linked
+                  Channel references
                 </div>
                 <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
-                  {rooms.reduce((acc, r) => acc + r.social_links.filter(s => s.enabled).length, 0)}
+                  {rooms.reduce((acc, r) => acc + r.social_links.length, 0)}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
-                  Slack · Discord · Telegram
+                  Saved addresses; connection status is shown per room
                 </div>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Zero-Blocker Stories
+                  Room tasks
                 </div>
                 <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
                   {rooms.reduce((acc, r) => acc + r.tasks.length, 0)}
                 </div>
                 <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                  3-Axis Verified
+                  Tasks across all rooms
                 </div>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Specialized Agents
+                  AI roles
                 </div>
                 <div className="text-2xl font-bold font-mono text-teal-800 mt-1">
                   {SPECIALIZED_PM_AGENTS.length}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
-                  Pre-Trained Roles Available
+                  Roles available to assign to a room
                 </div>
               </div>
             </div>
@@ -1444,7 +1474,7 @@ export const RoomsView: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-teal-600 text-[20px]">add_circle</span>
-                <h3 className="text-base font-bold text-slate-900">Create Autonomous Project Room</h3>
+                <h3 className="text-base font-bold text-slate-900">Create project room</h3>
               </div>
               <button
                 onClick={() => setIsCreateModalOpen(false)}

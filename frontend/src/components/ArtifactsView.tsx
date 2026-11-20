@@ -66,7 +66,7 @@ export const ArtifactsView: React.FC = () => {
   });
 
   return (
-    <div className="flex-1 h-full min-h-0 overflow-y-auto overscroll-contain bg-slate-50 flex flex-col font-sans">
+    <div className="flex-1 h-full min-h-0 overflow-hidden bg-slate-50 flex flex-col font-sans">
       {/* Top Header */}
       <div className="px-8 py-4 bg-white border-b border-slate-200 shrink-0">
         <div className="flex items-center justify-between">
@@ -142,7 +142,7 @@ export const ArtifactsView: React.FC = () => {
       </div>
 
       {/* Provenance records */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6">
         <div className="w-full max-w-[1440px] mx-auto">
           <div className="grid grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_150px_100px] gap-4 px-3 pb-3 text-xs text-slate-500 max-md:hidden">
             <span>Artifact</span><span>Source</span><span>Updated</span><span>Access</span>
