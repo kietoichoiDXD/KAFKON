@@ -78,14 +78,27 @@ DISCUSSION_HINTS = re.compile(
 
 
 def looks_like_a_discussion(messages: List[str]) -> bool:
-    joined = "\n".join(messages)
-    if len(messages) >= 3:
+    joined = "\n".join(messages).strip()
+    if not joined:
+        return False
+    # If it is a pasted transcript with multiple human speakers
+    speakers = set(re.findall(r"(?m)^\s*\*?@([a-zA-Z0-9_\-\.]+):?", joined))
+    human_speakers = {s for s in speakers if not any(bot in s.lower() for bot in ["ai", "bot", "assistant", "system", "lead agile"])}
+    if len(human_speakers) >= 2:
         return True
-    speakers = len(re.findall(r"(?m)^\s*\*?@\w+", joined))
-    if speakers >= 2:
+
+    # Or explicitly requested specification/task extraction
+    if any(cmd in joined.lower() for cmd in ["/ba-summarize", "phân tích", "trích xuất task", "tạo story", "bóc tách task", "tạo user story"]):
         return True
-    # One long paragraph stating requirements is still a specification job.
-    return len(joined.split()) > 25 and bool(DISCUSSION_HINTS.search(joined))
+
+    # One substantial requirement statement (at least 15 words with requirement signals)
+    words = joined.split()
+    if len(words) >= 15 and bool(DISCUSSION_HINTS.search(joined)):
+        req_signals = ["cần", "must", "require", "feature", "tính năng", "chức năng", "người dùng muốn", "sso", "api", "tối ưu", "xác thực"]
+        if any(sig in joined.lower() for sig in req_signals):
+            return True
+
+    return False
 
 
 def _environments_line() -> str:
@@ -137,6 +150,40 @@ class ChatResponder:
         # Check if the user pasted a Slack link or channel
         latest_message = messages[-1] if messages else ""
         all_text = "\n".join(messages)
+
+        # Natural language request to read/scan recent Slack activity
+        wants_slack_query = any(kw in latest_message.lower() for kw in [
+            "đọc cho tôi task ở slack", "đọc task ở slack", "quét slack", "tin nhắn ở slack",
+            "xem slack", "kiểm tra slack", "slack có gì", "tin nhắn slack", "task ở slack", "thảo luận ở slack",
+            "đọc tin nhắn slack", "tin nhắn mới ở slack"
+        ])
+        if wants_slack_query:
+            from .platforms.slack_adapter import SlackAdapter
+            slack = SlackAdapter()
+            if slack.is_live:
+                try:
+                    data = await slack._call("conversations.history", {"channel": "C0CFE9GL4AK", "limit": 8})
+                    msgs = data.get("messages", [])
+                    clean_msgs = []
+                    for m in msgs:
+                        txt = (m.get("text") or "").strip()
+                        if txt and m.get("subtype") not in ("channel_join", "channel_leave") and "has joined the channel" not in txt and "[ScribeBA AI Agent]" not in txt:
+                            author = await slack._display_name(m.get("user", ""))
+                            clean_msgs.append(f"• **@{author}**: {txt}")
+
+                    if clean_msgs:
+                        formatted_list = "\n".join(clean_msgs[:5])
+                        return {
+                            "type": "text",
+                            "text": (
+                                "📡 **Đã quét kênh Slack #all-ai4l-aio trong thời gian thực:**\n\n"
+                                f"{formatted_list}\n\n"
+                                "💡 **Hành động gợi ý**: Bạn có thể yêu cầu tôi bóc tách User Story hoặc tạo ClickUp task từ các trao đổi này."
+                            )
+                        }
+                except Exception:
+                    pass
+
         from .platforms.slack_adapter import parse_slack_link, SlackAdapter
         slack_target = parse_slack_link(latest_message) or parse_slack_link(all_text)
         if slack_target:

@@ -419,7 +419,7 @@ Return strictly valid JSON matching this schema:
                     skill=skill,
                     tier=tier
                 ),
-                timeout=15.0
+                timeout=25.0
             )
 
             if parsed and parsed.get("story"):

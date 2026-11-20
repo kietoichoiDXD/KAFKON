@@ -3237,9 +3237,9 @@ def room_chat(room_id: str):
     messages.append(user_msg)
 
     lower = user_text.lower()
-    is_tree_command = any(k in lower for k in ["/tree", "cây thư mục", "repo tree", "file tree", "cấu trúc", "tree"])
-    is_task_command = any(k in lower for k in ["/task", "/tasks", "nhiệm vụ", "công việc", "task"])
-    is_sync_command = any(k in lower for k in ["/sync", "đồng bộ", "kênh social", "slack", "discord", "telegram"])
+    is_tree_command = lower == "/tree" or lower.startswith("/tree ")
+    is_task_command = lower in ("/task", "/tasks") or lower.startswith(("/task ", "/tasks "))
+    is_sync_command = lower == "/sync" or lower.startswith("/sync ")
 
     if is_tree_command:
         ai_reply = (
@@ -3282,14 +3282,18 @@ def room_chat(room_id: str):
                     if link.get("platform") == "Slack" and ch.startswith("C0"):
                         slack_ch = ch
                         break
-                hist = asyncio.run(slack._call("conversations.history", {"channel": slack_ch, "limit": 4}))
+                hist = asyncio.run(slack._call("conversations.history", {"channel": slack_ch, "limit": 6}))
                 for m in reversed(hist.get("messages", [])):
                     txt = m.get("text", "").strip()
                     if txt and not any(existing.get("text") == txt for existing in messages):
                         user_id = m.get("user") or "colleague"
+                        try:
+                            author_name = asyncio.run(slack._display_name(user_id))
+                        except Exception:
+                            author_name = user_id
                         messages.append({
                             "id": f"slack-{m.get('ts', time.time())}",
-                            "sender": f"@{user_id}",
+                            "sender": f"@{author_name}",
                             "platform": "Slack",
                             "time": time.strftime("%H:%M"),
                             "text": txt,
@@ -3316,9 +3320,17 @@ def room_chat(room_id: str):
         try:
             from .chat import ChatResponder
             responder = ChatResponder(skill_manager)
-            chat_history = [m.get("text", "") for m in messages[-4:]]
+            # Filter out AI agent cards from chat history to avoid recursive self-analysis
+            user_chat_history = [
+                f"{m.get('sender', '@user')}: {m.get('text', '')}"
+                for m in messages
+                if m.get("platform") != "AI Agent"
+            ][-4:]
+            if not user_chat_history:
+                user_chat_history = [f"{user_msg['sender']}: {user_text}"]
+
             out = asyncio.run(responder.respond(
-                chat_history,
+                user_chat_history,
                 skill="startup_lean",
                 tier="low",
             ))
@@ -3363,14 +3375,137 @@ def room_chat(room_id: str):
     return jsonify({"status": "ok", "user_message": user_msg, "ai_message": ai_msg, "room": room})
 
 
+_last_slack_sync_time: Dict[str, float] = {}
+
+
+def _sync_slack_to_room(room: dict) -> bool:
+    """Sync latest real Slack messages from connected channel into room chat in real-time."""
+    room_id = room.get("id")
+    now = time.time()
+    # Throttle to once every 4 seconds per room to prevent Slack rate limits
+    if now - _last_slack_sync_time.get(room_id, 0) < 4.0:
+        return False
+    _last_slack_sync_time[room_id] = now
+
+    slack_is_live = bool(settings.slack_user_token or settings.slack_bot_token)
+    if not slack_is_live:
+        return False
+
+    # Find Slack channel
+    slack_ch = "C0CFE9GL4AK"
+    for link in room.get("social_links", []):
+        ch = link.get("channel", "")
+        if link.get("platform") == "Slack" and ch.startswith("C0"):
+            slack_ch = ch
+            break
+
+    try:
+        slack = _slack_adapter_for_request()
+        if not slack.is_live:
+            return False
+        hist = asyncio.run(slack._call("conversations.history", {"channel": slack_ch, "limit": 10}))
+        slack_msgs = hist.get("messages", [])
+        if not slack_msgs:
+            return False
+
+        existing_texts = {m.get("text", "").strip() for m in room.get("chat_messages", [])}
+        existing_ids = {m.get("id") for m in room.get("chat_messages", [])}
+        new_msgs_added = False
+
+        for m in reversed(slack_msgs):
+            txt = (m.get("text") or "").strip()
+            # Ignore channel joins or empty messages
+            if not txt or m.get("subtype") in ("channel_join", "channel_leave") or "has joined the channel" in txt:
+                continue
+            # Ignore our own bot greetings
+            if "[ScribeBA AI Agent]" in txt:
+                continue
+
+            msg_id = f"slack-{m.get('ts')}"
+            if msg_id in existing_ids or txt in existing_texts:
+                continue
+
+            user_id = m.get("user") or "colleague"
+            try:
+                author_name = asyncio.run(slack._display_name(user_id))
+            except Exception:
+                author_name = user_id
+
+            ts_float = float(m.get("ts", now))
+            time_str = time.strftime("%H:%M", time.localtime(ts_float))
+
+            room.setdefault("chat_messages", []).append({
+                "id": msg_id,
+                "sender": f"@{author_name}",
+                "platform": "Slack",
+                "time": time_str,
+                "text": txt,
+            })
+            existing_texts.add(txt)
+            existing_ids.add(msg_id)
+            new_msgs_added = True
+
+        if new_msgs_added:
+            room["chat_messages"] = room["chat_messages"][-MAX_ROOM_CHAT_MESSAGES:]
+            return True
+    except Exception as exc:
+        logger.debug("Real-time slack sync for room %s failed: %s", room_id, exc)
+
+    return False
+
+
 @app.get("/api/rooms/<room_id>")
 def get_room(room_id: str):
-    """Get single room details and chat messages for realtime polling."""
+    """Get single room details and chat messages for realtime polling with live Slack sync."""
     rooms = _load_rooms()
     room = next((r for r in rooms if r.get("id") == room_id), None)
     if not room:
         return jsonify({"error": "Room not found"}), 404
+    if _sync_slack_to_room(room):
+        try:
+            _save_rooms(rooms)
+        except Exception:
+            pass
     return jsonify(room)
+
+
+@app.post("/api/slack/scan-now")
+def slack_scan_now():
+    """Trigger an immediate real-time scan of the configured Slack channel,
+    returning recent active discussions and unhandled feature requests."""
+    body = request.get_json(silent=True) or {}
+    channel = (request.args.get("channel") or body.get("channel") or "").strip() or "C0CFE9GL4AK"
+    try:
+        slack = _slack_adapter_for_request()
+        if not slack.is_live:
+            return jsonify({"error": "Slack is not connected on server."}), 503
+        data = asyncio.run(slack._call("conversations.history", {"channel": channel, "limit": 15}))
+        messages = data.get("messages", [])
+        scanned = []
+        for m in messages:
+            txt = (m.get("text") or "").strip()
+            if not txt or m.get("subtype") in ("channel_join", "channel_leave") or "has joined the channel" in txt:
+                continue
+            user_id = m.get("user") or "colleague"
+            try:
+                author_name = asyncio.run(slack._display_name(user_id))
+            except Exception:
+                author_name = user_id
+            scanned.append({
+                "ts": m.get("ts"),
+                "author": author_name,
+                "text": txt,
+                "reply_count": m.get("reply_count", 0),
+            })
+        return jsonify({
+            "status": "ok",
+            "channel": channel,
+            "message_count": len(scanned),
+            "messages": scanned,
+            "timestamp": time.time()
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.get("/api/rooms/tree")
