@@ -67,5 +67,7 @@ demo_assets/*.mp4
 # Local AWS credential exports; never commit provider access keys.
 /Kietran_credentials.csv
 /Kietran_accessKeys.csv
+scribeba.db
+scratch/
 xoxb-*.txt
 xoxp-*.txt

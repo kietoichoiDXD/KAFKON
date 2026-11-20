@@ -124,10 +124,29 @@ class CloudDatabaseManager:
                         payload_json TEXT NOT NULL,
                         created_at DOUBLE PRECISION NOT NULL
                     );
+                    CREATE TABLE IF NOT EXISTS projects (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        description TEXT DEFAULT '',
+                        repo_url TEXT DEFAULT '',
+                        repo_branch TEXT DEFAULT 'main',
+                        local_path TEXT DEFAULT '',
+                        slack_channel TEXT DEFAULT '',
+                        clickup_list_id TEXT DEFAULT '',
+                        discord_channel TEXT DEFAULT '',
+                        telegram_chat TEXT DEFAULT '',
+                        ai_instructions TEXT DEFAULT '',
+                        status TEXT DEFAULT 'active',
+                        social_channels_json TEXT DEFAULT '[]',
+                        created_at DOUBLE PRECISION NOT NULL,
+                        updated_at DOUBLE PRECISION NOT NULL
+                    );
+                    ALTER TABLE projects ADD COLUMN IF NOT EXISTS social_channels_json TEXT DEFAULT '[]';
                     CREATE INDEX IF NOT EXISTS idx_chat_sessions_owner ON chat_sessions(owner_id, updated_at DESC);
                     CREATE INDEX IF NOT EXISTS idx_chat_turns_session ON chat_turns(owner_id, session_id, id);
                     CREATE INDEX IF NOT EXISTS idx_product_tasks_updated ON product_tasks(updated_at DESC);
                     CREATE INDEX IF NOT EXISTS idx_telemetry_runs_created ON telemetry_runs(created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC);
                 """)
 
     @contextmanager
@@ -178,10 +197,32 @@ class CloudDatabaseManager:
                 payload_json TEXT NOT NULL,
                 created_at REAL NOT NULL
             )""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                repo_url TEXT DEFAULT '',
+                repo_branch TEXT DEFAULT 'main',
+                local_path TEXT DEFAULT '',
+                slack_channel TEXT DEFAULT '',
+                clickup_list_id TEXT DEFAULT '',
+                discord_channel TEXT DEFAULT '',
+                telegram_chat TEXT DEFAULT '',
+                ai_instructions TEXT DEFAULT '',
+                status TEXT DEFAULT 'active',
+                social_channels_json TEXT DEFAULT '[]',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )""")
+            try:
+                conn.execute("ALTER TABLE projects ADD COLUMN social_channels_json TEXT DEFAULT '[]'")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_owner ON chat_sessions(owner_id, updated_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_turns_session ON chat_turns(owner_id, session_id, id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_product_tasks_updated ON product_tasks(updated_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_runs_created ON telemetry_runs(created_at DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC)")
             try:
                 yield conn
                 conn.commit()
