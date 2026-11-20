@@ -48,12 +48,14 @@ export const RoomsView: React.FC = () => {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('room') === 'none') return null;
-    return params.get('room') || 'room-auth-iam';
+    return params.get('room') || localStorage.getItem('scribeba_selected_room') || 'room-auth-iam';
   });
   const [activeTab, setActiveTab] = useState<RoomTab>(() => {
     const params = new URLSearchParams(window.location.search);
     const t = params.get('tab') as RoomTab;
     if (['chat', 'tree', 'tasks', 'channels', 'agent', 'repos'].includes(t)) return t;
+    const saved = localStorage.getItem('scribeba_room_active_tab') as RoomTab;
+    if (['chat', 'tree', 'tasks', 'channels', 'agent', 'repos'].includes(saved)) return saved;
     return 'chat';
   });
   const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
@@ -92,9 +94,22 @@ export const RoomsView: React.FC = () => {
   const [telegramChannelName, setTelegramChannelName] = useState('@squad_ops_bot');
 
   // Chat input state
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState(() => localStorage.getItem('scribeba_room_draft_input') || '');
   const [chatPlatformSender, setChatPlatformSender] = useState<'Slack' | 'Discord' | 'Telegram' | 'PM Lead'>('Slack');
   const [isAiThinking, setIsAiThinking] = useState(false);
+
+  // Persist selected room, active tab, and draft input to localStorage
+  useEffect(() => {
+    if (selectedRoomId) localStorage.setItem('scribeba_selected_room', selectedRoomId);
+  }, [selectedRoomId]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba_room_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba_room_draft_input', chatInput);
+  }, [chatInput]);
 
   // New Task Modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -263,6 +278,7 @@ export const RoomsView: React.FC = () => {
       prev.map(r => (r.id === currentRoom.id ? { ...r, chat_messages: updatedMessages } : r))
     );
     setChatInput('');
+    localStorage.removeItem('scribeba_room_draft_input');
     setIsAiThinking(true);
 
     // Try backend API first with graceful fallback

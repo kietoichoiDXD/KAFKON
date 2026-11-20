@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { AnimatePresence, MotionConfig, motion } from 'motion/react';
+import { MotionConfig } from 'motion/react';
 import { ViewType, WorkspaceTab } from './types';
 import { Sidebar } from './components/Sidebar';
 import { WorkspaceModal } from './components/WorkspaceModal';
@@ -39,10 +39,21 @@ function getViewFromUrl(): ViewType {
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewType>(() => getViewFromUrl());
+  const [mountedViews, setMountedViews] = useState<Set<ViewType>>(() => new Set([currentView]));
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<WorkspaceTab>('Agents');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [chatResetKey, setChatResetKey] = useState(0);
+
+  // Keep visited views mounted in memory to prevent loss of drafts and tab state
+  useEffect(() => {
+    setMountedViews(prev => {
+      if (prev.has(currentView)) return prev;
+      const next = new Set(prev);
+      next.add(currentView);
+      return next;
+    });
+  }, [currentView]);
 
   // Sync state with URL hash and browser back/forward history
   useEffect(() => {
@@ -87,47 +98,62 @@ export function App() {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      {/* Primary Workspace Viewport */}
+      {/* Primary Workspace Viewport (Keep-Alive architecture preserves tab state and inputs) */}
       <main className="app-main flex-1 flex overflow-hidden relative bg-slate-50">
-        <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={currentView}
-          className="flex-1 min-w-0 h-full min-h-0 flex flex-col overflow-hidden"
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -2 }}
-          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-        >
-        <ErrorBoundary key={currentView} onReset={() => setCurrentView(currentView)}>
-        <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500" role="status">Loading workspace…</div>}>
-        {currentView === 'home' && (
-          <HomeView
-            onSelectPrompt={handleSelectPrompt}
-            onNavigateToAutomations={() => handleSelectView('automations')}
-            onOpenSkills={() => handleOpenModal('Skills')}
-            resetKey={chatResetKey}
-          />
-        )}
+        {VALID_VIEWS.map(view => {
+          if (!mountedViews.has(view)) return null;
+          const isActive = currentView === view;
+          return (
+            <div
+              key={view}
+              className={`flex-1 min-w-0 h-full min-h-0 flex-col overflow-hidden ${
+                isActive ? 'flex' : 'hidden'
+              }`}
+              style={{ display: isActive ? undefined : 'none' }}
+              aria-hidden={!isActive}
+            >
+              <ErrorBoundary key={view} onReset={() => setCurrentView(view)}>
+                <Suspense
+                  fallback={
+                    <div
+                      className="flex h-full items-center justify-center text-sm text-slate-500"
+                      role="status"
+                    >
+                      Loading workspace…
+                    </div>
+                  }
+                >
+                  {view === 'home' && (
+                    <HomeView
+                      onSelectPrompt={handleSelectPrompt}
+                      onNavigateToAutomations={() => handleSelectView('automations')}
+                      onOpenSkills={() => handleOpenModal('Skills')}
+                      resetKey={chatResetKey}
+                    />
+                  )}
 
-        {currentView === 'tasks' && <TaskSummaryView />}
+                  {view === 'tasks' && <TaskSummaryView />}
 
-        {currentView === 'live' && <LiveRunView onOpenConnections={() => handleOpenModal('Connections')} />}
+                  {view === 'live' && (
+                    <LiveRunView onOpenConnections={() => handleOpenModal('Connections')} />
+                  )}
 
-        {currentView === 'ops' && <OpsView />}
+                  {view === 'ops' && <OpsView />}
 
-        {currentView === 'rooms' && <RoomsView />}
+                  {view === 'rooms' && <RoomsView />}
 
-        {currentView === 'artifacts' && <ArtifactsView />}
+                  {view === 'artifacts' && <ArtifactsView />}
 
-        {currentView === 'automations' && <AutomationsView />}
+                  {view === 'automations' && <AutomationsView />}
 
-        {currentView === 'review' && <ReviewView />}
+                  {view === 'review' && <ReviewView />}
 
-        {currentView === 'conflicts' && <ConflictGraphView />}
-        </Suspense>
-        </ErrorBoundary>
-        </motion.div>
-        </AnimatePresence>
+                  {view === 'conflicts' && <ConflictGraphView />}
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          );
+        })}
       </main>
 
       {/* System Design & Workspace Modal */}

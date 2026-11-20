@@ -178,11 +178,11 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const [pendingSlackUrl, setPendingSlackUrl] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channel, setChannel] = useState('');
-  const [channelLink, setChannelLink] = useState('');
+  const [channelLink, setChannelLink] = useState(() => localStorage.getItem('scribeba.live.channel_link') || '');
   const [channelLinkError, setChannelLinkError] = useState('');
   const [connectionFeedback, setConnectionFeedback] = useState<ConnectionFeedback | null>(null);
-  const [ts, setTs] = useState('');
-  const [skill, setSkill] = useState('startup_lean');
+  const [ts, setTs] = useState(() => localStorage.getItem('scribeba.live.ts') || '');
+  const [skill, setSkill] = useState(() => localStorage.getItem('scribeba.live.skill') || 'startup_lean');
   const [skills, setSkills] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -199,6 +199,19 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const previewRequestId = useRef(0);
   const selectionRevision = useRef(0);
   const active = PRESETS.find(p => p.skill === skill) ?? PRESETS[0];
+
+  // Persist form inputs to prevent data loss across navigation and refreshes
+  useEffect(() => {
+    localStorage.setItem('scribeba.live.channel_link', channelLink);
+  }, [channelLink]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba.live.ts', ts);
+  }, [ts]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba.live.skill', skill);
+  }, [skill]);
 
   const loadThreads = async (ch: string, directMessageLink = false, announceConnection = false, teamId?: string) => {
     const requestId = ++threadRequestId.current;

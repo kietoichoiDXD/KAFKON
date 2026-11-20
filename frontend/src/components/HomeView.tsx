@@ -337,17 +337,30 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills, resetKey = 0 }) => {
-  const [promptInput, setPromptInput] = useState('');
-  const [skill, setSkill] = useState('startup_lean');
+  const [promptInput, setPromptInput] = useState(() => localStorage.getItem('scribeba.chat.draft-prompt') || '');
+  const [skill, setSkill] = useState(() => localStorage.getItem('scribeba.chat.skill') || 'startup_lean');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const [runs, setRuns] = useState<Run[] | null>(null);
-  const [modelMode, setModelMode] = useState('Nebius Qwen-30B (Fast)');
+  const [modelMode, setModelMode] = useState(() => localStorage.getItem('scribeba.chat.model') || 'Nebius Qwen-30B (Fast)');
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState('');
+
+  // Persist draft and configuration to prevent loss on navigation or refresh
+  useEffect(() => {
+    localStorage.setItem('scribeba.chat.draft-prompt', promptInput);
+  }, [promptInput]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba.chat.skill', skill);
+  }, [skill]);
+
+  useEffect(() => {
+    localStorage.setItem('scribeba.chat.model', modelMode);
+  }, [modelMode]);
 
   const persistNewSession = async () => {
     const result = await safeFetchJson<{ id: string; title: string }>(`${API}/api/chat/sessions`, { method: 'POST' });
@@ -360,7 +373,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     ].slice(0, 100));
   };
 
-  const openSession = async (sessionId: string) => {
+  const openSession = async (sessionId: string, clearDraft = false) => {
     if (!sessionId) return;
     const result = await safeFetchJson<{ id: string; turns: Turn[] }>(`${API}/api/chat/sessions/${sessionId}`);
     if (!result.ok || !result.data) return;
@@ -368,7 +381,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     localStorage.setItem('scribeba.chat.active-session', sessionId);
     setTurns(result.data.turns ?? []);
     setPendingAction(null);
-    setPromptInput('');
+    if (clearDraft) {
+      setPromptInput('');
+      localStorage.removeItem('scribeba.chat.draft-prompt');
+    }
   };
 
   useEffect(() => {
@@ -413,6 +429,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
     if (!text || analyzing) return;
     setTurns(t => [...t, { role: 'you', text }]);
     setPromptInput('');
+    localStorage.removeItem('scribeba.chat.draft-prompt');
     setAnalyzing(true);
 
     const history = [
@@ -503,7 +520,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectPrompt, onOpenSkills
       <select
         id="chat-history-select"
         value={activeSessionId}
-        onChange={e => void openSession(e.target.value)}
+        onChange={e => void openSession(e.target.value, true)}
         className="max-w-[min(52vw,320px)] px-2.5 py-2 rounded-md border border-slate-300 bg-white text-slate-800 text-xs"
         aria-label="Saved chat history"
       >
