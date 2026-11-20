@@ -43,6 +43,9 @@ class FallbackTier(str, Enum):
     MEDIUM = "medium"   # Balanced (standard agile specification)
     HIGH = "high"       # Maximum reasoning (deep compliance, strict INVEST)
 
+# Cache invalid/expired providers across calls to avoid 401 latency loops
+_DISABLED_PROVIDERS: set[str] = set()
+
 class ModelFallbackRouter:
     """Intelligent multi-tier fallback orchestrator.
     
@@ -56,7 +59,7 @@ class ModelFallbackRouter:
     # error, and the run silently degrades to the local engine.
     TIER_MODEL_MAP: Dict[FallbackTier, List[Dict[str, str]]] = {
         FallbackTier.LOW: [
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
+            {"alias": "nebius",             "model": settings.nebius_model,         "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-haiku-4.5",  "provider": "openrouter"},
             {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-8b-instruct", "provider": "openrouter"},
@@ -65,7 +68,7 @@ class ModelFallbackRouter:
             {"alias": "openai_direct",      "model": "",                            "provider": "openai"},
         ],
         FallbackTier.MEDIUM: [
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
+            {"alias": "nebius",             "model": settings.nebius_model,         "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-sonnet-5",   "provider": "openrouter"},
             {"alias": "gemini_flash",       "model": "gemini-2.5-flash",            "provider": "gemini"},
             {"alias": "luna",               "model": "meta-llama/llama-3.1-70b-instruct", "provider": "openrouter"},
@@ -74,7 +77,7 @@ class ModelFallbackRouter:
             {"alias": "openai_direct",      "model": "",                            "provider": "openai"},
         ],
         FallbackTier.HIGH: [
-            {"alias": "nebius",             "model": "",                            "provider": "nebius"},
+            {"alias": "nebius",             "model": settings.nebius_model,         "provider": "nebius"},
             {"alias": "openrouter_primary", "model": "anthropic/claude-opus-5",     "provider": "openrouter"},
             {"alias": "gemini_pro",         "model": "gemini-2.5-pro",              "provider": "gemini"},
             {"alias": "luna",               "model": "deepseek/deepseek-r1",        "provider": "openrouter"},
@@ -85,9 +88,8 @@ class ModelFallbackRouter:
     }
 
     def __init__(self):
-        # 25s was not enough for a 70B model on a full thread: it timed out, and because
-        # httpx.ReadTimeout carries an empty message the trail showed "FAILED ()".
-        self.http_timeout = 60.0
+        # Ultra-fast timeout (5s). Never let LLM or agents stall the user for too long.
+        self.http_timeout = 5.0
 
     def get_chain_for_tier(self, tier_name: str) -> List[Dict[str, str]]:
         tier_key = FallbackTier.MEDIUM
@@ -133,15 +135,14 @@ class ModelFallbackRouter:
             })
             return None, audit_trail
 
-        openrouter_auth_failed = False
         async with httpx.AsyncClient(timeout=self.http_timeout) as client:
             for idx, item in enumerate(chain, 1):
-                if item["provider"] == "openrouter" and openrouter_auth_failed:
-                    audit_trail.append({"step": idx, "alias": item["alias"], "model": item["model"], "status": "skipped", "reason": "OpenRouter API key expired/invalid"})
+                provider = item["provider"]
+                if provider in _DISABLED_PROVIDERS:
+                    audit_trail.append({"step": idx, "alias": item["alias"], "model": item["model"], "status": "skipped", "reason": f"{provider} credentials invalid/expired"})
                     continue
                 alias = item["alias"]
                 model_id = item["model"]
-                provider = item["provider"]
 
                 try:
                     # Attempt provider call
@@ -195,8 +196,8 @@ class ModelFallbackRouter:
 
                 except httpx.HTTPStatusError as e:
                     status = e.response.status_code
-                    if status == 401 and provider == "openrouter":
-                        openrouter_auth_failed = True
+                    if status in (401, 403):
+                        _DISABLED_PROVIDERS.add(provider)
                     reason = "Out of tokens (402 Payment Required)" if status == 402 else "Rate limited (429)" if status == 429 else f"HTTP {status}"
                     print(f"⚠️ [Fallback Triggered] {alias} ({model_id}) failed with {reason}. Cascading to next candidate...")
                     audit_trail.append({
@@ -339,8 +340,8 @@ class ModelFallbackRouter:
             },
             json={
                 "model": model,
-                "max_tokens": 4000,
-                "temperature": 0.2,
+                "max_tokens": 1500,
+                "temperature": 0.1,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
