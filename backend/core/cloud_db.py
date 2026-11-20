@@ -95,6 +95,7 @@ class CloudDatabaseManager:
                         id TEXT PRIMARY KEY,
                         owner_id TEXT NOT NULL,
                         title TEXT NOT NULL,
+                        project_id TEXT DEFAULT '',
                         created_at DOUBLE PRECISION NOT NULL,
                         updated_at DOUBLE PRECISION NOT NULL
                     );
@@ -172,6 +173,7 @@ class CloudDatabaseManager:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("""CREATE TABLE IF NOT EXISTS chat_sessions (
                 id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, title TEXT NOT NULL,
+                project_id TEXT DEFAULT '',
                 created_at REAL NOT NULL, updated_at REAL NOT NULL
             )""")
             conn.execute("""CREATE TABLE IF NOT EXISTS chat_turns (
@@ -218,7 +220,12 @@ class CloudDatabaseManager:
                 conn.execute("ALTER TABLE projects ADD COLUMN social_channels_json TEXT DEFAULT '[]'")
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE chat_sessions ADD COLUMN project_id TEXT DEFAULT ''")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_owner ON chat_sessions(owner_id, updated_at DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_project ON chat_sessions(owner_id, project_id, updated_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_turns_session ON chat_turns(owner_id, session_id, id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_product_tasks_updated ON product_tasks(updated_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_runs_created ON telemetry_runs(created_at DESC)")
