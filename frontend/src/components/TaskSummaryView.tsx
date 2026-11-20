@@ -276,7 +276,7 @@ export const TaskSummaryView: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="mx-auto flex w-full max-w-7xl flex-1 min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain p-5 lg:p-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-5 lg:p-6 pb-24">
         {error && (
           <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
             <strong className="font-bold">Không thể tải danh sách nhiệm vụ:</strong> {error}
@@ -285,7 +285,7 @@ export const TaskSummaryView: React.FC = () => {
 
         {/* Backlog Metrics Dashboard */}
         {data && (
-          <section aria-label="Backlog health metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <section aria-label="Backlog health metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
             <MetricCard
               label="Tổng số nhiệm vụ"
               value={data.task_count}
@@ -329,7 +329,7 @@ export const TaskSummaryView: React.FC = () => {
         )}
 
         {/* Controls: Filter Pills, Search Bar, and Batch Action Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs shrink-0">
           {/* Filter Tabs */}
           <div className="flex flex-wrap items-center gap-1.5">
             <FilterTabButton
@@ -385,7 +385,7 @@ export const TaskSummaryView: React.FC = () => {
 
         {/* Bulk Action Bar (when tasks are selected) */}
         {selectedTaskIds.size > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-2.5 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-2.5 shadow-2xs shrink-0">
             <div className="flex items-center gap-2 text-xs font-semibold text-teal-900">
               <span className="material-symbols-outlined text-[18px]">check_box</span>
               Đã chọn <span className="font-bold underline">{selectedTaskIds.size}</span> nhiệm vụ quan trọng
@@ -416,8 +416,8 @@ export const TaskSummaryView: React.FC = () => {
         )}
 
         {/* Task List Table */}
-        <section className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden flex-1 min-h-[300px] flex flex-col">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs font-semibold text-slate-600">
+        <section className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50/95 backdrop-blur-xs px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-2xs">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -426,7 +426,7 @@ export const TaskSummaryView: React.FC = () => {
                 onChange={() => toggleSelectAllVisible(filteredTasks)}
                 className="rounded text-teal-700 focus:ring-teal-500 h-4 w-4"
               />
-              <span>Tên nhiệm vụ & Nguy cơ bỏ sót</span>
+              <span>Tên nhiệm vụ & Nguy cơ bỏ sót ({filteredTasks.length} nhiệm vụ)</span>
             </div>
             <div className="flex items-center gap-6">
               <span className="w-24 text-center">Độ quan trọng</span>
@@ -436,17 +436,17 @@ export const TaskSummaryView: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="flex flex-1 items-center justify-center p-12 text-xs text-slate-500 gap-2">
+            <div className="flex items-center justify-center p-12 text-xs text-slate-500 gap-2">
               <span className="material-symbols-outlined animate-spin text-teal-600 text-xl">progress_activity</span>
               Đang tải danh sách nhiệm vụ từ ClickUp & Database…
             </div>
           ) : filteredTasks.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center p-12 text-center">
+            <div className="flex flex-col items-center justify-center p-12 text-center">
               <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">task</span>
               <p className="text-xs text-slate-500 m-0">Không tìm thấy nhiệm vụ nào phù hợp với bộ lọc.</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 overflow-y-auto">
+            <div className="divide-y divide-slate-100">
               {filteredTasks.map(task => {
                 const isSelected = selectedTaskIds.has(task.id);
                 return (
@@ -786,8 +786,9 @@ function FormattedText({ text }: { text: string }) {
 }
 
 function ProgressTaskItem({ line }: { line: string }) {
-  const cleaned = line.replace(/^-\s*/, '').trim();
-  if (!cleaned) return null;
+  // Strip bullets, dashes, colons, and spaces at the start of the line
+  const cleaned = line.replace(/^[-•*:\s]+/, '').trim();
+  if (!cleaned || cleaned === ':' || cleaned === '-' || cleaned.length < 2) return null;
 
   // Extract tags in [brackets]
   const tagMatches = Array.from(cleaned.matchAll(/\[(.*?)\]/g)).map(m => m[1]);
@@ -801,7 +802,9 @@ function ProgressTaskItem({ line }: { line: string }) {
   if (dupNote) {
     title = title.replace(/\(.*?\)/g, '');
   }
-  title = title.trim();
+  // Strip any residual leading punctuation from title
+  title = title.replace(/^[:\s\-•*]+/, '').trim();
+  if (!title || title === ':' || title === '-' || title.length < 2) return null;
 
   return (
     <div className="flex items-start gap-2.5 rounded-lg border border-indigo-100 bg-white/90 p-2.5 shadow-2xs transition-all hover:border-indigo-300">
@@ -854,6 +857,7 @@ function SummarySectionBlock({
   };
 }) {
   const { title, category, body } = section;
+  const cleanBody = body.replace(/^[:\s\-•*]+/, '').trim();
 
   if (category === 'overview') {
     return (
@@ -865,7 +869,7 @@ function SummarySectionBlock({
           <span className="text-xs font-bold uppercase tracking-wider text-sky-950">{title}</span>
         </div>
         <div className="text-xs leading-relaxed text-slate-700">
-          <FormattedText text={body} />
+          <FormattedText text={cleanBody} />
         </div>
       </div>
     );
@@ -891,9 +895,9 @@ function SummarySectionBlock({
   }
 
   if (category === 'blockers') {
-    const isClean = body.toLowerCase().includes('không có task bị block') ||
-                    body.toLowerCase().includes('không có blocker') ||
-                    body.toLowerCase().includes('0 task');
+    const isClean = cleanBody.toLowerCase().includes('không có task bị block') ||
+                    cleanBody.toLowerCase().includes('không có blocker') ||
+                    cleanBody.toLowerCase().includes('0 task');
     return (
       <div
         className={`rounded-xl border p-4 space-y-2.5 shadow-2xs ${
@@ -920,7 +924,7 @@ function SummarySectionBlock({
               check_circle
             </span>
           )}
-          <span><FormattedText text={body} /></span>
+          <span><FormattedText text={cleanBody} /></span>
         </div>
       </div>
     );
@@ -936,7 +940,7 @@ function SummarySectionBlock({
           <span className="text-xs font-bold uppercase tracking-wider text-teal-950">{title}</span>
         </div>
         <div className="text-xs leading-relaxed text-slate-800 font-normal">
-          <FormattedText text={body} />
+          <FormattedText text={cleanBody} />
         </div>
       </div>
     );
@@ -949,7 +953,7 @@ function SummarySectionBlock({
         <span className="text-xs font-bold text-slate-900">{title}</span>
       </div>
       <div className="text-xs leading-relaxed text-slate-700">
-        <FormattedText text={body} />
+        <FormattedText text={cleanBody} />
       </div>
     </div>
   );
@@ -963,6 +967,7 @@ function ExecutiveSummaryCard({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(summary);
@@ -980,8 +985,16 @@ function ExecutiveSummaryCard({
 
     if (rawParts.length > 1) {
       for (let i = 1; i < rawParts.length; i += 2) {
-        const title = (rawParts[i] || '').trim();
-        const body = (rawParts[i + 1] || '').trim();
+        let title = (rawParts[i] || '').trim();
+        // Remove number prefixes like "1. ", "2. "
+        title = title.replace(/^\d+[\.\)]\s*/, '');
+        // Remove trailing colons/dashes
+        title = title.replace(/[:\-\s]+$/, '').trim();
+
+        let body = (rawParts[i + 1] || '').trim();
+        // Remove leading colons, hyphens, asterisks, bullets that LLMs often put after bold headings
+        body = body.replace(/^[:\s\-•*]+/, '').trim();
+
         const lower = title.toLowerCase();
 
         let category: 'overview' | 'progress' | 'blockers' | 'recommendations' | 'other' = 'other';
@@ -990,22 +1003,24 @@ function ExecutiveSummaryCard({
         else if (lower.includes('blocker') || lower.includes('gỡ vướng') || lower.includes('chặn')) category = 'blockers';
         else if (lower.includes('đề xuất') || lower.includes('hành động') || lower.includes('action')) category = 'recommendations';
 
-        result.push({ title, category, body });
+        if (title && body) {
+          result.push({ title, category, body });
+        }
       }
     }
     return result;
   }, [summary]);
 
   return (
-    <section className="rounded-2xl border border-teal-200/90 bg-gradient-to-br from-white via-teal-50/20 to-slate-50 p-5 shadow-xs space-y-4">
+    <section className="rounded-2xl border border-teal-200/90 bg-gradient-to-br from-white via-teal-50/20 to-slate-50 p-4 lg:p-5 shadow-xs space-y-3.5 transition-all shrink-0">
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b border-teal-100 pb-3 flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-700 text-white shadow-2xs">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-700 text-white shadow-2xs shrink-0">
             <span className="material-symbols-outlined text-[18px]">smart_toy</span>
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs font-bold uppercase tracking-wider text-teal-950 m-0">
                 AI Executive Backlog Summary
               </h3>
@@ -1015,7 +1030,9 @@ function ExecutiveSummaryCard({
               </span>
             </div>
             <p className="text-[11px] text-slate-500 m-0">
-              Báo cáo tổng hợp backlog thông minh được trích xuất từ dữ liệu thực tế trên ClickUp
+              {isCollapsed
+                ? 'Báo cáo tổng hợp backlog thông minh đã sẵn sàng (đang thu gọn để tiết kiệm diện tích)'
+                : 'Báo cáo tổng hợp backlog thông minh được trích xuất từ dữ liệu thực tế trên ClickUp'}
             </p>
           </div>
         </div>
@@ -1033,27 +1050,45 @@ function ExecutiveSummaryCard({
             <span>{copied ? 'Đã chép!' : 'Sao chép'}</span>
           </button>
 
+          {/* Toggle Expand / Collapse (Doesn't destroy summary data!) */}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50/80 px-2.5 py-1 text-xs font-semibold text-teal-900 hover:bg-teal-100 transition-colors cursor-pointer"
+            title={isCollapsed ? 'Mở rộng hiển thị chi tiết tóm tắt' : 'Thu gọn tóm tắt để xem nhiều task hơn'}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {isCollapsed ? 'expand_more' : 'expand_less'}
+            </span>
+            <span>{isCollapsed ? 'Hiện tóm tắt' : 'Ẩn tóm tắt'}</span>
+          </button>
+
+          {/* Close & remove button */}
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50/70 px-2.5 py-1 text-xs font-medium text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+            title="Đóng và xóa báo cáo tóm tắt này"
           >
-            <span className="material-symbols-outlined text-[15px]">expand_less</span>
-            <span>Ẩn tóm tắt</span>
+            <span className="material-symbols-outlined text-[16px]">close</span>
           </button>
         </div>
       </div>
 
-      {/* Grid of Sections if parsed, or fallback formatted text */}
-      {sections.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {sections.map((sec, idx) => (
-            <SummarySectionBlock key={idx} section={sec} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-800">
-          <FormattedText text={summary} />
+      {/* Grid of Sections if expanded */}
+      {!isCollapsed && (
+        <div className="pt-2 border-t border-teal-100">
+          {sections.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {sections.map((sec, idx) => (
+                <SummarySectionBlock key={idx} section={sec} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-800">
+              <FormattedText text={summary} />
+            </div>
+          )}
         </div>
       )}
     </section>

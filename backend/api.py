@@ -2711,13 +2711,19 @@ def clickup_tasks_summary():
             async def _run_ai_summary():
                 return await ModelFallbackRouter().complete_text(
                     "Bạn là trợ lý phân tích backlog sản phẩm. "
-                    "Viết bằng tiếng Việt, ngắn gọn (dưới 150 từ), có các mục: Tổng quan, Đang thực hiện, Blocker cần gỡ vướng, Đề xuất hành động. "
+                    "Viết bằng tiếng Việt, ngắn gọn (dưới 150 từ), có 4 mục rõ ràng: "
+                    "**Tổng quan**, **Đang thực hiện**, **Blocker cần gỡ vướng**, **Đề xuất hành động**. "
+                    "Không viết dấu hai chấm sau dấu sao (ví dụ: viết **Tổng quan** thay vì **Tổng quan:**:). "
                     "Không tự bịa deadline hay owner.",
                     f"Tổng số task: {len(tasks)}. Thống kê trạng thái: {counts_text}. "
                     f"Task chưa hoàn tất: {len(active_tasks)}. Task blocked: {len(blocked_tasks)}.\n\nTASKS:\n{safe_context}",
                     tier="low",
                 )
             summary = asyncio.run(asyncio.wait_for(_run_ai_summary(), timeout=6.0))
+            if summary:
+                # Clean up any leftover ": " or ":-" immediately after bold headings or at line starts
+                summary = re.sub(r'(\*\*[^*]+?\*\*)\s*[:\-]+\s*', r'\1\n', summary)
+                summary = re.sub(r'\n\s*[:\-]+\s*', r'\n', summary)
         except Exception:
             summary = local_summary
 
