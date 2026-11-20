@@ -1268,12 +1268,17 @@ def database_status():
     return jsonify(cloud_db.get_status())
 
 
-def _create_chat_session(owner_id: str, title: str = "New conversation") -> str:
+def _create_chat_session(owner_id: str, title: str = "New conversation", project_id: str = "") -> str:
     session_id = str(uuid.uuid4())
     now = time.time()
+    effective_project_id = project_id or _ACTIVE_PROJECT_ID or ""
     with _chat_db() as db:
-        db.execute("INSERT INTO chat_sessions(id,owner_id,title,created_at,updated_at) VALUES(?,?,?,?,?)",
-                   (session_id, owner_id, title[:100], now, now))
+        try:
+            db.execute("INSERT INTO chat_sessions(id,owner_id,title,created_at,updated_at,project_id) VALUES(?,?,?,?,?,?)",
+                       (session_id, owner_id, title[:100], now, now, effective_project_id))
+        except Exception:
+            db.execute("INSERT INTO chat_sessions(id,owner_id,title,created_at,updated_at) VALUES(?,?,?,?,?)",
+                       (session_id, owner_id, title[:100], now, now))
     return session_id
 
 
@@ -1870,17 +1875,47 @@ def test_ping_social_channel(project_id: str):
 @app.get("/api/chat/sessions")
 def list_chat_sessions():
     owner_id = _chat_owner_id()
+    project_id = request.args.get("project_id")
     with _chat_db() as db:
-        rows = db.execute("SELECT id,title,created_at,updated_at FROM chat_sessions WHERE owner_id=? ORDER BY updated_at DESC",
-                          (owner_id,)).fetchall()
+        cols = [d[1] for d in db.execute("PRAGMA table_info(chat_sessions)").fetchall()]
+        has_proj = "project_id" in cols
+        if project_id and has_proj:
+            rows = db.execute(
+                "SELECT id,title,created_at,updated_at,project_id FROM chat_sessions WHERE owner_id=? AND project_id=? ORDER BY updated_at DESC",
+                (owner_id, project_id)
+            ).fetchall()
+        elif has_proj:
+            rows = db.execute(
+                "SELECT id,title,created_at,updated_at,project_id FROM chat_sessions WHERE owner_id=? ORDER BY updated_at DESC",
+                (owner_id,)
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT id,title,created_at,updated_at FROM chat_sessions WHERE owner_id=? ORDER BY updated_at DESC",
+                (owner_id,)
+            ).fetchall()
     return jsonify([dict(row) for row in rows])
 
 
 @app.post("/api/chat/sessions")
 def create_chat_session():
     owner_id = _chat_owner_id()
-    session_id = _create_chat_session(owner_id)
-    return jsonify({"id": session_id, "title": "New conversation", "turns": []}), 201
+    body = request.get_json(silent=True) or {}
+    project_id = body.get("project_id") or request.args.get("project_id") or _ACTIVE_PROJECT_ID or ""
+    title = body.get("title") or "New conversation"
+    session_id = _create_chat_session(owner_id, title=title, project_id=project_id)
+    return jsonify({"id": session_id, "title": title, "project_id": project_id, "turns": []}), 201
+
+
+@app.post("/api/projects/<project_id>/new-session")
+def project_new_chat_session(project_id: str):
+    owner_id = _chat_owner_id()
+    global _ACTIVE_PROJECT_ID
+    _ACTIVE_PROJECT_ID = project_id
+    body = request.get_json(silent=True) or {}
+    title = body.get("title") or "New conversation"
+    session_id = _create_chat_session(owner_id, title=title, project_id=project_id)
+    return jsonify({"id": session_id, "title": title, "project_id": project_id, "turns": []}), 201
 
 
 @app.get("/api/chat/sessions/<session_id>")
@@ -1889,7 +1924,10 @@ def get_chat_session(session_id: str):
     if not _chat_session_exists(owner_id, session_id):
         return jsonify({"error": "Chat session not found."}), 404
     with _chat_db() as db:
-        session_row = db.execute("SELECT id,title,created_at,updated_at FROM chat_sessions WHERE id=? AND owner_id=?",
+        cols = [d[1] for d in db.execute("PRAGMA table_info(chat_sessions)").fetchall()]
+        has_proj = "project_id" in cols
+        select_cols = "id,title,created_at,updated_at,project_id" if has_proj else "id,title,created_at,updated_at"
+        session_row = db.execute(f"SELECT {select_cols} FROM chat_sessions WHERE id=? AND owner_id=?",
                                  (session_id, owner_id)).fetchone()
         turns = db.execute("SELECT payload FROM chat_turns WHERE session_id=? AND owner_id=? ORDER BY id",
                            (session_id, owner_id)).fetchall()
@@ -1910,10 +1948,18 @@ def chat():
 
     owner_id = _chat_owner_id()
     session_id = str(body.get("session_id") or "")
+    project_id = str(body.get("project_id") or _ACTIVE_PROJECT_ID or "")
     if not re.fullmatch(r"[0-9a-f-]{36}", session_id, re.IGNORECASE) or not _chat_session_exists(owner_id, session_id):
         if session_id:
             return jsonify({"error": "This chat session is unavailable. Start a new session."}), 404
-        session_id = _create_chat_session(owner_id)
+        session_id = _create_chat_session(owner_id, project_id=project_id)
+    elif project_id:
+        try:
+            with _chat_db() as db:
+                db.execute("UPDATE chat_sessions SET project_id=?, updated_at=? WHERE id=? AND (project_id IS NULL OR project_id='')",
+                           (project_id, time.time(), session_id))
+        except Exception:
+            pass
     user_text = str(messages[-1]).strip()
     _save_chat_turn(owner_id, session_id, {"role": "you", "text": user_text})
 
