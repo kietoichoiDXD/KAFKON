@@ -105,41 +105,59 @@ class ClickUpClient:
         skill: SkillConfig,
         thread_url: str
     ) -> str:
-        """Construct full audit trail markdown for the ClickUp ticket description."""
-        markdown_body = MessageFormatter.to_markdown(result)
-        audit_trail = [
-            markdown_body,
+        """Construct a clean, concise, executive Agile task description for ClickUp."""
+        story = result.story
+        score = result.invest_score
+
+        sections = [
+            "## 🎯 Objective & Business Value",
+            f"> **As an** {story.as_a}, **I want** {story.i_want}, **So that** {story.so_that}.",
+            "",
+            f"**INVEST Score**: `{score.overall}/100` · **Skill**: `{skill.name}`",
             "",
             "---",
-            "### 🏷️ ScribeBA Audit & Provenance Ledger",
-            f"- **Applied Team Skill**: `{skill.name}` (v{skill.version})",
-            f"- **Source Thread**: {thread_url or 'Unavailable'}",
-            f"- **INVEST Verification Score**: `{result.invest_score.overall}/100`",
-            f"- **Verified Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Verified')}",
-            f"- **Inferred Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Inferred')}",
-            f"- **Assumed Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Assumed')}",
-            f"- **Blocked Claims**: {sum(1 for e in result.evidence_items if e.label.value == 'Blocked')}",
-            "",
-            "### Source Evidence by Claim",
+            "## 📋 Actionable Tasks Breakdown",
         ]
-        for evidence in result.evidence_items:
-            source = evidence.source_message
-            audit_trail.append(f"- **{evidence.field}** — `{evidence.label.value}`: {evidence.value}")
-            if source and source.match_status == "matched":
-                excerpt = source.excerpt.replace("\n", " ").strip()
-                source_label = " · ".join(part for part in [source.author, source.timestamp] if part)
-                source_url = source.thread_url or thread_url
-                if source_url:
-                    source_label = f"[{source_label or 'Open source thread'}]({source_url})"
-                audit_trail.append(f"  - **Source**: {source_label or 'Matched message'} · `{source.message_id}`")
-                if excerpt:
-                    audit_trail.append(f"  - **Excerpt**: > {excerpt[:500]}")
-            else:
-                citation = evidence.quote_source or "No source quote recorded."
-                audit_trail.append(f"  - **Source unresolved**: {citation}")
-        body = "\n".join(audit_trail)
-        seal = hashlib.sha256(body.encode("utf-8")).hexdigest()
-        return f"{body}\n- **Integrity Seal**: `sha256:{seal}`"
+
+        tasks = getattr(result, "decomposed_tasks", []) or []
+        if tasks:
+            for t in tasks:
+                owner_text = f" ({t.owner})" if t.owner else ""
+                sections.append(f"- [ ] **{t.title}**{owner_text}")
+                if t.description:
+                    sections.append(f"  - {t.description}")
+        else:
+            for ac in result.acceptance_criteria:
+                sections.append(f"- [ ] **{ac.scenario}**")
+                sections.append(f"  - When {ac.when}, then {ac.then}")
+
+        sections.extend([
+            "",
+            "---",
+            "## ✅ Acceptance Checklist",
+        ])
+        for ac in result.acceptance_criteria:
+            sections.append(f"- [ ] **{ac.id}**: {ac.scenario} (`{ac.then}`)")
+
+        if result.clarifying_question:
+            sections.extend([
+                "",
+                "---",
+                "## ⚠️ Clarification Needed",
+                f"> {result.clarifying_question}",
+            ])
+
+        verified_count = sum(1 for e in result.evidence_items if e.label.value == "Verified")
+        sections.extend([
+            "",
+            "---",
+            f"📌 **Source Thread**: [{thread_url or 'Slack Link'}]({thread_url or '#'})",
+            f"🛡️ **3-Axis Provenance**: `{verified_count}/{len(result.evidence_items)} Claims Verified`",
+        ])
+
+        body = "\n".join(sections)
+        seal = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+        return f"{body}\n\n`Integrity Seal: sha256:{seal}`"
 
     async def _create_task_live(
         self,

@@ -62,6 +62,15 @@ type Evidence = {
   } | null;
 };
 
+type DecomposedTask = {
+  id: string;
+  title: string;
+  owner?: string | null;
+  description?: string;
+  category?: string;
+  priority?: string;
+};
+
 type RunResult = {
   permalink: string;
   messages_read: number;
@@ -69,6 +78,7 @@ type RunResult = {
   invest: { overall: number };
   engine: string;
   evidence: Evidence[];
+  decomposed_tasks?: DecomposedTask[];
   clarifying_question?: string | null;
   ticket?: { id: string; url: string; title: string };
   ticket_error?: string;
@@ -876,6 +886,42 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
               <span className="font-semibold text-slate-900">I want</span> {result.story.i_want},{' '}
               <span className="font-semibold text-slate-900">So that</span> {result.story.so_that}
             </div>
+
+            {result.decomposed_tasks && result.decomposed_tasks.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                  <span>Actionable Tasks Breakdown</span>
+                  <span className="font-mono text-[11px] text-teal-700 font-semibold">{result.decomposed_tasks.length} Subtasks</span>
+                </div>
+                <div className="space-y-1.5">
+                  {result.decomposed_tasks.map((task, idx) => (
+                    <div key={idx} className="p-2.5 bg-teal-50/60 rounded-lg border border-teal-100 flex items-start justify-between gap-3 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-teal-700 text-white font-mono text-[10px] font-bold">
+                            {task.id || `TASK-${idx + 1}`}
+                          </span>
+                          <strong className="text-slate-900 font-semibold">{task.title}</strong>
+                          {task.owner && (
+                            <span className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-mono text-[10px]">
+                              {task.owner}
+                            </span>
+                          )}
+                        </div>
+                        {task.description && (
+                          <p className="text-slate-600 m-0 mt-1 leading-relaxed text-[11.5px]">{task.description}</p>
+                        )}
+                      </div>
+                      {task.priority && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 shrink-0">
+                          {task.priority}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">

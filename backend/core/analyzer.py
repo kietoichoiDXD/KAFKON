@@ -11,6 +11,7 @@ from .models import (
     EvidenceLabel,
     SourceMessageEvidence,
     SkillConfig,
+    DecomposedTask,
 )
 from .skills import SkillManager
 from .scorer import InvestScorer
@@ -312,12 +313,23 @@ class ScribeBAAnalyzer:
 
         # Compute INVEST score
         invest_score = InvestScorer.evaluate(story, criteria, evidence_items, skill)
+        decomposed_tasks = [
+            DecomposedTask(
+                id=f"TASK-{i+1}",
+                title=ac.scenario,
+                description=f"When {ac.when}, then {ac.then}",
+                category="Feature",
+                priority="High",
+            )
+            for i, ac in enumerate(criteria)
+        ]
 
         return AnalysisResult(
             story=story,
             acceptance_criteria=criteria,
             evidence_items=evidence_items,
             invest_score=invest_score,
+            decomposed_tasks=decomposed_tasks,
             clarifying_question=clarifying_question,
             ready_for_ticket=ready_for_ticket,
             skill_applied=skill.name,
@@ -338,9 +350,18 @@ class ScribeBAAnalyzer:
     ) -> AnalysisResult:
         """Execute story generation across multi-tier fallback cascade (OpenRouter -> GPT -> LUNA -> SONET -> 5 -> SOL)."""
         system_prompt = f"""You are ScribeBA, an expert AI Business Analyst.
-Analyze multi-person engineering conversations and produce a structured User Story with INVEST scoring and Evidence Labels.
+Analyze multi-person engineering conversations and produce a structured User Story with INVEST scoring, decomposed actionable tasks, and Evidence Labels.
 
-Every single field must be labeled with one of:
+IMPORTANT INSTRUCTIONS:
+1. Ignore off-topic banter, chit-chat, or operational maintenance announcements (such as building power cuts/cắt điện, server maintenance 30 mins, coffee breaks). Filter them out completely from requirements.
+2. Decompose the actual product scope into distinct, concrete subtasks ('decomposed_tasks'). For each task, extract:
+- 'id': e.g. 'TASK-1'
+- 'title': Short descriptive task name (e.g. 'Auto-complete & Sửa lỗi chính tả')
+- 'owner': The person who proposed, requested, or was assigned this task (e.g. '@Quang Minh Tran')
+- 'description': Concise 1-sentence action item or scope
+- 'category': 'Frontend|Backend|Database|Search'
+- 'priority': 'High|Medium|Low'
+3. Every single field must be labeled with one of:
 - Verified: directly quoted from the thread
 - Inferred: reasoned logically from verified statements
 - Assumed: industry standard assumption, not yet confirmed
@@ -357,6 +378,16 @@ Return strictly valid JSON matching this schema:
     "so_that": "string",
     "evidence": "Verified|Inferred|Assumed|Blocked"
   }},
+  "decomposed_tasks": [
+    {{
+      "id": "TASK-1",
+      "title": "string",
+      "owner": "@username",
+      "description": "string",
+      "category": "Frontend|Backend|Database|Search",
+      "priority": "High|Medium|Low"
+    }}
+  ],
   "acceptance_criteria": [
     {{
       "id": "AC-1",
@@ -397,6 +428,27 @@ Return strictly valid JSON matching this schema:
             story = UserStory(**parsed["story"])
             criteria = [AcceptanceCriterion(**c) for c in parsed["acceptance_criteria"]]
             evidence_items = [EvidenceItem(**e) for e in parsed["evidence_items"]]
+            tasks_data = parsed.get("decomposed_tasks") or []
+            decomposed_tasks = []
+            for idx, t in enumerate(tasks_data):
+                if isinstance(t, dict):
+                    decomposed_tasks.append(DecomposedTask(
+                        id=t.get("id") or f"TASK-{idx+1}",
+                        title=t.get("title") or f"Subtask {idx+1}",
+                        owner=t.get("owner"),
+                        description=t.get("description", ""),
+                        category=t.get("category", "Feature"),
+                        priority=t.get("priority", "High"),
+                    ))
+            if not decomposed_tasks:
+                for idx, ac in enumerate(criteria):
+                    decomposed_tasks.append(DecomposedTask(
+                        id=f"TASK-{idx+1}",
+                        title=ac.scenario,
+                        description=f"When {ac.when}, then {ac.then}",
+                        category="Feature",
+                        priority="High",
+                    ))
             invest_score = InvestScorer.evaluate(story, criteria, evidence_items, skill)
 
             return AnalysisResult(
@@ -404,6 +456,7 @@ Return strictly valid JSON matching this schema:
                 acceptance_criteria=criteria,
                 evidence_items=evidence_items,
                 invest_score=invest_score,
+                decomposed_tasks=decomposed_tasks,
                 clarifying_question=parsed.get("clarifying_question"),
                 ready_for_ticket=parsed.get("ready_for_ticket", False),
                 skill_applied=skill.name,

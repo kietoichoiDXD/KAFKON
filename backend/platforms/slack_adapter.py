@@ -81,7 +81,12 @@ class SlackAdapter(BasePlatformAdapter):
         if not self.is_live:
             raise RuntimeError("No Slack token configured; refusing to pretend a message was posted.")
         # A top-level post has no thread_ts; sending null makes Slack reject the call.
-        params = {"channel": channel_id, "text": text}
+        params = {
+            "channel": channel_id,
+            "text": text,
+            "unfurl_links": False,
+            "unfurl_media": False,
+        }
         if thread_id:
             params["thread_ts"] = thread_id
         if blocks:
@@ -90,7 +95,12 @@ class SlackAdapter(BasePlatformAdapter):
             data = await self._call("chat.postMessage", params, post=True)
         except RuntimeError:
             # A malformed block must not cost the demo the message.
-            retry = {"channel": channel_id, "text": text}
+            retry = {
+                "channel": channel_id,
+                "text": text,
+                "unfurl_links": False,
+                "unfurl_media": False,
+            }
             if thread_id:
                 retry["thread_ts"] = thread_id
             data = await self._call("chat.postMessage", retry, post=True)
@@ -124,11 +134,7 @@ class SlackAdapter(BasePlatformAdapter):
         thread_id: str,
         ticket: TicketPayload
     ) -> str:
-        text = (
-            f"✅ *ClickUp Task Created*: <{ticket.clickup_url}|{ticket.title}>\n"
-            f"• Priority: `{ticket.priority}`\n"
-            f"• Linked Source Thread: `{ticket.thread_link}`"
-        )
+        text = f"✅ *ClickUp Task Created*: <{ticket.clickup_url}|{ticket.title}> (Priority: `{ticket.priority}`)"
         return await self._post(channel_id, thread_id, text)
 
 

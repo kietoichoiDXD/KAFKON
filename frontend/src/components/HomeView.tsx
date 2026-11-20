@@ -88,6 +88,43 @@ function AnalysisCard({ result, skill, tier }: { result: any; skill: string; tie
         </div>
       )}
 
+      {/* Decomposed Actionable Tasks */}
+      {result.decomposed_tasks && result.decomposed_tasks.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
+            <span>Actionable Tasks Breakdown</span>
+            <span className="font-mono text-[11px] text-teal-700 font-semibold">{result.decomposed_tasks.length} Subtasks Identified</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-1">
+            {result.decomposed_tasks.map((task: any, idx: number) => (
+              <div key={idx} className="p-3 bg-teal-50/50 rounded-lg border border-teal-100 flex items-start justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded bg-teal-700 text-white font-mono text-[10px] font-bold">
+                      {task.id || `TASK-${idx + 1}`}
+                    </span>
+                    <strong className="text-slate-900 font-semibold">{task.title}</strong>
+                    {task.owner && (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
+                        {task.owner}
+                      </span>
+                    )}
+                  </div>
+                  {task.description && (
+                    <p className="text-slate-600 m-0 leading-relaxed text-[11.5px]">{task.description}</p>
+                  )}
+                </div>
+                {task.priority && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 shrink-0">
+                    {task.priority}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Acceptance Criteria */}
       {result.acceptance_criteria && result.acceptance_criteria.length > 0 && (
         <div className="space-y-2">
