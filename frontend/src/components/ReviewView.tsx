@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { API, safeRender } from '../api';
+import { API, isGitHubPages, safeRender } from '../api';
 
 const LABEL_BADGES: Record<string, { bg: string; text: string; border: string }> = {
   Verified: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
@@ -48,34 +48,56 @@ const DEFAULT_SAMPLE_ITEMS = [
 ];
 
 export const ReviewView: React.FC = () => {
-  const [items, setItems] = useState<any[]>(DEFAULT_SAMPLE_ITEMS);
-  const [selectedItem, setSelectedItem] = useState<any>(DEFAULT_SAMPLE_ITEMS[3]);
+  const [items, setItems] = useState<any[]>(isGitHubPages() ? DEFAULT_SAMPLE_ITEMS : []);
+  const [selectedItem, setSelectedItem] = useState<any>(isGitHubPages() ? DEFAULT_SAMPLE_ITEMS[0] : null);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(!isGitHubPages());
 
   useEffect(() => {
+    setLoading(true);
     fetch(`${API}/api/runs`, { credentials: 'include' })
       .then(r => r.json())
       .then((runs: any[]) => {
-        if (!Array.isArray(runs) || runs.length === 0) return;
+        setLoading(false);
+        if (!Array.isArray(runs) || runs.length === 0) {
+          if (isGitHubPages()) {
+            setItems(DEFAULT_SAMPLE_ITEMS);
+            setSelectedItem(DEFAULT_SAMPLE_ITEMS[0]);
+          } else {
+            setItems([]);
+            setSelectedItem(null);
+          }
+          return;
+        }
         const real = runs.flatMap((run, ri) =>
           (run.evidence ?? []).map((e: any, ei: number) => ({
             id: `run-${ri}-${ei}`,
             status: e.label,
-            tag: run.skill.toUpperCase().replace('_', '-'),
+            tag: (run.skill || 'AGILE').toUpperCase().replace('_', '-'),
             title: safeRender(e.field),
             claim: safeRender(e.value),
             source: safeRender(e.quote_source ?? run.permalink),
             timestamp: run.at,
+            ticketTitle: run.ticket?.title,
           }))
         );
         if (real.length) {
           setItems(real);
           setSelectedItem(real[0]);
           setIsLive(true);
+        } else if (isGitHubPages()) {
+          setItems(DEFAULT_SAMPLE_ITEMS);
+          setSelectedItem(DEFAULT_SAMPLE_ITEMS[0]);
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setLoading(false);
+        if (isGitHubPages()) {
+          setItems(DEFAULT_SAMPLE_ITEMS);
+          setSelectedItem(DEFAULT_SAMPLE_ITEMS[0]);
+        }
+      });
   }, []);
 
   const filteredItems = items.filter(
@@ -181,8 +203,15 @@ export const ReviewView: React.FC = () => {
             <h2 id="evidence-heading" className="text-base font-semibold text-slate-900">Evidence</h2>
             <span className="text-xs text-slate-500">{filteredItems.length} claims</span>
           </div>
-          {filteredItems.length === 0 ? (
-            <div className="py-6 text-sm text-slate-500">No claims match this filter.</div>
+          {loading ? (
+            <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
+              <span className="material-symbols-outlined animate-spin text-2xl text-teal-600">progress_activity</span>
+              <span className="text-xs font-medium">Loading real audit evidence from telemetry runs…</span>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="py-6 text-sm text-slate-500">
+              {items.length === 0 ? 'No telemetry runs recorded yet. Run a synthesis in Live Telemetry or Spec Studio to populate this audit docket.' : 'No claims match this filter.'}
+            </div>
           ) : (
             <div>
               {filteredItems.map(item => {

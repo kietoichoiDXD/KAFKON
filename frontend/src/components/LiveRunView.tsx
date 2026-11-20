@@ -187,8 +187,17 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
   const [running, setRunning] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
-  const [threads, setThreads] = useState<{ ts: string; text: string; reply_count: number }[]>([]);
+  const [threads, setThreads] = useState<{
+    ts: string;
+    text: string;
+    reply_count: number;
+    signal_level?: 'high' | 'medium' | 'low';
+    is_feature?: boolean;
+    topic?: string;
+    has_noise?: boolean;
+  }[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
+  const [onlyFeatureThreads, setOnlyFeatureThreads] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [preview, setPreview] = useState<ThreadPreview | null>(null);
@@ -237,6 +246,12 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
       if (requestId !== threadRequestId.current) return;
       if (res.ok && Array.isArray(res.data)) {
         setThreads(res.data);
+        if (!ts && res.data.length > 0) {
+          const best = res.data.find((t: any) => t.signal_level === 'high') || res.data.find((t: any) => t.reply_count > 0) || res.data[0];
+          if (best?.ts) {
+            setTs(best.ts);
+          }
+        }
         if (announceConnection) {
           const channelName = channels.find(item => item.id === ch)?.name || ch;
           setConnectionFeedback({
@@ -769,21 +784,47 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
 
           {/* Quick Thread Selector & Active Discussions Panel */}
           <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[16px] text-teal-600">forum</span>
                 Active Discussions in #{channels.find(c => c.id === channel)?.name || channel} ({threads.length})
               </span>
-              <button
-                type="button"
-                onClick={() => void loadThreads(channel, false, true)}
-                disabled={threadsLoading || !channel}
-                className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 flex items-center gap-1 disabled:opacity-40"
-                title="Refresh threads"
-              >
-                <span className={`material-symbols-outlined text-[14px] ${threadsLoading ? 'animate-spin' : ''}`}>refresh</span>
-                Refresh threads
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setOnlyFeatureThreads(true)}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      onlyFeatureThreads
+                        ? 'bg-white text-teal-800 shadow-xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🎯 Feature Threads
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyFeatureThreads(false)}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      !onlyFeatureThreads
+                        ? 'bg-white text-teal-800 shadow-xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Tất cả ({threads.length})
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadThreads(channel, false, true)}
+                  disabled={threadsLoading || !channel}
+                  className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 flex items-center gap-1 disabled:opacity-40"
+                  title="Refresh threads"
+                >
+                  <span className={`material-symbols-outlined text-[14px] ${threadsLoading ? 'animate-spin' : ''}`}>refresh</span>
+                  Refresh
+                </button>
+              </div>
             </div>
 
             {threads.length > 0 && (
@@ -804,8 +845,10 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                 className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 text-slate-700 truncate font-mono"
               >
                 <option value="">-- Quick select from channel threads --</option>
-                {threads.map(t => (
+                {(onlyFeatureThreads ? threads.filter(t => t.signal_level === 'high' || t.is_feature || t.reply_count > 0) : threads).map(t => (
                   <option key={t.ts} value={t.ts}>
+                    {t.signal_level === 'high' ? '🎯 ' : t.signal_level === 'low' ? '⚠️ ' : ''}
+                    {t.topic ? `[${t.topic}] ` : ''}
                     {t.ts} ({t.reply_count} replies) — {t.text}
                   </option>
                 ))}
@@ -819,7 +862,7 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
               </div>
             ) : threads.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto overscroll-contain p-1 border border-slate-100 rounded-lg bg-slate-50/50">
-                {threads.map(t => {
+                {(onlyFeatureThreads ? threads.filter(t => t.signal_level === 'high' || t.is_feature || t.reply_count > 0) : threads).map(t => {
                   const isSelected = t.ts === ts;
                   return (
                     <button
@@ -841,10 +884,33 @@ export function LiveRunView({ onOpenConnections }: { onOpenConnections?: () => v
                           : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="text-xs font-medium text-slate-900 line-clamp-2 leading-relaxed">
-                        {t.text || 'Untitled thread'}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {t.signal_level === 'high' ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              🎯 Feature Thread
+                            </span>
+                          ) : t.signal_level === 'low' ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                              ⚠️ 0 replies (bỏ qua)
+                            </span>
+                          ) : null}
+                          {t.has_noise && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800">
+                              🛡️ Tự động lọc nhiễu
+                            </span>
+                          )}
+                        </div>
+                        {t.topic && (
+                          <div className="text-xs font-bold text-slate-900 line-clamp-1">
+                            {t.topic}
+                          </div>
+                        )}
+                        <div className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                          {t.text || 'Untitled thread'}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 w-full">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 w-full mt-1">
                         <span className="font-mono text-[10px] text-slate-400">{t.ts}</span>
                         <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] ${
                           t.reply_count > 0 ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-600'
